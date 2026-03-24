@@ -1,5 +1,6 @@
 // Blog posts use ISR — force-dynamic removed to allow static generation
 
+import Image from "next/image";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
@@ -16,28 +17,32 @@ async function getPosts(page = 1) {
   const pageSize = 12;
   const skip = (page - 1) * pageSize;
 
-  const [posts, total] = await Promise.all([
-    db.blogPost.findMany({
-      where: { status: "published", publishDate: { lte: new Date() } },
-      orderBy: { publishDate: "desc" },
-      skip,
-      take: pageSize,
-      select: {
-        id: true,
-        slug: true,
-        title: true,
-        excerpt: true,
-        featuredImage: true,
-        publishDate: true,
-        author: { select: { name: true } },
-      },
-    }),
-    db.blogPost.count({
-      where: { status: "published", publishDate: { lte: new Date() } },
-    }),
-  ]);
+  try {
+    const [posts, total] = await Promise.all([
+      db.blogPost.findMany({
+        where: { status: "published", publishDate: { lte: new Date() } },
+        orderBy: { publishDate: "desc" },
+        skip,
+        take: pageSize,
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          excerpt: true,
+          featuredImage: true,
+          publishDate: true,
+          author: { select: { name: true } },
+        },
+      }),
+      db.blogPost.count({
+        where: { status: "published", publishDate: { lte: new Date() } },
+      }),
+    ]);
 
-  return { posts, total, pageSize };
+    return { posts, total, pageSize };
+  } catch {
+    return { posts: [], total: 0, pageSize };
+  }
 }
 
 export default async function BlogPage() {
@@ -93,10 +98,12 @@ export default async function BlogPage() {
               }}
             >
               {post.featuredImage && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
+                <Image
                   src={post.featuredImage}
-                  alt={post.title}
+                  alt={`Featured image for ${post.title}`}
+                  width={1200}
+                  height={720}
+                  sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
                   className="w-full h-48 object-cover"
                 />
               )}
