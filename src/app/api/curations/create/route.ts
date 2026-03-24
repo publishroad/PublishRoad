@@ -5,6 +5,8 @@ import { checkRateLimit, curationLimiter, getClientIp } from "@/lib/rate-limit";
 import { createCurationSchema } from "@/lib/validations/curation";
 import { runCuration } from "@/lib/curation-engine";
 
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {

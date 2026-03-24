@@ -131,6 +131,7 @@ export async function rankWebsitesForCuration(
     keywords: string[];
     description: string;
     countryName?: string;
+    categoryName?: string;
   },
   candidates: WebsiteCandidate[]
 ): Promise<MatchResult[]> {
@@ -160,6 +161,7 @@ function buildMatchingPrompt(
     keywords: string[];
     description: string;
     countryName?: string;
+    categoryName?: string;
   },
   candidates: WebsiteCandidate[]
 ): string {
@@ -177,6 +179,7 @@ Product to launch:
 - Keywords: ${product.keywords.join(", ")}
 - Description: ${product.description}
 ${product.countryName ? `- Target country: ${product.countryName}` : ""}
+${product.categoryName ? `- Target category: ${product.categoryName}` : ""}
 
 Available websites (${candidates.length} total):
 ${websiteList}

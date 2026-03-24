@@ -1,7 +1,8 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { SessionProvider, type Session } from "next-auth/react";
+import type { Session } from "next-auth";
+import { SessionProvider } from "next-auth/react";
 import { useState } from "react";
 
 interface ProvidersProps {

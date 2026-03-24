@@ -5,6 +5,10 @@ import { redis } from "@/lib/redis";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
+
+const POLL_INTERVAL_MS = 2000;
+const DB_STATUS_CHECK_INTERVAL = 5;
 
 export async function GET(
   req: NextRequest,
@@ -45,14 +49,14 @@ export async function GET(
   const stream = new ReadableStream({
     async start(controller) {
       const channelKey = `curation:${id}:progress`;
-
-      // Poll Redis for progress updates every 500ms (simple polling for Upstash)
       let isActive = true;
       let lastEvent = "";
+      let iteration = 0;
 
       const poll = async () => {
         while (isActive) {
           try {
+            iteration += 1;
             const event = await redis.get<string>(channelKey);
             if (event && event !== lastEvent) {
               lastEvent = event;
@@ -66,32 +70,33 @@ export async function GET(
               }
             }
 
-            // Check if curation is done in DB as fallback
-            const current = await db.curation.findUnique({
-              where: { id },
-              select: { status: true },
-            });
+            if (iteration % DB_STATUS_CHECK_INTERVAL === 0) {
+              const current = await db.curation.findUnique({
+                where: { id },
+                select: { status: true },
+              });
 
-            if (current?.status === "completed") {
-              const data = `data: ${JSON.stringify({ event: "complete" })}\n\n`;
-              controller.enqueue(encoder.encode(data));
-              isActive = false;
-              controller.close();
-              return;
-            }
+              if (current?.status === "completed") {
+                const data = `data: ${JSON.stringify({ event: "complete" })}\n\n`;
+                controller.enqueue(encoder.encode(data));
+                isActive = false;
+                controller.close();
+                return;
+              }
 
-            if (current?.status === "failed") {
-              const data = `data: ${JSON.stringify({ event: "error" })}\n\n`;
-              controller.enqueue(encoder.encode(data));
-              isActive = false;
-              controller.close();
-              return;
+              if (current?.status === "failed") {
+                const data = `data: ${JSON.stringify({ event: "error" })}\n\n`;
+                controller.enqueue(encoder.encode(data));
+                isActive = false;
+                controller.close();
+                return;
+              }
             }
           } catch {
             // Ignore errors in polling
           }
 
-          await new Promise((r) => setTimeout(r, 500));
+          await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
         }
       };
 

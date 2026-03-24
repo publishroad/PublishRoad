@@ -41,7 +41,7 @@ export default function TipTapEditor({ content, onChange }: TipTapEditorProps) {
       return;
     }
 
-    editor.commands.setContent(content, false);
+    editor.commands.setContent(content, { emitUpdate: false });
     lastEditorHtmlRef.current = content;
   }, [content, editor]);
 
