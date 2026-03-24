@@ -1,0 +1,480 @@
+// PublishRoad — Prisma Schema
+// Database: PostgreSQL (Supabase)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+
+enum AuthProvider {
+  email
+  google
+}
+
+enum BillingType {
+  free
+  one_time
+  monthly
+  lifetime
+}
+
+enum CurationStatus {
+  pending
+  processing
+  completed
+  failed
+}
+
+enum CurationSection {
+  a
+  b
+  c
+}
+
+enum UserResultStatus {
+  saved
+  hidden
+}
+
+enum WebsiteType {
+  distribution
+  guest_post
+  press_release
+}
+
+enum PaymentStatus {
+  pending
+  completed
+  failed
+  refunded
+}
+
+enum LeadStatus {
+  new
+  contacted
+  closed
+}
+
+enum BlogStatus {
+  draft
+  published
+}
+
+enum AdminRole {
+  super_admin
+  admin
+  editor
+}
+
+// ─────────────────────────────────────────────
+// LOOKUP TABLES
+// ─────────────────────────────────────────────
+
+model Country {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  flagEmoji String?  @map("flag_emoji")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  websites  Website[]
+  curations Curation[]
+
+  @@map("countries")
+}
+
+model Category {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  slug         String   @unique
+  description  String?
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  subCategories SubCategory[]
+  websites      Website[]
+  blogPosts     BlogPost[]
+
+  @@map("categories")
+}
+
+model SubCategory {
+  id         String   @id @default(cuid())
+  categoryId String   @map("category_id")
+  name       String
+  slug       String   @unique
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  category Category  @relation(fields: [categoryId], references: [id])
+  websites Website[]
+
+  @@map("sub_categories")
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  websiteTags WebsiteTag[]
+
+  @@map("tags")
+}
+
+// ─────────────────────────────────────────────
+// PLAN CONFIGS
+// ─────────────────────────────────────────────
+
+model PlanConfig {
+  id            String      @id @default(cuid())
+  name          String
+  slug          String      @unique // free | starter | pro | lifetime
+  priceCents    Int         @map("price_cents")
+  credits       Int         // -1 = unlimited
+  billingType   BillingType @map("billing_type")
+  stripePriceId String?     @map("stripe_price_id")
+  features      Json        @default("[]") // array of feature strings
+  isActive      Boolean     @default(true) @map("is_active")
+  sortOrder     Int         @default(0) @map("sort_order")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  users    User[]
+  payments Payment[]
+
+  @@map("plan_configs")
+}
+
+// ─────────────────────────────────────────────
+// USERS
+// ─────────────────────────────────────────────
+
+model User {
+  id                 String       @id @default(uuid())
+  email              String       @unique
+  name               String?
+  passwordHash       String?      @map("password_hash")
+  authProvider       AuthProvider @default(email) @map("auth_provider")
+  planId             String?      @map("plan_id")
+  creditsRemaining   Int          @default(1) @map("credits_remaining")
+  stripeCustomerId   String?      @map("stripe_customer_id") // encrypted at app level
+  emailVerifiedAt    DateTime?    @map("email_verified_at")
+  emailVerifyToken   String?      @map("email_verify_token")
+  resetToken         String?      @map("reset_token")
+  resetTokenExpiry   DateTime?    @map("reset_token_expiry")
+  failedLoginCount   Int          @default(0) @map("failed_login_count")
+  lockedUntil        DateTime?    @map("locked_until")
+  deletedAt          DateTime?    @map("deleted_at")
+  createdAt          DateTime     @default(now()) @map("created_at")
+  updatedAt          DateTime     @updatedAt @map("updated_at")
+
+  plan          PlanConfig?     @relation(fields: [planId], references: [id])
+  curations     Curation[]
+  payments      Payment[]
+  notifications Notification[]
+  referralsMade Referral[]      @relation("ReferrerUser")
+  referralUsed  Referral[]      @relation("ReferredUser")
+  serviceLeads  ServiceLead[]
+
+  @@index([email])
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────
+// ADMIN USERS
+// ─────────────────────────────────────────────
+
+model AdminUser {
+  id          String    @id @default(uuid())
+  email       String    @unique
+  name        String
+  passwordHash String   @map("password_hash")
+  totpSecret  String?   @map("totp_secret")
+  totpEnabled Boolean   @default(false) @map("totp_enabled")
+  backupCodes Json      @default("[]") @map("backup_codes") // hashed backup codes
+  role        AdminRole @default(admin)
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  auditLogs AuditLog[]
+  blogPosts BlogPost[]
+  aiConfigs AiConfig[]
+
+  @@map("admin_users")
+}
+
+// ─────────────────────────────────────────────
+// WEBSITES DATABASE
+// ─────────────────────────────────────────────
+
+model Website {
+  id            String      @id @default(cuid())
+  name          String
+  url           String      @unique
+  type          WebsiteType
+  da            Int         @default(0) // domain authority 0-100
+  countryId     String?     @map("country_id")
+  categoryId    String?     @map("category_id")
+  subCategoryId String?     @map("sub_category_id")
+  description   String?     @db.Text
+  submissionUrl String?     @map("submission_url")
+  isActive      Boolean     @default(true) @map("is_active")
+  isPinned      Boolean     @default(false) @map("is_pinned")
+  isExcluded    Boolean     @default(false) @map("is_excluded")
+  tagSlugs      String[]    @default([]) @map("tag_slugs") // denormalized for fast GIN queries
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  country       Country?        @relation(fields: [countryId], references: [id])
+  category      Category?       @relation(fields: [categoryId], references: [id])
+  subCategory   SubCategory?    @relation(fields: [subCategoryId], references: [id])
+  websiteTags   WebsiteTag[]
+  curationResults CurationResult[]
+
+  @@index([type, isActive])
+  @@index([countryId, isActive])
+  @@map("websites")
+}
+
+model WebsiteTag {
+  websiteId String @map("website_id")
+  tagId     String @map("tag_id")
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  tag     Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([websiteId, tagId])
+  @@map("website_tags")
+}
+
+// ─────────────────────────────────────────────
+// CURATIONS
+// ─────────────────────────────────────────────
+
+model Curation {
+  id          String         @id @default(uuid())
+  userId      String         @map("user_id")
+  productUrl  String         @map("product_url")
+  countryId   String?        @map("country_id")
+  keywords    String[]       @default([])
+  description String?        @db.Text
+  status      CurationStatus @default(pending)
+  errorMessage String?       @map("error_message")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  user    User             @relation(fields: [userId], references: [id])
+  country Country?         @relation(fields: [countryId], references: [id])
+  results CurationResult[]
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("curations")
+}
+
+model CurationResult {
+  id          String            @id @default(cuid())
+  curationId  String            @map("curation_id")
+  websiteId   String            @map("website_id")
+  matchScore  Float             @map("match_score")
+  matchReason String?           @db.Text @map("match_reason")
+  section     CurationSection   // a = distribution, b = guest post, c = press release
+  rank        Int
+  userStatus  UserResultStatus? @map("user_status")
+  userNotes   String?           @db.Text @map("user_notes")
+  createdAt   DateTime          @default(now()) @map("created_at")
+
+  curation Curation @relation(fields: [curationId], references: [id], onDelete: Cascade)
+  website  Website  @relation(fields: [websiteId], references: [id])
+
+  @@index([curationId, section, rank])
+  @@map("curation_results")
+}
+
+// ─────────────────────────────────────────────
+// PAYMENTS
+// ─────────────────────────────────────────────
+
+model Payment {
+  id                     String        @id @default(cuid())
+  userId                 String        @map("user_id")
+  planId                 String?       @map("plan_id")
+  stripePaymentIntentId  String?       @map("stripe_payment_intent_id")
+  stripeSubscriptionId   String?       @map("stripe_subscription_id")
+  stripeInvoiceId        String?       @map("stripe_invoice_id")
+  amountCents            Int           @map("amount_cents")
+  currency               String        @default("usd")
+  status                 PaymentStatus @default(pending)
+  createdAt              DateTime      @default(now()) @map("created_at")
+
+  user User        @relation(fields: [userId], references: [id])
+  plan PlanConfig? @relation(fields: [planId], references: [id])
+
+  @@map("payments")
+}
+
+// Idempotency table for Stripe webhook events
+model ProcessedStripeEvent {
+  eventId     String   @id @map("event_id")
+  processedAt DateTime @default(now()) @map("processed_at")
+
+  @@map("processed_stripe_events")
+}
+
+// ─────────────────────────────────────────────
+// BLOG
+// ─────────────────────────────────────────────
+
+model BlogPost {
+  id              String     @id @default(cuid())
+  slug            String     @unique
+  title           String
+  excerpt         String?    @db.Text
+  content         String     @db.Text
+  featuredImage   String?    @map("featured_image")
+  categoryId      String?    @map("category_id")
+  authorId        String     @map("author_id")
+  status          BlogStatus @default(draft)
+  publishDate     DateTime?  @map("publish_date")
+  metaTitle       String?    @map("meta_title")
+  metaDescription String?    @map("meta_description")
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+
+  category Category?  @relation(fields: [categoryId], references: [id])
+  author   AdminUser  @relation(fields: [authorId], references: [id])
+
+  @@index([status, publishDate(sort: Desc)])
+  @@map("blog_posts")
+}
+
+// ─────────────────────────────────────────────
+// SERVICE LEADS
+// ─────────────────────────────────────────────
+
+model ServiceLead {
+  id          String     @id @default(cuid())
+  userId      String?    @map("user_id")
+  name        String
+  email       String
+  phone       String?    // encrypted at app level
+  websiteUrl  String?    @map("website_url")
+  serviceType String?    @map("service_type")
+  message     String?    @db.Text
+  status      LeadStatus @default(new)
+  notes       String?    @db.Text
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@map("service_leads")
+}
+
+// ─────────────────────────────────────────────
+// AUDIT LOGS
+// ─────────────────────────────────────────────
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  adminId   String   @map("admin_id")
+  action    String   // e.g. "website_created", "user_plan_changed"
+  entity    String   // table name
+  entityId  String   @map("entity_id")
+  oldData   Json?    @map("old_data")
+  newData   Json?    @map("new_data")
+  ip        String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  admin AdminUser @relation(fields: [adminId], references: [id])
+
+  @@index([adminId, createdAt(sort: Desc)])
+  @@index([entity, entityId])
+  @@map("audit_logs")
+}
+
+// ─────────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────────
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  type      String   // "curation_complete" | "low_credits" | "payment_success" | "payment_failed"
+  title     String
+  message   String   @db.Text
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+// ─────────────────────────────────────────────
+// REFERRALS
+// ─────────────────────────────────────────────
+
+model Referral {
+  id             String   @id @default(cuid())
+  referrerUserId String   @map("referrer_user_id")
+  referredUserId String?  @map("referred_user_id")
+  code           String   @unique
+  status         String   @default("pending") // pending | converted | rewarded
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  referrer User  @relation("ReferrerUser", fields: [referrerUserId], references: [id])
+  referred User? @relation("ReferredUser", fields: [referredUserId], references: [id])
+
+  @@map("referrals")
+}
+
+// ─────────────────────────────────────────────
+// CONTACT SUBMISSIONS
+// ─────────────────────────────────────────────
+
+model ContactSubmission {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  subject   String
+  message   String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("contact_submissions")
+}
+
+// ─────────────────────────────────────────────
+// AI CONFIG (single row, admin-controlled)
+// ─────────────────────────────────────────────
+
+model AiConfig {
+  id          String    @id @default("default")
+  baseUrl     String    @map("base_url")
+  apiKey      String    @map("api_key") // encrypted at app level
+  modelName   String    @map("model_name")
+  maxTokens   Int       @default(4096) @map("max_tokens")
+  temperature Float     @default(0.3)
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  updatedById String?   @map("updated_by_id")
+
+  updatedBy AdminUser? @relation(fields: [updatedById], references: [id])
+
+  @@map("ai_config")
+}

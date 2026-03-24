@@ -9,7 +9,7 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-heading: var(--font-heading);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -43,78 +43,84 @@
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* PublishRoad Brand Colors — Novaire palette */
+  --color-navy: var(--navy);
+  --color-blue: var(--blue);
+  --color-light-blue: var(--light-blue);
+  --color-ice-blue: var(--ice-blue);
+  --color-indigo: var(--indigo);
+  --color-indigo-light: var(--indigo-light);
+  --color-dark: var(--dark);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+  --color-purple: var(--purple);
+  --color-dark-gray: var(--dark-gray);
+  --color-medium-gray: var(--medium-gray);
+  --color-light-gray: var(--light-gray);
+  --color-border-gray: var(--border-gray);
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
+  /* Novaire Core Palette */
+  --indigo: #5B58F6;
+  --indigo-light: #EEF0FE;
+  --dark: #020617;
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  /* Legacy aliases pointing to new palette (keeps existing class names working) */
+  --navy: #020617;
+  --blue: #5B58F6;
+  --light-blue: #EEF0FE;
+  --ice-blue: #FAFAFA;
+
+  /* Status colors */
+  --success: #27AE60;
+  --warning: #E67E22;
+  --error: #C0392B;
+  --purple: #7C3AED;
+  --dark-gray: #1e293b;
+  --medium-gray: #64748b;
+  --light-gray: #F8FAFC;
+  --border-gray: #E2E8F0;
+
+  /* shadcn/ui tokens mapped to Novaire palette */
+  --background: #FAFAFA;
+  --foreground: #1e293b;
+  --card: #ffffff;
+  --card-foreground: #1e293b;
+  --popover: #ffffff;
+  --popover-foreground: #1e293b;
+  --primary: #5B58F6;
+  --primary-foreground: #ffffff;
+  --secondary: #EEF0FE;
+  --secondary-foreground: #5B58F6;
+  --muted: #F8FAFC;
+  --muted-foreground: #64748b;
+  --accent: #EEF0FE;
+  --accent-foreground: #5B58F6;
+  --destructive: #C0392B;
+  --border: #E2E8F0;
+  --input: #E2E8F0;
+  --ring: #5B58F6;
+  --radius: 0.75rem;
+
+  /* Sidebar — deep dark like Novaire footer */
+  --sidebar: #020617;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #5B58F6;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #5B58F6;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(255,255,255,0.08);
+  --sidebar-ring: #5B58F6;
+
+  /* Charts */
+  --chart-1: #5B58F6;
+  --chart-2: #27AE60;
+  --chart-3: #E67E22;
+  --chart-4: #7C3AED;
+  --chart-5: #C0392B;
 }
 
 @layer base {
@@ -123,8 +129,129 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-sans), system-ui, sans-serif;
+    font-size: 16px;
+    font-weight: 300;
+    line-height: 1.7;
+    color: var(--dark-gray);
+    background-color: var(--background);
   }
   html {
     @apply font-sans;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading), var(--font-sans), serif;
+    line-height: 1.2;
+  }
+  h1 {
+    font-size: 3rem;
+    font-weight: 700;
+    color: var(--dark);
+    letter-spacing: -0.02em;
+  }
+  h2 {
+    font-size: 2rem;
+    font-weight: 600;
+    color: var(--dark);
+    letter-spacing: -0.01em;
+  }
+  h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--dark);
+  }
+  p {
+    line-height: 1.7;
+    font-weight: 300;
+  }
+  small {
+    font-size: 0.875rem;
+    color: var(--medium-gray);
+  }
+
+  /* Focus visible ring */
+  :focus-visible {
+    outline: 2px solid var(--indigo);
+    outline-offset: 2px;
+  }
+
+  /* Reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* Utility classes — Novaire design tokens */
+@layer utilities {
+  /* Color utilities */
+  .text-navy { color: var(--dark); }
+  .text-blue { color: var(--indigo); }
+  .text-indigo { color: var(--indigo); }
+  .text-medium-gray { color: var(--medium-gray); }
+  .text-dark-gray { color: var(--dark-gray); }
+  .bg-ice-blue { background-color: var(--ice-blue); }
+  .bg-light-blue { background-color: var(--light-blue); }
+  .bg-indigo-light { background-color: var(--indigo-light); }
+  .bg-navy { background-color: var(--dark); }
+  .bg-blue { background-color: var(--indigo); }
+  .border-gray { border-color: var(--border-gray); }
+  .border-border-gray { border-color: var(--border-gray); }
+
+  /* Novaire card */
+  .card-base {
+    background: white;
+    border: 1px solid var(--border-gray);
+    border-radius: 2rem;
+    padding: 2rem;
+    box-shadow: 0 4px 24px rgba(91, 88, 246, 0.06);
+  }
+
+  /* Dot-grid background pattern */
+  .bg-dot-grid {
+    background-image: radial-gradient(circle, #c7c5fb 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+
+  /* Mesh gradient hero bg */
+  .bg-mesh {
+    background:
+      radial-gradient(ellipse 80% 60% at 20% 30%, rgba(91,88,246,0.12) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 50% at 80% 70%, rgba(124,58,237,0.08) 0%, transparent 60%),
+      #FAFAFA;
+  }
+
+  /* Indigo glow button shadow */
+  .btn-glow {
+    box-shadow: 0 0 20px rgba(91, 88, 246, 0.4), 0 4px 12px rgba(91, 88, 246, 0.3);
+  }
+  .btn-glow:hover {
+    box-shadow: 0 0 32px rgba(91, 88, 246, 0.55), 0 6px 20px rgba(91, 88, 246, 0.4);
+  }
+
+  /* Frosted glass */
+  .glass {
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  /* Section spacing */
+  .section-pad { padding-top: 7rem; padding-bottom: 7rem; }
+
+  /* Button sizes */
+  .btn-height-default { height: 44px; }
+  .btn-height-hero { height: 52px; }
+  .btn-height-sm { height: 36px; }
+
+  /* Gradient text */
+  .gradient-text {
+    background: linear-gradient(135deg, #5B58F6 0%, #7C3AED 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
 }
