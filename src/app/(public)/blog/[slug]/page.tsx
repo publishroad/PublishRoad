@@ -1,4 +1,6 @@
+import Image from "next/image";
 import { notFound } from "next/navigation";
+import sanitizeHtml from "sanitize-html";
 import { db } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
 import type { Metadata } from "next";
@@ -11,10 +13,16 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const post = await db.blogPost.findUnique({
-    where: { slug, status: "published" },
-    select: { title: true, metaTitle: true, metaDescription: true, excerpt: true },
-  });
+  let post = null;
+
+  try {
+    post = await db.blogPost.findUnique({
+      where: { slug, status: "published" },
+      select: { title: true, metaTitle: true, metaDescription: true, excerpt: true },
+    });
+  } catch {
+    return {};
+  }
 
   if (!post) return {};
 
@@ -27,12 +35,32 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function BlogPostPage({ params }: Props) {
   const { slug } = await params;
 
-  const post = await db.blogPost.findUnique({
-    where: { slug, status: "published" },
-    include: { author: { select: { name: true } } },
-  });
+  let post = null;
+
+  try {
+    post = await db.blogPost.findUnique({
+      where: { slug, status: "published" },
+      include: { author: { select: { name: true } } },
+    });
+  } catch {
+    notFound();
+  }
 
   if (!post) notFound();
+
+  const sanitizedContent = sanitizeHtml(post.content, {
+    allowedTags: sanitizeHtml.defaults.allowedTags.concat(["img", "h1", "h2", "span"]),
+    allowedAttributes: {
+      ...sanitizeHtml.defaults.allowedAttributes,
+      a: ["href", "name", "target", "rel"],
+      img: ["src", "alt", "title", "width", "height", "loading"],
+      '*': ["class"],
+    },
+    allowedSchemes: ["http", "https", "mailto"],
+    transformTags: {
+      a: sanitizeHtml.simpleTransform("a", { rel: "noopener noreferrer" }, true),
+    },
+  });
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "var(--background)" }}>
@@ -62,10 +90,12 @@ export default async function BlogPostPage({ params }: Props) {
       <article className="max-w-[720px] mx-auto px-4 sm:px-6 py-12">
         {/* Featured Image */}
         {post.featuredImage && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <Image
             src={post.featuredImage}
-            alt={post.title}
+            alt={`Featured image for ${post.title}`}
+            width={1200}
+            height={720}
+            sizes="(min-width: 768px) 720px, 100vw"
             className="w-full rounded-[2rem] mb-10 object-cover"
             style={{ boxShadow: "0 8px 40px rgba(91,88,246,0.1)" }}
           />
@@ -75,7 +105,7 @@ export default async function BlogPostPage({ params }: Props) {
         <div
           className="prose prose-lg max-w-none"
           style={{ color: "var(--dark-gray)" }}
-          dangerouslySetInnerHTML={{ __html: post.content }}
+          dangerouslySetInnerHTML={{ __html: sanitizedContent }}
         />
 
         {/* Back link */}

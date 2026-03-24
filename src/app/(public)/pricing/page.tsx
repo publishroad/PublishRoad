@@ -14,12 +14,24 @@ export const metadata: Metadata = {
 export const revalidate = 30;
 
 async function getPlans() {
-  return getCachedWithLock(CacheKeys.plans, CacheTTL.PLAN, async () => {
-    return db.planConfig.findMany({
-      where: { isActive: true },
-      orderBy: { sortOrder: "asc" },
+  try {
+    return await getCachedWithLock(CacheKeys.plans, CacheTTL.PLAN, async () => {
+      return db.planConfig.findMany({
+        where: { isActive: true },
+        orderBy: { sortOrder: "asc" },
+      });
     });
-  });
+  } catch {
+    return [];
+  }
+}
+
+async function getOptionalSession() {
+  try {
+    return await auth();
+  } catch {
+    return null;
+  }
 }
 
 // Static fallback plans shown when DB has no plans yet
@@ -67,7 +79,7 @@ const fallbackPlans = [
 ];
 
 export default async function PricingPage() {
-  const [dbPlans, session] = await Promise.all([getPlans(), auth()]);
+  const [dbPlans, session] = await Promise.all([getPlans(), getOptionalSession()]);
 
   const currentPlanSlug = session?.user?.planSlug;
 
