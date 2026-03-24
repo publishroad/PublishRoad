@@ -1,10 +1,10 @@
 import Stripe from "stripe";
 import { db } from "./db";
 
-export const stripe = new Stripe(
-  process.env.STRIPE_SECRET_KEY ?? "sk_test_placeholder",
-  { apiVersion: "2026-02-25.clover", typescript: true }
-);
+function getStripeClient(secretKey?: string): Stripe {
+  const key = secretKey ?? process.env.STRIPE_SECRET_KEY ?? "sk_test_placeholder";
+  return new Stripe(key, { apiVersion: "2026-02-25.clover", typescript: true });
+}
 
 // ─────────────────────────────────────────────
 // Create Stripe Checkout Session
@@ -15,12 +15,14 @@ export async function createCheckoutSession({
   stripeCustomerId,
   successUrl,
   cancelUrl,
+  stripeSecretKey,
 }: {
   userId: string;
   planId: string;
   stripeCustomerId?: string | null;
   successUrl: string;
   cancelUrl: string;
+  stripeSecretKey?: string;
 }): Promise<string> {
   const plan = await db.planConfig.findUnique({
     where: { id: planId, isActive: true },
@@ -31,6 +33,8 @@ export async function createCheckoutSession({
 
   const mode: Stripe.Checkout.SessionCreateParams.Mode =
     plan.billingType === "monthly" ? "subscription" : "payment";
+
+  const stripe = getStripeClient(stripeSecretKey);
 
   const session = await stripe.checkout.sessions.create({
     mode,
@@ -52,8 +56,10 @@ export async function createCheckoutSession({
 // ─────────────────────────────────────────────
 export async function createPortalSession(
   stripeCustomerId: string,
-  returnUrl: string
+  returnUrl: string,
+  stripeSecretKey?: string
 ): Promise<string> {
+  const stripe = getStripeClient(stripeSecretKey);
   const session = await stripe.billingPortal.sessions.create({
     customer: stripeCustomerId,
     return_url: returnUrl,
@@ -67,8 +73,10 @@ export async function createPortalSession(
 export function constructWebhookEvent(
   payload: Buffer,
   signature: string,
-  secret: string
+  secret: string,
+  stripeSecretKey?: string
 ): Stripe.Event {
+  const stripe = getStripeClient(stripeSecretKey);
   return stripe.webhooks.constructEvent(payload, signature, secret);
 }
 
@@ -78,7 +86,8 @@ export function constructWebhookEvent(
 export async function getOrCreateStripeCustomer(
   userId: string,
   email: string,
-  name?: string | null
+  name?: string | null,
+  stripeSecretKey?: string
 ): Promise<string> {
   const user = await db.user.findUnique({
     where: { id: userId },
@@ -90,16 +99,21 @@ export async function getOrCreateStripeCustomer(
     return decryptField(user.stripeCustomerId);
   }
 
+  const stripe = getStripeClient(stripeSecretKey);
+
   const customer = await stripe.customers.create({
     email,
     name: name ?? undefined,
     metadata: { userId },
   });
 
-  const { encryptField } = await import("./server-utils");
+  const { encryptField, hashLookupValue } = await import("./server-utils");
   await db.user.update({
     where: { id: userId },
-    data: { stripeCustomerId: encryptField(customer.id) },
+    data: {
+      stripeCustomerId: encryptField(customer.id),
+      stripeCustomerHash: hashLookupValue(customer.id),
+    },
   });
 
   return customer.id;

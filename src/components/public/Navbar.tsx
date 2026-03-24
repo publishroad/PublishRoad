@@ -2,12 +2,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useSession } from "next-auth/react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 const navLinks = [
+  { href: "/", label: "Home" },
   { href: "/pricing", label: "Pricing" },
   { href: "/blog", label: "Blog" },
+  { href: "/contact", label: "Hire Us" },
   { href: "/faq", label: "FAQ" },
   { href: "/contact", label: "Contact" },
 ];
@@ -35,12 +38,8 @@ export function Navbar() {
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link
-            href="/"
-            className="text-xl font-bold tracking-tight"
-            style={{ fontFamily: "var(--font-heading)", color: "#020617", textDecoration: "none" }}
-          >
-            Publish<span style={{ color: "#5B58F6" }}>Road</span>
+          <Link href="/" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
+            <Image src="/logo.png" alt="PublishRoad" width={140} height={40} sizes="140px" style={{ height: "auto" }} priority />
           </Link>
 
           {/* Desktop Nav — center pill */}
@@ -48,7 +47,7 @@ export function Navbar() {
             <div className="flex items-center gap-1 bg-white/60 border border-white/80 rounded-full px-2 py-1 shadow-sm">
               {navLinks.map((link) => (
                 <Link
-                  key={link.href}
+                  key={`${link.href}-${link.label}`}
                   href={link.href}
                   className="px-4 py-1.5 rounded-full text-sm font-medium text-slate-600 hover:text-dark hover:bg-white transition-all duration-200"
                   style={{ textDecoration: "none" }}
@@ -87,15 +86,12 @@ export function Navbar() {
             </SheetTrigger>
             <SheetContent side="right" className="w-72 bg-white/90 backdrop-blur-xl border-l border-white/40">
               <div className="flex flex-col gap-2 mt-10">
-                <p
-                  className="text-lg font-bold mb-4 px-2"
-                  style={{ fontFamily: "var(--font-heading)", color: "#020617" }}
-                >
-                  Publish<span style={{ color: "#5B58F6" }}>Road</span>
-                </p>
+                <div className="mb-4 px-2">
+                  <Image src="/logo.png" alt="PublishRoad" width={120} height={34} sizes="120px" style={{ height: "auto" }} />
+                </div>
                 {navLinks.map((link) => (
                   <Link
-                    key={link.href}
+                    key={`${link.href}-${link.label}`}
                     href={link.href}
                     className="text-slate-600 font-medium text-base py-2.5 px-4 rounded-full hover:bg-slate-50 hover:text-slate-900 transition-colors"
                     style={{ textDecoration: "none" }}

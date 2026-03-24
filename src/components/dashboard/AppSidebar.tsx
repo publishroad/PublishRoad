@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
@@ -33,9 +34,7 @@ export function AppSidebar({ groups, bottomSlot, exactMatch = [] }: AppSidebarPr
     <aside className="w-[260px] shrink-0 min-h-screen bg-white border-r border-gray-200 flex flex-col">
       {/* Logo */}
       <div className="h-[70px] flex items-center px-6 border-b border-gray-200">
-        <span className="text-xl font-bold text-gray-900">
-          Publish<span className="text-[#465FFF]">Road</span>
-        </span>
+        <Image src="/logo.png" alt="PublishRoad" width={130} height={37} sizes="130px" style={{ height: "auto" }} priority />
       </div>
 
       {/* Nav */}

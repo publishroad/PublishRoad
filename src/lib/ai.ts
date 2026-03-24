@@ -110,6 +110,9 @@ interface WebsiteCandidate {
   url: string;
   type: string;
   da: number;
+  pa: number;
+  spamScore: number;
+  traffic: number;
   description?: string | null;
   tagSlugs: string[];
 }
@@ -164,7 +167,7 @@ function buildMatchingPrompt(
     .slice(0, 150) // Limit to avoid token overflow
     .map(
       (w, i) =>
-        `${i + 1}. ID:${w.id} | Name:${w.name} | URL:${w.url} | Type:${w.type} | DA:${w.da} | Tags:${w.tagSlugs.join(",")} | Desc:${w.description?.slice(0, 100) ?? "N/A"}`
+        `${i + 1}. ID:${w.id} | Name:${w.name} | URL:${w.url} | Type:${w.type} | DA:${w.da} | PA:${w.pa} | Spam:${w.spamScore} | Traffic:${w.traffic} | Tags:${w.tagSlugs.join(",")} | Desc:${w.description?.slice(0, 100) ?? "N/A"}`
     )
     .join("\n");
 

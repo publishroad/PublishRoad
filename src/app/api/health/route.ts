@@ -6,6 +6,19 @@ import Stripe from "stripe";
 export async function GET() {
   const checks: Record<string, "ok" | "error" | "skipped"> = {};
 
+  const gatewayConfig = await db.paymentGatewayConfig.findUnique({
+    where: { id: "default" },
+    select: { provider: true },
+  });
+
+  const emailConfigRows = await db.$queryRaw<Array<{ provider: "resend" | "smtp" | "sendgrid" | "ses"; api_key: string | null }>>`
+    SELECT provider, api_key
+    FROM email_provider_config
+    WHERE id = 'default'
+    LIMIT 1
+  `;
+  const emailConfig = emailConfigRows[0] ?? null;
+
   // DB check
   try {
     await db.$queryRaw`SELECT 1`;
@@ -23,7 +36,9 @@ export async function GET() {
   }
 
   // Stripe check (non-blocking in local/dev)
-  if (process.env.NODE_ENV !== "production") {
+  if (gatewayConfig && gatewayConfig.provider !== "stripe") {
+    checks.stripe = "skipped";
+  } else if (process.env.NODE_ENV !== "production") {
     checks.stripe = "skipped";
   } else if (!process.env.STRIPE_SECRET_KEY) {
     checks.stripe = "skipped";
@@ -37,6 +52,18 @@ export async function GET() {
     } catch {
       checks.stripe = "error";
     }
+  }
+
+  // Email check (non-blocking in local/dev)
+  const emailProvider = emailConfig?.provider ?? "resend";
+  if (process.env.NODE_ENV !== "production") {
+    checks.email = "skipped";
+  } else if (emailProvider !== "resend") {
+    checks.email = "skipped";
+  } else if (!emailConfig?.api_key && !process.env.RESEND_API_KEY) {
+    checks.email = "error";
+  } else {
+    checks.email = "ok";
   }
 
   const allOk = Object.values(checks).every((v) => v === "ok" || v === "skipped");

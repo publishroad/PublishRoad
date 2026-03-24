@@ -142,6 +142,9 @@ async function processCuration(
       name: true,
       url: true,
       da: true,
+      pa: true,
+      spamScore: true,
+      traffic: true,
       type: true,
       description: true,
       tagSlugs: true,
@@ -173,6 +176,9 @@ async function processCuration(
         name: true,
         url: true,
         da: true,
+        pa: true,
+        spamScore: true,
+        traffic: true,
         type: true,
         description: true,
         tagSlugs: true,
@@ -230,7 +236,19 @@ async function processCuration(
     where: { id: curationId },
     include: {
       results: {
-        include: { website: { select: { name: true, url: true, da: true, type: true } } },
+        include: {
+          website: {
+            select: {
+              name: true,
+              url: true,
+              da: true,
+              pa: true,
+              spamScore: true,
+              traffic: true,
+              type: true,
+            },
+          },
+        },
         orderBy: [{ section: "asc" }, { rank: "asc" }],
       },
     },

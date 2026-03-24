@@ -3,6 +3,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -69,12 +70,9 @@ export default function AdminLoginPage() {
       <div className="relative w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
-          <span
-            className="text-2xl font-bold text-white"
-            style={{ fontFamily: "var(--font-heading)" }}
-          >
-            Publish<span style={{ color: "var(--indigo)" }}>Road</span>
-          </span>
+          <div className="inline-block">
+            <Image src="/logo.png" alt="PublishRoad" width={150} height={43} sizes="150px" style={{ filter: "brightness(0) invert(1)", height: "auto" }} priority />
+          </div>
           <p className="text-slate-400 text-sm mt-1 font-light">Admin Portal</p>
         </div>
 

@@ -113,7 +113,7 @@ export function BulkImportModal() {
             <div className="text-sm text-medium-gray bg-ice-blue rounded-lg p-3">
               <p className="font-medium text-navy mb-1">CSV/JSON format:</p>
               <p className="font-mono text-xs">
-                name, url, type, da, country_slug, category_slug, tags, description
+                name, url, type, da, pa, spam_score, traffic, country_slug, category_slug, tags, description
               </p>
             </div>
 

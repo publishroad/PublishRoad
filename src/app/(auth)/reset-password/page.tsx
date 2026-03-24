@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -102,10 +103,8 @@ export default function ResetPasswordPage() {
       <div style={{ position: "relative", width: "100%", maxWidth: "440px" }}>
         {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: "2rem" }}>
-          <Link href="/" style={{ textDecoration: "none" }}>
-            <span style={{ fontFamily: "var(--font-heading)", fontSize: "2rem", fontWeight: 700, color: "#020617" }}>
-              Publish<span style={{ color: "#5B58F6" }}>Road</span>
-            </span>
+          <Link href="/" style={{ textDecoration: "none", display: "inline-block" }}>
+            <Image src="/logo.png" alt="PublishRoad" width={160} height={46} sizes="160px" style={{ height: "auto" }} priority />
           </Link>
           <p style={{ color: "#64748b", marginTop: "0.375rem", fontWeight: 300, fontSize: "0.95rem" }}>
             Set your new password

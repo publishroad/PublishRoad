@@ -20,7 +20,14 @@ export default async function CurationsPage({ searchParams }: { searchParams: Pr
     where: { userId, ...(cursor ? { OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { lt: cursor.id } }] } : {}) },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: PAGE_SIZE + 1,
-    include: { _count: { select: { results: true } } },
+    include: {
+      results: {
+        select: {
+          section: true,
+          userStatus: true,
+        },
+      },
+    },
   });
 
   const hasMore = curations.length > PAGE_SIZE;
@@ -48,9 +55,36 @@ export default async function CurationsPage({ searchParams }: { searchParams: Pr
         ) : (
           <>
             <div className="space-y-3">
-              {items.map((c) => (
-                <CurationCard key={c.id} id={c.id} productUrl={c.productUrl} status={c.status as "pending" | "processing" | "completed" | "failed"} createdAt={c.createdAt} resultCount={c._count.results} />
-              ))}
+              {items.map((c) => {
+                const progress = c.results.reduce(
+                  (acc, result) => {
+                    if (result.section !== "a" && result.section !== "b" && result.section !== "c") {
+                      return acc;
+                    }
+                    acc[result.section].total += 1;
+                    if (result.userStatus === "saved") {
+                      acc[result.section].completed += 1;
+                    }
+                    return acc;
+                  },
+                  {
+                    a: { total: 0, completed: 0 },
+                    b: { total: 0, completed: 0 },
+                    c: { total: 0, completed: 0 },
+                  }
+                );
+
+                return (
+                  <CurationCard
+                    key={c.id}
+                    id={c.id}
+                    productUrl={c.productUrl}
+                    status={c.status as "pending" | "processing" | "completed" | "failed"}
+                    createdAt={c.createdAt}
+                    progress={progress}
+                  />
+                );
+              })}
             </div>
             {nextCursor && (
               <div className="mt-6 text-center">

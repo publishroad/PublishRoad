@@ -2,7 +2,7 @@
  * Server-only utilities that use Node.js APIs (crypto, bcrypt).
  * Do NOT import this file from middleware or client components.
  */
-import { createCipheriv, createDecipheriv, randomBytes } from "crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 
 // ─────────────────────────────────────────────
@@ -44,6 +44,11 @@ export function decryptField(ciphertext: string): string {
     decipher.update(encrypted),
     decipher.final(),
   ]).toString("utf8");
+}
+
+// Deterministic SHA-256 hash for indexed lookups of encrypted values.
+export function hashLookupValue(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
 }
 
 // ─────────────────────────────────────────────

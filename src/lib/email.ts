@@ -1,13 +1,5 @@
-import { Resend } from "resend";
 import React from "react";
-
-if (!process.env.RESEND_API_KEY) {
-  throw new Error("RESEND_API_KEY env var not set");
-}
-
-const resend = new Resend(process.env.RESEND_API_KEY);
-
-const FROM_ADDRESS = "PublishRoad <noreply@publishroad.com>";
+import { sendEmailWithActiveProvider, UnsupportedEmailProviderError } from "@/lib/email/service";
 
 // ─────────────────────────────────────────────
 // Generic email sender
@@ -23,15 +15,14 @@ export async function sendEmail({
   react?: React.ReactElement;
   text?: string;
 }): Promise<void> {
-  const { error } = await resend.emails.send({
-    from: FROM_ADDRESS,
-    to,
-    subject,
-    react,
-    text,
-  });
+  try {
+    await sendEmailWithActiveProvider({ to, subject, react, text });
+  } catch (error) {
+    if (error instanceof UnsupportedEmailProviderError) {
+      console.error("[Email] Provider not enabled yet:", error.provider);
+      return;
+    }
 
-  if (error) {
     console.error("[Email] Failed to send:", error);
     // Don't throw — email failure should not block the main flow
   }

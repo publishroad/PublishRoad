@@ -1,10 +1,20 @@
-import NextAuth, { type DefaultSession } from "next-auth";
+import NextAuth, { CredentialsSignin, type DefaultSession } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { db } from "./db";
 import { loginSchema } from "./validations/auth";
 import { authConfig } from "./auth.config";
+import { evaluateLoginCredentials } from "./login-evaluator";
 import { verifyPassword } from "./server-utils";
+
+class LoginCredentialsError extends CredentialsSignin {
+  code: string;
+
+  constructor(code: string) {
+    super();
+    this.code = code;
+  }
+}
 
 // ─────────────────────────────────────────────
 // Extend session types
@@ -44,45 +54,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!parsed.success) return null;
         const { email, password } = parsed.data;
 
-        const user = await db.user.findFirst({
-          where: { email, deletedAt: null },
-          include: { plan: true },
-        });
+        const result = await evaluateLoginCredentials(email, password, { recordFailures: true });
 
-        if (!user || !user.passwordHash) return null;
-
-        if (user.lockedUntil && user.lockedUntil > new Date()) {
-          throw new Error("Account locked. Please try again later.");
+        if (result.code === "OK") {
+          return result.user;
         }
 
-        const isValid = await verifyPassword(user.passwordHash, password);
-
-        if (!isValid) {
-          const newCount = user.failedLoginCount + 1;
-          const lockedUntil = newCount >= 15 ? new Date(Date.now() + 30 * 60 * 1000) : null;
-          await db.user.update({
-            where: { id: user.id },
-            data: { failedLoginCount: newCount, ...(lockedUntil ? { lockedUntil } : {}) },
-          });
-          return null;
+        if (result.code === "EMAIL_NOT_FOUND") {
+          throw new LoginCredentialsError("email_not_found");
         }
 
-        // Only reset failed-login counter if it was actually non-zero (saves a DB write)
-        if (user.failedLoginCount > 0 || user.lockedUntil) {
-          await db.user.update({
-            where: { id: user.id },
-            data: { failedLoginCount: 0, lockedUntil: null },
-          });
+        if (result.code === "SOCIAL_LOGIN_ONLY") {
+          throw new LoginCredentialsError("social_login_only");
         }
 
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          planSlug: user.plan?.slug ?? "free",
-          creditsRemaining: user.creditsRemaining,
-          isEmailVerified: !!user.emailVerifiedAt,
-        };
+        if (result.code === "ACCOUNT_LOCKED") {
+          throw new LoginCredentialsError("account_locked");
+        }
+
+        throw new LoginCredentialsError("wrong_password");
       },
     }),
   ],

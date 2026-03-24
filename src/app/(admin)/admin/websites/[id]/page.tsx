@@ -16,14 +16,25 @@ async function getData(id: string) {
   }
 
   const [website, countries, categories, tags] = await Promise.all([
-    db.website.findUnique({ where: { id } }),
+    db.website.findUnique({
+      where: { id },
+      include: { websiteTags: { select: { tagId: true } } },
+    }),
     db.country.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
     db.category.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
     db.tag.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
   ]);
 
   if (!website) notFound();
-  return { website, countries, categories, tags };
+  return {
+    website: {
+      ...website,
+      tagIds: website.websiteTags.map((t) => t.tagId),
+    },
+    countries,
+    categories,
+    tags,
+  };
 }
 
 export default async function WebsiteEditPage({

@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { constructWebhookEvent } from "@/lib/stripe";
 import { db } from "@/lib/db";
-import { encryptField, decryptField } from "@/lib/server-utils";
+import { encryptField, decryptField, hashLookupValue } from "@/lib/server-utils";
 import { invalidateUserProfile } from "@/lib/cache";
+import { getActivePaymentProvider, getStripeWebhookSecret } from "@/lib/payments/service";
 import type Stripe from "stripe";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  const sig = req.headers.get("stripe-signature");
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
+  const activeProvider = await getActivePaymentProvider();
+  if (activeProvider !== "stripe") {
+    return NextResponse.json({ received: true, skipped: true }, { status: 200 });
+  }
 
-  if (!sig) {
+  const sig = req.headers.get("stripe-signature");
+  const webhookSecret = await getStripeWebhookSecret();
+
+  if (!sig || !webhookSecret) {
     return NextResponse.json({ error: "Missing signature" }, { status: 400 });
   }
 
@@ -97,7 +103,10 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       planId,
       creditsRemaining: plan.credits,
       ...(typeof session.customer === "string"
-        ? { stripeCustomerId: encryptField(session.customer) }
+        ? {
+            stripeCustomerId: encryptField(session.customer),
+            stripeCustomerHash: hashLookupValue(session.customer),
+          }
         : {}),
     },
   });
@@ -190,14 +199,31 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
 }
 
 async function findUserByStripeCustomer(customerId: string) {
-  const users = await db.user.findMany({
-    where: { stripeCustomerId: { not: null } },
+  const customerHash = hashLookupValue(customerId);
+
+  const byHash = await db.user.findFirst({
+    where: { stripeCustomerHash: customerHash },
     select: { id: true, stripeCustomerId: true },
+  });
+
+  if (byHash) {
+    return byHash;
+  }
+
+  // Backward-compatible fallback for old rows that do not have a hash yet.
+  const users = await db.user.findMany({
+    where: { stripeCustomerId: { not: null }, stripeCustomerHash: null },
+    select: { id: true, stripeCustomerId: true },
+    take: 500,
   });
 
   for (const user of users) {
     try {
       if (user.stripeCustomerId && decryptField(user.stripeCustomerId) === customerId) {
+        await db.user.update({
+          where: { id: user.id },
+          data: { stripeCustomerHash: customerHash },
+        });
         return user;
       }
     } catch {

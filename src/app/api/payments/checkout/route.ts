@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { createCheckoutSession } from "@/lib/stripe";
 import { decryptField } from "@/lib/server-utils";
+import { createCheckoutForActiveProvider, PaymentConfigurationError, UnsupportedPaymentProviderError } from "@/lib/payments/service";
 import { z } from "zod";
 
 const schema = z.object({ planId: z.string().min(1) });
@@ -32,16 +32,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  if (!plan.stripePriceId) {
-    return NextResponse.json({ error: "Plan not configured for payment" }, { status: 400 });
-  }
-
   const stripeCustomerId = user.stripeCustomerId
     ? decryptField(user.stripeCustomerId)
     : null;
 
   try {
-    const checkoutUrl = await createCheckoutSession({
+    const checkoutUrl = await createCheckoutForActiveProvider({
       userId,
       planId,
       stripeCustomerId,
@@ -51,6 +47,12 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ url: checkoutUrl });
   } catch (error) {
+    if (error instanceof UnsupportedPaymentProviderError) {
+      return NextResponse.json({ error: error.message }, { status: 501 });
+    }
+    if (error instanceof PaymentConfigurationError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     console.error("Checkout error:", error);
     return NextResponse.json({ error: "Failed to create checkout session" }, { status: 500 });
   }

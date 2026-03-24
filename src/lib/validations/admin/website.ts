@@ -13,7 +13,10 @@ export const websiteSchema = z.object({
     .max(2000, "URL too long")
     .refine(isValidUrl, "Must be a valid HTTP/HTTPS URL"),
   type: z.enum(["distribution", "guest_post", "press_release"]),
-  da: z.number().int().min(0).max(100).default(0),
+  da: z.coerce.number().int().min(0).max(100).default(0),
+  pa: z.coerce.number().int().min(0).max(100).default(0),
+  spamScore: z.coerce.number().int().min(0).max(100).default(0),
+  traffic: z.coerce.number().int().min(0).default(0),
   countryId: z.string().optional().nullable(),
   categoryId: z.string().optional().nullable(),
   subCategoryId: z.string().optional().nullable(),
@@ -35,6 +38,9 @@ export const bulkImportRowSchema = z.object({
   url: z.string().min(1).refine(isValidUrl, "Invalid URL"),
   type: z.enum(["distribution", "guest_post", "press_release"]),
   da: z.coerce.number().int().min(0).max(100).default(0),
+  pa: z.coerce.number().int().min(0).max(100).default(0),
+  spam_score: z.coerce.number().int().min(0).max(100).default(0),
+  traffic: z.coerce.number().int().min(0).default(0),
   country_slug: z.string().optional().nullable(),
   category_slug: z.string().optional().nullable(),
   tags: z

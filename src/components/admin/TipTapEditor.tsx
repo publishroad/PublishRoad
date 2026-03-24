@@ -4,7 +4,8 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Image } from "@tiptap/extension-image";
 import { Link } from "@tiptap/extension-link";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
+import { uploadBlogImage } from "@/lib/blog-image-upload";
 
 interface TipTapEditorProps {
   content: string;
@@ -12,6 +13,10 @@ interface TipTapEditorProps {
 }
 
 export default function TipTapEditor({ content, onChange }: TipTapEditorProps) {
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const lastEditorHtmlRef = useRef(content);
+
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -19,17 +24,41 @@ export default function TipTapEditor({ content, onChange }: TipTapEditorProps) {
       Link.configure({ openOnClick: false }),
     ],
     content,
+    immediatelyRender: false,
     onUpdate: ({ editor }) => {
-      onChange(editor.getHTML());
+      const html = editor.getHTML();
+      lastEditorHtmlRef.current = html;
+      onChange(html);
     },
   });
 
   // Sync if content changes externally
   useEffect(() => {
-    if (editor && content !== editor.getHTML()) {
-      editor.commands.setContent(content, false as unknown as Parameters<typeof editor.commands.setContent>[1]);
+    if (!editor) return;
+
+    // Sync only external updates and avoid touching content while user is typing.
+    if (content === lastEditorHtmlRef.current || editor.isFocused) {
+      return;
     }
+
+    editor.commands.setContent(content, false);
+    lastEditorHtmlRef.current = content;
   }, [content, editor]);
+
+  async function uploadImageFromComputer(file: File) {
+    if (!editor) return;
+
+    setIsUploadingImage(true);
+    try {
+      const imageUrl = await uploadBlogImage(file);
+      editor.chain().focus().setImage({ src: imageUrl, alt: file.name }).run();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Image upload failed";
+      window.alert(message);
+    } finally {
+      setIsUploadingImage(false);
+    }
+  }
 
   if (!editor) return null;
 
@@ -125,6 +154,16 @@ export default function TipTapEditor({ content, onChange }: TipTapEditorProps) {
           Image
         </ToolbarButton>
         <ToolbarButton
+          onClick={() => imageInputRef.current?.click()}
+        >
+          {isUploadingImage ? "Uploading..." : "Upload Image"}
+        </ToolbarButton>
+        <ToolbarButton
+          onClick={() => editor.chain().focus().setHardBreak().run()}
+        >
+          New Line
+        </ToolbarButton>
+        <ToolbarButton
           onClick={() => editor.chain().focus().undo().run()}
         >
           ↩
@@ -140,6 +179,20 @@ export default function TipTapEditor({ content, onChange }: TipTapEditorProps) {
       <EditorContent
         editor={editor}
         className="prose prose-sm max-w-none p-4 min-h-[300px] focus:outline-none"
+      />
+
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) {
+            void uploadImageFromComputer(file);
+          }
+          event.target.value = "";
+        }}
       />
     </div>
   );

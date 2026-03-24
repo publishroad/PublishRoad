@@ -1,30 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-
-const websiteSchema = z.object({
-  name: z.string().min(1).max(200),
-  url: z.string().url(),
-  type: z.enum(["distribution", "guest_post", "press_release"]),
-  da: z.coerce.number().int().min(0).max(100),
-  description: z.string().max(1000).optional(),
-  countryId: z.string().optional(),
-  categoryId: z.string().optional(),
-  isActive: z.boolean(),
-  isPinned: z.boolean(),
-  isExcluded: z.boolean(),
-  tagIds: z.array(z.string()),
-});
-
-type FormData = z.infer<typeof websiteSchema>;
+import { websiteSchema, type WebsiteInput } from "@/lib/validations/admin/website";
+type FormData = WebsiteInput;
 
 interface Country { id: string; name: string; }
 interface Category { id: string; name: string; }
@@ -37,6 +22,10 @@ interface WebsiteFormProps {
     url: string;
     type: string;
     da: number;
+    pa: number;
+    spamScore: number;
+    traffic: number;
+    tagIds: string[];
     description: string | null;
     countryId: string | null;
     categoryId: string | null;
@@ -51,7 +40,11 @@ interface WebsiteFormProps {
 
 export function WebsiteForm({ website, countries, categories, tags }: WebsiteFormProps) {
   const router = useRouter();
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>(website?.tagIds ?? []);
+
+  useEffect(() => {
+    setSelectedTags(website?.tagIds ?? []);
+  }, [website]);
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>({
     resolver: zodResolver(websiteSchema) as Resolver<FormData>,
@@ -61,17 +54,23 @@ export function WebsiteForm({ website, countries, categories, tags }: WebsiteFor
           url: website.url,
           type: website.type as "distribution" | "guest_post" | "press_release",
           da: website.da,
+          pa: website.pa,
+          spamScore: website.spamScore,
+          traffic: website.traffic,
           description: website.description ?? "",
           countryId: website.countryId ?? "",
           categoryId: website.categoryId ?? "",
           isActive: website.isActive,
           isPinned: website.isPinned,
           isExcluded: website.isExcluded,
-          tagIds: [],
+          tagIds: website.tagIds,
         }
       : {
           type: "distribution",
           da: 0,
+          pa: 0,
+          spamScore: 0,
+          traffic: 0,
           isActive: true,
           isPinned: false,
           isExcluded: false,
@@ -106,8 +105,18 @@ export function WebsiteForm({ website, countries, categories, tags }: WebsiteFor
   async function handleDelete() {
     if (!website || !confirm("Delete this website?")) return;
     const res = await fetch(`/api/admin/websites/${website.id}`, { method: "DELETE" });
-    if (!res.ok) { toast.error("Failed to delete"); return; }
-    toast.success("Website deleted");
+    const payload = await res.json().catch(() => null);
+    if (!res.ok) {
+      toast.error(payload?.error ?? "Failed to delete");
+      return;
+    }
+
+    if (payload?.archived) {
+      toast.success(payload.message ?? "Website archived successfully");
+    } else {
+      toast.success("Website deleted");
+    }
+
     router.push("/admin/websites");
     router.refresh();
   }
@@ -138,6 +147,21 @@ export function WebsiteForm({ website, countries, categories, tags }: WebsiteFor
             <Label htmlFor="da">Domain Authority (DA)</Label>
             <Input id="da" type="number" {...register("da")} min={0} max={100} />
             {errors.da && <p className="text-xs text-error">{errors.da.message}</p>}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="pa">Page Authority (PA)</Label>
+            <Input id="pa" type="number" {...register("pa")} min={0} max={100} />
+            {errors.pa && <p className="text-xs text-error">{errors.pa.message}</p>}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="spamScore">Spam Score</Label>
+            <Input id="spamScore" type="number" {...register("spamScore")} min={0} max={100} />
+            {errors.spamScore && <p className="text-xs text-error">{errors.spamScore.message}</p>}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="traffic">Traffic</Label>
+            <Input id="traffic" type="number" {...register("traffic")} min={0} />
+            {errors.traffic && <p className="text-xs text-error">{errors.traffic.message}</p>}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="countryId">Country (optional)</Label>

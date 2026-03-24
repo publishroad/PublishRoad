@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface StreamingCurationData {
   id: string;
@@ -19,7 +19,15 @@ interface StreamingResult {
   rank: number;
   userStatus: "saved" | "hidden" | null;
   masked?: boolean;
-  website?: { name: string; url: string; da: number; type: string };
+  website?: {
+    name: string;
+    url: string;
+    da: number;
+    pa: number;
+    spamScore: number;
+    traffic: number;
+    type: string;
+  };
 }
 
 interface UseStreamingCurationReturn {
@@ -27,6 +35,10 @@ interface UseStreamingCurationReturn {
   isLoading: boolean;
   error: Error | null;
   isStreaming: boolean;
+  refresh: () => Promise<void>;
+  mutate: (
+    updater: (current: StreamingCurationData | null) => StreamingCurationData | null
+  ) => void;
 }
 
 /**
@@ -49,11 +61,34 @@ export function useStreamingCuration(
   const [isStreaming, setIsStreaming] = useState(false);
 
   // Track the EventSource connection to prevent duplicates
+  const dataRef = useRef<StreamingCurationData | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isUnmountingRef = useRef(false);
   const retryCountRef = useRef(0);
   const MAX_RETRIES = 5; // Prevent infinite reconnection loops
+
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+
+  const fetchCurationData = useCallback(async (): Promise<StreamingCurationData> => {
+    const res = await fetch(`/api/curations/${curationId}`);
+    if (!res.ok) throw new Error("Failed to fetch curation");
+    return (await res.json()) as StreamingCurationData;
+  }, [curationId]);
+
+  const refresh = useCallback(async () => {
+    const nextData = await fetchCurationData();
+    setData(nextData);
+  }, [fetchCurationData]);
+
+  const mutate = useCallback(
+    (updater: (current: StreamingCurationData | null) => StreamingCurationData | null) => {
+      setData((current) => updater(current));
+    },
+    []
+  );
 
   useEffect(() => {
     // Reset unmounting flag
@@ -64,9 +99,7 @@ export function useStreamingCuration(
       try {
         setIsLoading(true);
         setError(null);
-        const res = await fetch(`/api/curations/${curationId}`);
-        if (!res.ok) throw new Error("Failed to fetch curation");
-        const initialData = (await res.json()) as StreamingCurationData;
+        const initialData = await fetchCurationData();
         setData(initialData);
 
         // Only open stream if curation is still processing
@@ -135,9 +168,7 @@ export function useStreamingCuration(
     // Step 3: Fetch final data when curation completes
     const fetchFinalData = async () => {
       try {
-        const res = await fetch(`/api/curations/${curationId}`);
-        if (!res.ok) throw new Error("Failed to fetch final curation data");
-        const finalData = (await res.json()) as StreamingCurationData;
+        const finalData = await fetchCurationData();
         setData(finalData);
       } catch (err) {
         console.error("Error fetching final data:", err);
@@ -171,8 +202,9 @@ export function useStreamingCuration(
       // Fixed 2-second delay between retry attempts
       reconnectTimeoutRef.current = setTimeout(() => {
         if (isUnmountingRef.current) return;
-        if (data && (data.status === "processing" || data.status === "pending")) {
-          openStream(data);
+        const currentData = dataRef.current;
+        if (currentData && (currentData.status === "processing" || currentData.status === "pending")) {
+          openStream(currentData);
         }
       }, 2000);
     };
@@ -196,7 +228,7 @@ export function useStreamingCuration(
 
       setIsStreaming(false);
     };
-  }, [curationId]);
+  }, [curationId, fetchCurationData]);
 
-  return { data, isLoading, error, isStreaming };
+  return { data, isLoading, error, isStreaming, refresh, mutate };
 }

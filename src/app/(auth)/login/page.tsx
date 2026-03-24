@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -17,6 +18,74 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { loginSchema, type LoginInput } from "@/lib/validations/auth";
+
+type CredentialsResult = {
+  success: boolean;
+  errorMessage?: string;
+  redirectUrl?: string;
+};
+
+function mapCredentialsCodeToMessage(code?: string | null): string {
+  if (code === "email_not_found") {
+    return "Email is not registered.";
+  }
+
+  if (code === "wrong_password") {
+    return "Password is incorrect.";
+  }
+
+  if (code === "social_login_only") {
+    return "This account uses Google login. Please continue with Google.";
+  }
+
+  if (code === "account_locked") {
+    return "Account temporarily locked. Please try again in 30 minutes.";
+  }
+
+  return "Invalid email or password.";
+}
+
+function parseCredentialsSignInResult(
+  result: { error?: string | null; status?: number; url?: string | null } | undefined
+): CredentialsResult {
+  if (!result) {
+    return { success: false, errorMessage: "Invalid email or password." };
+  }
+
+  if (!result.url) {
+    return { success: false, errorMessage: "Invalid email or password." };
+  }
+
+  // NextAuth may return a URL containing ?error=... even when result.error is empty.
+  try {
+    const url = new URL(result.url, window.location.origin);
+    const error = url.searchParams.get("error");
+    const code = url.searchParams.get("code");
+
+    if (error === "CredentialsSignin") {
+      return { success: false, errorMessage: mapCredentialsCodeToMessage(code) };
+    }
+
+    if (error) {
+      const code = url.searchParams.get("code");
+      if (code === "account_locked") {
+        return {
+          success: false,
+          errorMessage: "Account temporarily locked. Please try again in 30 minutes.",
+        };
+      }
+      return { success: false, errorMessage: "Invalid email or password." };
+    }
+  } catch {
+    // Ignore URL parse issues and fall back to default behavior.
+  }
+
+  if (result.error || (typeof result.status === "number" && result.status >= 400)) {
+    return { success: false, errorMessage: "Invalid email or password." };
+  }
+
+  return { success: true, redirectUrl: result.url };
+}
 
 const cardStyle: React.CSSProperties = {
   background: "#ffffff",
@@ -63,16 +132,45 @@ export default function LoginPage() {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") ?? "/dashboard";
   const error = searchParams.get("error");
+  const code = searchParams.get("code");
   const [isLoading, setIsLoading] = useState(false);
   const [failedAttempts, setFailedAttempts] = useState(0);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const form = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: "", password: "" },
   });
 
+  useEffect(() => {
+    if (!error || error === "account_exists") return;
+
+    if (error === "CredentialsSignin") {
+      setAuthError(mapCredentialsCodeToMessage(code));
+      return;
+    }
+
+    if (error === "CallbackRouteError") {
+      setAuthError("Account temporarily locked. Please try again in 30 minutes.");
+      return;
+    }
+
+    setAuthError("Sign-in failed. Please try again.");
+  }, [code, error]);
+
+  useEffect(() => {
+    const subscription = form.watch(() => {
+      if (authError) {
+        setAuthError(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [authError, form]);
+
   async function onSubmit(data: LoginInput) {
     setIsLoading(true);
+    setAuthError(null);
     try {
       // Prevent open redirects and ensure dashboard is default target.
       const safeCallbackUrl = callbackUrl.startsWith("/") ? callbackUrl : "/dashboard";
@@ -84,21 +182,17 @@ export default function LoginPage() {
         callbackUrl: safeCallbackUrl,
       });
 
-      // ✅ Check ok status, not just error
-      if (result?.ok) {
-        const redirectTarget = result?.url ?? safeCallbackUrl;
-        window.location.assign(redirectTarget);
-      } else {
+      const parsedResult = parseCredentialsSignInResult(result);
+      if (!parsedResult.success) {
         setFailedAttempts((prev) => prev + 1);
-        const errorMessage = result?.error === "Account locked. Please try again later." 
-          ? "Account temporarily locked. Please try again in 30 minutes."
-          : "Invalid email or password.";
-        toast.error(errorMessage);
+        setAuthError(parsedResult.errorMessage ?? "Invalid email or password.");
+        return;
       }
+
+      window.location.assign(parsedResult.redirectUrl!);
     } catch (error) {
-      // ✅ ADD CATCH BLOCK for network errors
       console.error("Sign in error:", error);
-      toast.error("An unexpected error occurred. Please try again.");
+      setAuthError("An unexpected error occurred. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -132,10 +226,8 @@ export default function LoginPage() {
       <div style={{ position: "relative", width: "100%", maxWidth: "440px" }}>
         {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: "2rem" }}>
-          <Link href="/" style={{ textDecoration: "none" }}>
-            <span style={{ fontFamily: "var(--font-heading)", fontSize: "2rem", fontWeight: 700, color: "#020617" }}>
-              Publish<span style={{ color: "#5B58F6" }}>Road</span>
-            </span>
+          <Link href="/" style={{ textDecoration: "none", display: "inline-block" }}>
+            <Image src="/logo.png" alt="PublishRoad" width={160} height={46} sizes="160px" style={{ height: "auto" }} priority />
           </Link>
           <p style={{ color: "#64748b", marginTop: "0.375rem", fontWeight: 300, fontSize: "0.95rem" }}>
             Sign in to your account
@@ -207,6 +299,12 @@ export default function LoginPage() {
                   </FormItem>
                 )}
               />
+
+              {authError && (
+                <p style={{ color: "#B42318", fontSize: "0.875rem", fontWeight: 500, marginTop: "-0.25rem" }}>
+                  {authError}
+                </p>
+              )}
 
               {failedAttempts >= 3 && (
                 <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: "1rem", padding: "0.75rem 1rem", fontSize: "0.875rem", color: "#9a3412" }}>

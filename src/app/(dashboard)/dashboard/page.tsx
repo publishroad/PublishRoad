@@ -12,7 +12,19 @@ export default async function DashboardPage() {
   const userId = session!.user.id;
 
   const [recentCurations, user] = await Promise.all([
-    db.curation.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take: 5, include: { _count: { select: { results: true } } } }),
+    db.curation.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+      include: {
+        results: {
+          select: {
+            section: true,
+            userStatus: true,
+          },
+        },
+      },
+    }),
     db.user.findUnique({ where: { id: userId }, include: { plan: true } }),
   ]);
 
@@ -38,9 +50,9 @@ export default async function DashboardPage() {
           ) : undefined
         }
       />
-      <div className="flex-1 p-6 max-w-4xl mx-auto w-full space-y-6">
+      <div className="flex-1 w-full max-w-4xl mx-auto space-y-5 p-4 sm:p-6">
         {/* Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 sm:gap-4">
           {stats.map((s) => (
             <div key={s.label} className="bg-white border border-gray-200 rounded-2xl p-5 flex items-start gap-4">
               <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-lg shrink-0 ${s.iconBg}`}>{s.icon}</div>
@@ -55,13 +67,15 @@ export default async function DashboardPage() {
 
         {/* CTA banner */}
         {hasCredits ? (
-          <div className="bg-gray-900 rounded-2xl p-6 flex items-center justify-between relative overflow-hidden">
+          <div className="relative overflow-hidden rounded-2xl bg-gray-900 p-5 sm:p-6">
             <div className="absolute right-0 top-0 w-48 h-48 rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(70,95,255,0.3) 0%, transparent 70%)", transform: "translate(30%,-30%)" }} />
-            <div className="relative">
-              <h2 className="text-white font-semibold text-base">Ready to launch?</h2>
-              <p className="text-gray-400 text-sm mt-1">Create a curation to get your personalised distribution plan.</p>
+            <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-white font-semibold text-base">Ready to launch?</h2>
+                <p className="text-gray-400 text-sm mt-1">Create a curation to get your personalised distribution plan.</p>
+              </div>
+              <Link href="/dashboard/new-curation" className="relative h-10 px-5 rounded-xl bg-[#465FFF] text-white text-sm font-semibold hover:bg-[#3d55e8] inline-flex items-center justify-center transition-colors w-full sm:w-auto">New Curation →</Link>
             </div>
-            <Link href="/dashboard/new-curation" className="relative shrink-0 ml-4 h-10 px-5 rounded-xl bg-[#465FFF] text-white text-sm font-semibold hover:bg-[#3d55e8] flex items-center transition-colors">New Curation →</Link>
           </div>
         ) : (
           <div className="bg-white border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center">
@@ -83,9 +97,36 @@ export default async function DashboardPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {recentCurations.map((c) => (
-                <CurationCard key={c.id} id={c.id} productUrl={c.productUrl} status={c.status as "pending" | "processing" | "completed" | "failed"} createdAt={c.createdAt} resultCount={c._count.results} />
-              ))}
+              {recentCurations.map((c) => {
+                const progress = c.results.reduce(
+                  (acc, result) => {
+                    if (result.section !== "a" && result.section !== "b" && result.section !== "c") {
+                      return acc;
+                    }
+                    acc[result.section].total += 1;
+                    if (result.userStatus === "saved") {
+                      acc[result.section].completed += 1;
+                    }
+                    return acc;
+                  },
+                  {
+                    a: { total: 0, completed: 0 },
+                    b: { total: 0, completed: 0 },
+                    c: { total: 0, completed: 0 },
+                  }
+                );
+
+                return (
+                  <CurationCard
+                    key={c.id}
+                    id={c.id}
+                    productUrl={c.productUrl}
+                    status={c.status as "pending" | "processing" | "completed" | "failed"}
+                    createdAt={c.createdAt}
+                    progress={progress}
+                  />
+                );
+              })}
             </div>
           )}
         </div>

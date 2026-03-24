@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import Image from "next/image";
 
 export default async function OnboardingLayout({
   children,
@@ -22,12 +23,7 @@ export default async function OnboardingLayout({
 
       {/* Logo bar */}
       <div className="relative z-10 flex items-center justify-between px-6 py-5 max-w-6xl mx-auto">
-        <span
-          className="text-xl font-bold"
-          style={{ fontFamily: "var(--font-heading)", color: "var(--dark)" }}
-        >
-          Publish<span style={{ color: "var(--indigo)" }}>Road</span>
-        </span>
+        <Image src="/logo.png" alt="PublishRoad" width={140} height={40} sizes="140px" style={{ height: "auto" }} />
       </div>
 
       <div className="relative z-10">{children}</div>

@@ -44,7 +44,9 @@ export default async function AdminDashboardPage() {
     { label: "Manage Pricing", href: "/admin/pricing" },
     { label: "New Blog Post", href: "/admin/blog/new" },
     { label: "View Leads", href: "/admin/leads" },
-    { label: "AI Settings", href: "/admin/settings" },
+    { label: "AI Settings", href: "/admin/settings#ai-settings" },
+    { label: "Payment Settings", href: "/admin/settings#payment-settings" },
+    { label: "Email Settings", href: "/admin/settings#email-settings" },
     { label: "Audit Logs", href: "/admin/audit-logs" },
   ];
 

@@ -56,6 +56,19 @@ enum PaymentStatus {
   refunded
 }
 
+enum PaymentProvider {
+  stripe
+  razorpay
+  paypal
+}
+
+enum EmailProvider {
+  resend
+  smtp
+  sendgrid
+  ses
+}
+
 enum LeadStatus {
   new
   contacted
@@ -173,6 +186,7 @@ model User {
   planId             String?      @map("plan_id")
   creditsRemaining   Int          @default(1) @map("credits_remaining")
   stripeCustomerId   String?      @map("stripe_customer_id") // encrypted at app level
+  stripeCustomerHash String?      @map("stripe_customer_hash")
   emailVerifiedAt    DateTime?    @map("email_verified_at")
   emailVerifyToken   String?      @map("email_verify_token")
   resetToken         String?      @map("reset_token")
@@ -192,6 +206,7 @@ model User {
   serviceLeads  ServiceLead[]
 
   @@index([email])
+  @@index([stripeCustomerHash])
   @@map("users")
 }
 
@@ -215,6 +230,9 @@ model AdminUser {
   auditLogs AuditLog[]
   blogPosts BlogPost[]
   aiConfigs AiConfig[]
+  paymentConfigs PaymentGatewayConfig[]
+  emailProviderConfigs EmailProviderConfig[]
+  betaConfigs BetaConfig[]
 
   @@map("admin_users")
 }
@@ -229,6 +247,9 @@ model Website {
   url           String      @unique
   type          WebsiteType
   da            Int         @default(0) // domain authority 0-100
+  pa            Int         @default(0) // page authority 0-100
+  spamScore     Int         @default(0) @map("spam_score") // spam score 0-100
+  traffic       Int         @default(0) // monthly traffic estimate
   countryId     String?     @map("country_id")
   categoryId    String?     @map("category_id")
   subCategoryId String?     @map("sub_category_id")
@@ -326,6 +347,51 @@ model Payment {
   plan PlanConfig? @relation(fields: [planId], references: [id])
 
   @@map("payments")
+}
+
+model PaymentGatewayConfig {
+  id              String          @id @default("default")
+  provider        PaymentProvider @default(stripe)
+  publicKey       String?         @map("public_key")
+  secretKey       String?         @map("secret_key") // encrypted at app level
+  webhookSecret   String?         @map("webhook_secret") // encrypted at app level
+  additionalConfig Json           @default("{}") @map("additional_config")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  updatedById     String?         @map("updated_by_id")
+
+  updatedBy AdminUser? @relation(fields: [updatedById], references: [id])
+
+  @@map("payment_gateway_config")
+}
+
+model EmailProviderConfig {
+  id               String        @id @default("default")
+  provider         EmailProvider @default(resend)
+  fromAddress      String        @map("from_address")
+  apiKey           String?       @map("api_key") // encrypted at app level
+  host             String?
+  port             Int?
+  username         String?
+  password         String?       // encrypted at app level
+  useTls           Boolean       @default(true) @map("use_tls")
+  additionalConfig Json          @default("{}") @map("additional_config")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+  updatedById      String?       @map("updated_by_id")
+
+  updatedBy AdminUser? @relation(fields: [updatedById], references: [id])
+
+  @@map("email_provider_config")
+}
+
+model BetaConfig {
+  id          String   @id @default("default")
+  enabled     Boolean  @default(false)
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  updatedById String?  @map("updated_by_id")
+
+  updatedBy AdminUser? @relation(fields: [updatedById], references: [id])
+
+  @@map("beta_config")
 }
 
 // Idempotency table for Stripe webhook events
@@ -478,3 +544,6 @@ model AiConfig {
 
   @@map("ai_config")
 }
+
+
+

@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { uploadBlogImage } from "@/lib/blog-image-upload";
 
 // Dynamically import TipTap to avoid SSR issues
 const TipTapEditor = dynamic(() => import("./TipTapEditor"), { ssr: false });
@@ -18,6 +19,7 @@ const blogSchema = z.object({
   title: z.string().min(1).max(200),
   slug: z.string().min(1).max(200).regex(/^[a-z0-9-]+$/, "Lowercase letters, numbers, hyphens only"),
   excerpt: z.string().max(500).optional(),
+  featuredImage: z.string().url("Please enter a valid image URL").optional().or(z.literal("")),
   metaTitle: z.string().max(70).optional(),
   metaDescription: z.string().max(160).optional(),
   status: z.enum(["draft", "published"]),
@@ -31,6 +33,7 @@ interface Post {
   title: string;
   slug: string;
   excerpt: string | null;
+  featuredImage: string | null;
   content: string | null;
   metaTitle: string | null;
   metaDescription: string | null;
@@ -41,6 +44,8 @@ interface Post {
 export function BlogEditor({ post }: { post: Post | null }) {
   const router = useRouter();
   const [content, setContent] = useState(post?.content ?? "");
+  const [isUploadingFeaturedImage, setIsUploadingFeaturedImage] = useState(false);
+  const featuredImageInputRef = useRef<HTMLInputElement>(null);
 
   const { register, handleSubmit, watch, setValue, formState: { errors, isSubmitting } } = useForm<FormData>({
     resolver: zodResolver(blogSchema),
@@ -49,6 +54,7 @@ export function BlogEditor({ post }: { post: Post | null }) {
           title: post.title,
           slug: post.slug,
           excerpt: post.excerpt ?? "",
+          featuredImage: post.featuredImage ?? "",
           metaTitle: post.metaTitle ?? "",
           metaDescription: post.metaDescription ?? "",
           status: post.status as "draft" | "published",
@@ -56,7 +62,7 @@ export function BlogEditor({ post }: { post: Post | null }) {
             ? new Date(post.publishDate).toISOString().split("T")[0]
             : "",
         }
-      : { status: "draft" },
+      : { status: "draft", featuredImage: "" },
   });
 
   const title = watch("title");
@@ -71,6 +77,24 @@ export function BlogEditor({ post }: { post: Post | null }) {
         .replace(/-+/g, "-")
         .slice(0, 200);
       setValue("slug", slug);
+    }
+  }
+
+  async function handleFeaturedImageUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setIsUploadingFeaturedImage(true);
+    try {
+      const imageUrl = await uploadBlogImage(file);
+      setValue("featuredImage", imageUrl, { shouldDirty: true, shouldValidate: true });
+      toast.success("Header image uploaded");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to upload image";
+      toast.error(message);
+    } finally {
+      setIsUploadingFeaturedImage(false);
     }
   }
 
@@ -121,6 +145,32 @@ export function BlogEditor({ post }: { post: Post | null }) {
             className="w-full border border-border-gray rounded-lg px-3 py-2 text-sm min-h-[80px] focus:outline-none focus:border-navy"
             placeholder="Short summary for listing pages..."
           />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="featuredImage">Header Image URL</Label>
+          <div className="flex gap-2">
+            <Input
+              id="featuredImage"
+              {...register("featuredImage")}
+              placeholder="https://example.com/header-image.jpg"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => featuredImageInputRef.current?.click()}
+              disabled={isUploadingFeaturedImage}
+            >
+              {isUploadingFeaturedImage ? "Uploading..." : "Upload"}
+            </Button>
+          </div>
+          <input
+            ref={featuredImageInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+            className="hidden"
+            onChange={handleFeaturedImageUpload}
+          />
+          {errors.featuredImage && <p className="text-xs text-error">{errors.featuredImage.message}</p>}
         </div>
       </div>
 

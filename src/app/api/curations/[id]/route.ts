@@ -28,11 +28,25 @@ export async function GET(
       const curation = await db.curation.findUnique({
         where: { id },
         include: {
+          country: {
+            select: { name: true },
+          },
           results: {
             orderBy: [{ section: "asc" }, { rank: "asc" }],
             include: {
               website: {
-                select: { name: true, url: true, da: true, type: true },
+                select: {
+                  name: true,
+                  url: true,
+                  da: true,
+                  pa: true,
+                  spamScore: true,
+                  traffic: true,
+                  type: true,
+                  category: {
+                    select: { name: true },
+                  },
+                },
               },
             },
           },
@@ -74,10 +88,22 @@ export async function GET(
     ];
   }
 
+  const categoryCounts = new Map<string, number>();
+  for (const result of data.results) {
+    const categoryName = result.website?.category?.name;
+    if (!categoryName) continue;
+    categoryCounts.set(categoryName, (categoryCounts.get(categoryName) ?? 0) + 1);
+  }
+
+  const categoryName =
+    [...categoryCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+
   return NextResponse.json({
     id: data.id,
     productUrl: data.productUrl,
     status: data.status,
+    countryName: data.country?.name ?? null,
+    categoryName,
     keywords: data.keywords,
     description: data.description,
     results,
