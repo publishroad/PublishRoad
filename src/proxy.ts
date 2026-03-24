@@ -1,11 +1,11 @@
 import NextAuth from "next-auth";
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { authConfig } from "@/lib/auth.config";
 
 // Edge-compatible auth — no DB, no Node.js crypto
 const { auth } = NextAuth(authConfig);
 
-export default auth(function proxy(request: NextRequest & { auth?: { user?: { id?: string } } }) {
+export default auth(function proxy(request) {
   const { pathname } = request.nextUrl;
 
   // Dashboard: requires user session

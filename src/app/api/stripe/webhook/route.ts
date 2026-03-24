@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { constructWebhookEvent } from "@/lib/stripe";
 import { db } from "@/lib/db";
+import { redis } from "@/lib/redis";
 import { encryptField, decryptField, hashLookupValue } from "@/lib/server-utils";
 import { invalidateUserProfile } from "@/lib/cache";
 import { getActivePaymentProvider, getStripeWebhookSecret } from "@/lib/payments/service";
 import type Stripe from "stripe";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
+
+const LEGACY_CUSTOMER_LOOKUP_CACHE_TTL_SECONDS = 3600;
+const LEGACY_CUSTOMER_SCAN_LIMIT = 100;
 
 export async function POST(req: NextRequest) {
   const activeProvider = await getActivePaymentProvider();
@@ -200,6 +205,19 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
 
 async function findUserByStripeCustomer(customerId: string) {
   const customerHash = hashLookupValue(customerId);
+  const cacheKey = `stripe-customer:${customerHash}`;
+
+  const cachedUserId = await redis.get<string>(cacheKey);
+  if (cachedUserId) {
+    const cachedUser = await db.user.findUnique({
+      where: { id: cachedUserId },
+      select: { id: true, stripeCustomerId: true },
+    });
+
+    if (cachedUser) {
+      return cachedUser;
+    }
+  }
 
   const byHash = await db.user.findFirst({
     where: { stripeCustomerHash: customerHash },
@@ -207,14 +225,14 @@ async function findUserByStripeCustomer(customerId: string) {
   });
 
   if (byHash) {
+    await redis.set(cacheKey, byHash.id, { ex: LEGACY_CUSTOMER_LOOKUP_CACHE_TTL_SECONDS });
     return byHash;
   }
 
-  // Backward-compatible fallback for old rows that do not have a hash yet.
   const users = await db.user.findMany({
     where: { stripeCustomerId: { not: null }, stripeCustomerHash: null },
     select: { id: true, stripeCustomerId: true },
-    take: 500,
+    take: LEGACY_CUSTOMER_SCAN_LIMIT,
   });
 
   for (const user of users) {
@@ -224,6 +242,7 @@ async function findUserByStripeCustomer(customerId: string) {
           where: { id: user.id },
           data: { stripeCustomerHash: customerHash },
         });
+        await redis.set(cacheKey, user.id, { ex: LEGACY_CUSTOMER_LOOKUP_CACHE_TTL_SECONDS });
         return user;
       }
     } catch {

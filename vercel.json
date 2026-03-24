@@ -1,18 +1,4 @@
 {
-  "functions": {
-    "src/app/api/curations/create/route.ts": {
-      "maxDuration": 60
-    },
-    "src/app/api/curations/[id]/stream/route.ts": {
-      "maxDuration": 300
-    },
-    "src/app/api/admin/websites/bulk-import/route.ts": {
-      "maxDuration": 60
-    },
-    "src/app/api/stripe/webhook/route.ts": {
-      "maxDuration": 30
-    }
-  },
   "headers": [
     {
       "source": "/api/(.*)",
