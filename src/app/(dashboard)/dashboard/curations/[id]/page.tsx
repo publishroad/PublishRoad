@@ -13,10 +13,13 @@ import { toast } from "sonner";
 
 interface CurationResult {
   id: string;
-  websiteId: string;
+  websiteId?: string | null;
+  influencerId?: string | null;
+  redditChannelId?: string | null;
+  fundId?: string | null;
   matchScore: number;
   matchReason: string | null;
-  section: "a" | "b" | "c";
+  section: "a" | "b" | "c" | "d" | "e" | "f";
   rank: number;
   userStatus: "saved" | "hidden" | null;
   masked?: boolean;
@@ -28,6 +31,26 @@ interface CurationResult {
     spamScore: number;
     traffic: number;
     type: string;
+  };
+  influencer?: {
+    name: string;
+    platform: string;
+    followersCount: number;
+    profileLink: string;
+  };
+  redditChannel?: {
+    name: string;
+    url: string;
+    totalMembers: number;
+    weeklyVisitors: number;
+    postingDifficulty: string | null;
+  };
+  fund?: {
+    name: string;
+    websiteUrl: string;
+    investmentStage: string | null;
+    ticketSize: string | null;
+    logoUrl: string | null;
   };
 }
 
@@ -47,21 +70,60 @@ const sectionLabels = {
   a: "Distribution Sites",
   b: "Guest Post & Backlinks",
   c: "Press Release Sites",
+  d: "Social Influencers",
+  e: "Reddit Communities",
+  f: "Investors & Funds",
 };
 
 const sectionDescriptions = {
   a: "Submit your product to these directories and listing sites.",
   b: "Pitch guest posts or request backlinks from these publications.",
   c: "Distribute your press release through these platforms.",
+  d: "Reach out to these influencers to promote your product to their audience.",
+  e: "Post in these subreddits to engage your target community.",
+  f: "These investors match your product's stage and category.",
 };
 
 const sectionSteps = {
   a: "Step 1",
   b: "Step 2",
   c: "Step 3",
+  d: "Step 4",
+  e: "Step 5",
+  f: "Step 6",
 };
 
-const sectionOrder = ["a", "b", "c"] as const;
+const sectionOrder = ["a", "b", "c", "d", "e", "f"] as const;
+
+const platformColors: Record<string, string> = {
+  tiktok: "bg-gray-900 text-white",
+  instagram: "bg-pink-50 text-pink-700",
+  youtube: "bg-red-50 text-red-700",
+  twitter: "bg-sky-50 text-sky-700",
+};
+
+const platformLabels: Record<string, string> = {
+  tiktok: "TikTok",
+  instagram: "Instagram",
+  youtube: "YouTube",
+  twitter: "Twitter (X)",
+};
+
+const difficultyColors: Record<string, string> = {
+  easy: "bg-green-50 text-green-700",
+  medium: "bg-yellow-50 text-yellow-700",
+  hard: "bg-red-50 text-red-700",
+};
+
+const stageLabels: Record<string, string> = {
+  pre_seed: "Pre-Seed",
+  seed: "Seed",
+  series_a: "Series A",
+  series_b: "Series B",
+  series_c: "Series C",
+  growth: "Growth",
+  late_stage: "Late Stage",
+};
 
 export default function CurationDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -69,8 +131,6 @@ export default function CurationDetailPage() {
   const [showProgress, setShowProgress] = useState(false);
   const [updatingResultId, setUpdatingResultId] = useState<string | null>(null);
 
-  // USE STREAMING HOOK instead of React Query polling
-  // This replaces the previous refetchInterval: 3000 with real-time SSE
   const { data: curation, isLoading, error, isStreaming, mutate, refresh } = useStreamingCuration(id);
 
   useEffect(() => {
@@ -82,27 +142,28 @@ export default function CurationDetailPage() {
   }, [curation?.status]);
 
   const planSlug = session?.user?.planSlug ?? "free";
-  const sectionA = curation?.results.filter((r) => r.section === "a") ?? [];
-  const sectionB = curation?.results.filter((r) => r.section === "b") ?? [];
-  const sectionC = curation?.results.filter((r) => r.section === "c") ?? [];
 
-  const stepStats = {
-    a: {
-      total: sectionA.length,
-      completed: sectionA.filter((result) => result.userStatus === "saved").length,
-    },
-    b: {
-      total: sectionB.length,
-      completed: sectionB.filter((result) => result.userStatus === "saved").length,
-    },
-    c: {
-      total: sectionC.length,
-      completed: sectionC.filter((result) => result.userStatus === "saved").length,
-    },
+  const sectionResults = {
+    a: curation?.results.filter((r) => r.section === "a") ?? [],
+    b: curation?.results.filter((r) => r.section === "b") ?? [],
+    c: curation?.results.filter((r) => r.section === "c") ?? [],
+    d: curation?.results.filter((r) => r.section === "d") ?? [],
+    e: curation?.results.filter((r) => r.section === "e") ?? [],
+    f: curation?.results.filter((r) => r.section === "f") ?? [],
   };
 
-  const totalTasks = stepStats.a.total + stepStats.b.total + stepStats.c.total;
-  const totalCompleted = stepStats.a.completed + stepStats.b.completed + stepStats.c.completed;
+  const stepStats = Object.fromEntries(
+    sectionOrder.map((s) => [
+      s,
+      {
+        total: sectionResults[s].length,
+        completed: sectionResults[s].filter((r) => r.userStatus === "saved").length,
+      },
+    ])
+  ) as Record<typeof sectionOrder[number], { total: number; completed: number }>;
+
+  const totalTasks = sectionOrder.reduce((sum, s) => sum + stepStats[s].total, 0);
+  const totalCompleted = sectionOrder.reduce((sum, s) => sum + stepStats[s].completed, 0);
   const totalCompletionPercent = totalTasks === 0 ? 0 : Math.round((totalCompleted / totalTasks) * 100);
 
   let curationWebsiteName = curation?.productUrl ?? "Website";
@@ -164,6 +225,11 @@ export default function CurationDetailPage() {
     }
   }
 
+  // Only render sections that have results (or all if completed)
+  const sectionsToShow = curation?.status === "completed"
+    ? sectionOrder.filter((s) => sectionResults[s].length > 0)
+    : [];
+
   return (
     <>
       <AppHeader title="Curation Results" />
@@ -213,7 +279,7 @@ export default function CurationDetailPage() {
                   </div>
 
                   <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                    {sectionOrder.map((section) => {
+                    {sectionsToShow.map((section) => {
                       const completed = stepStats[section].completed;
                       const total = stepStats[section].total;
                       const percent = total === 0 ? 0 : Math.round((completed / total) * 100);
@@ -244,18 +310,15 @@ export default function CurationDetailPage() {
                   <UpsellBanner maskedCount={curation.maskedCount} planSlug={planSlug} />
                 )}
 
-                {sectionOrder.map((section) => {
-                  const results = section === "a" ? sectionA : section === "b" ? sectionB : sectionC;
-                  return (
-                    <CurationSection
-                      key={section}
-                      section={section}
-                      results={results}
-                      updatingResultId={updatingResultId}
-                      onToggleComplete={handleTaskStatusChange}
-                    />
-                  );
-                })}
+                {sectionsToShow.map((section) => (
+                  <CurationSection
+                    key={section}
+                    section={section}
+                    results={sectionResults[section]}
+                    updatingResultId={updatingResultId}
+                    onToggleComplete={handleTaskStatusChange}
+                  />
+                ))}
               </div>
             )}
 
@@ -381,34 +444,61 @@ function ResultRow({
     );
   }
 
-  const website = result.website;
   const scorePercent = Math.round(result.matchScore * 100);
   const isComplete = result.userStatus === "saved";
+
+  // Determine entity type and data
+  const isInfluencer = result.section === "d";
+  const isReddit = result.section === "e";
+  const isFund = result.section === "f";
+  const isWebsite = !isInfluencer && !isReddit && !isFund;
+
+  const entityName =
+    result.website?.name ??
+    result.influencer?.name ??
+    result.redditChannel?.name ??
+    result.fund?.name ??
+    "Unknown";
+
+  const entityUrl =
+    result.website?.url ??
+    result.influencer?.profileLink ??
+    result.redditChannel?.url ??
+    result.fund?.websiteUrl ??
+    "#";
+
+  const actionLabel = isInfluencer
+    ? "View Profile"
+    : isReddit
+    ? "Visit Subreddit"
+    : isFund
+    ? "Visit Fund"
+    : "Submit Site";
 
   return (
     <div className={`group p-4 transition-colors sm:p-5 ${isComplete ? "bg-emerald-50/40" : "bg-white hover:bg-slate-50/70"}`}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex items-start gap-4 min-w-0 flex-1">
-        <button
-          type="button"
-          onClick={() => onToggleComplete(result.id, isComplete)}
-          disabled={isUpdating}
-          className={`mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-colors ${
-            isComplete
-              ? "border-emerald-600 bg-emerald-600 text-white shadow-[0_8px_20px_rgba(5,150,105,0.22)]"
-              : "border-slate-300 bg-white text-transparent hover:border-[#465FFF] hover:bg-[#EEF2FF]"
-          } ${isUpdating ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
-          aria-label={isComplete ? "Mark task incomplete" : "Mark task complete"}
-        >
-          <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
-            <path fillRule="evenodd" d="M16.704 5.29a1 1 0 010 1.42l-7.2 7.2a1 1 0 01-1.415.005L3.29 9.204a1 1 0 111.42-1.408l4.09 4.123 6.492-6.63a1 1 0 011.412 0z" clipRule="evenodd" />
-          </svg>
-        </button>
+          <button
+            type="button"
+            onClick={() => onToggleComplete(result.id, isComplete)}
+            disabled={isUpdating}
+            className={`mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-colors ${
+              isComplete
+                ? "border-emerald-600 bg-emerald-600 text-white shadow-[0_8px_20px_rgba(5,150,105,0.22)]"
+                : "border-slate-300 bg-white text-transparent hover:border-[#465FFF] hover:bg-[#EEF2FF]"
+            } ${isUpdating ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+            aria-label={isComplete ? "Mark task incomplete" : "Mark task complete"}
+          >
+            <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+              <path fillRule="evenodd" d="M16.704 5.29a1 1 0 010 1.42l-7.2 7.2a1 1 0 01-1.415.005L3.29 9.204a1 1 0 111.42-1.408l4.09 4.123 6.492-6.63a1 1 0 011.412 0z" clipRule="evenodd" />
+            </svg>
+          </button>
 
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${isComplete ? "bg-emerald-100 text-emerald-700" : "bg-[#EEF2FF] text-[#465FFF]"}`}>
-                  Task {result.rank}
+                Task {result.rank}
               </span>
               <span className="inline-flex items-center rounded-full bg-[#EEF2FF] px-2.5 py-1 text-xs font-semibold text-[#465FFF]">
                 {scorePercent}% match
@@ -425,26 +515,77 @@ function ResultRow({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <a
-                      href={website?.url}
+                      href={entityUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className={`text-lg font-semibold tracking-tight transition-colors ${isComplete ? "text-slate-700" : "text-slate-950 group-hover:text-[#465FFF]"}`}
                     >
-                      {website?.name ?? "Unknown"}
+                      {entityName}
                     </a>
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">DA {website?.da ?? 0}</span>
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">PA {website?.pa ?? 0}</span>
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">Spam {website?.spamScore ?? 0}%</span>
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">Traffic {(website?.traffic ?? 0).toLocaleString()}</span>
+
+                    {/* Website metrics */}
+                    {isWebsite && result.website && (
+                      <>
+                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">DA {result.website.da}</span>
+                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">PA {result.website.pa}</span>
+                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">Spam {result.website.spamScore}%</span>
+                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">Traffic {(result.website.traffic).toLocaleString()}</span>
+                      </>
+                    )}
+
+                    {/* Influencer metrics */}
+                    {isInfluencer && result.influencer && (
+                      <>
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${platformColors[result.influencer.platform] ?? "bg-gray-100 text-gray-600"}`}>
+                          {platformLabels[result.influencer.platform] ?? result.influencer.platform}
+                        </span>
+                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">
+                          {result.influencer.followersCount.toLocaleString()} followers
+                        </span>
+                      </>
+                    )}
+
+                    {/* Reddit metrics */}
+                    {isReddit && result.redditChannel && (
+                      <>
+                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">
+                          {result.redditChannel.totalMembers.toLocaleString()} members
+                        </span>
+                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">
+                          {result.redditChannel.weeklyVisitors.toLocaleString()} weekly visitors
+                        </span>
+                        {result.redditChannel.postingDifficulty && (
+                          <span className={`rounded-full px-2.5 py-1 text-xs font-medium capitalize ${difficultyColors[result.redditChannel.postingDifficulty] ?? "bg-gray-100 text-gray-600"}`}>
+                            {result.redditChannel.postingDifficulty} posting
+                          </span>
+                        )}
+                      </>
+                    )}
+
+                    {/* Fund metrics */}
+                    {isFund && result.fund && (
+                      <>
+                        {result.fund.investmentStage && (
+                          <span className="rounded-full bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-700">
+                            {stageLabels[result.fund.investmentStage] ?? result.fund.investmentStage}
+                          </span>
+                        )}
+                        {result.fund.ticketSize && (
+                          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">
+                            {result.fund.ticketSize}
+                          </span>
+                        )}
+                      </>
+                    )}
                   </div>
 
                   <a
-                    href={website?.url}
+                    href={entityUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="mt-1 block truncate text-sm text-[#465FFF] hover:underline"
                   >
-                    {website?.url}
+                    {entityUrl}
                   </a>
 
                   {result.matchReason && (
@@ -456,12 +597,12 @@ function ResultRow({
 
                 <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:min-w-[180px]">
                   <a
-                    href={website?.url}
+                    href={entityUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex h-11 items-center justify-center rounded-full border border-[#465FFF] bg-white px-5 text-sm font-semibold text-[#465FFF] transition-colors hover:bg-[#EEF2FF]"
                   >
-                    Submit Site
+                    {actionLabel}
                   </a>
                   <button
                     type="button"

@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { redis } from "@/lib/redis";
-import { rankWebsitesForCuration } from "@/lib/ai";
+import { rankAllCandidatesForCuration } from "@/lib/ai";
 import { sendCurationCompleteEmail } from "@/lib/email";
 import { invalidateUserProfile } from "@/lib/cache";
 
@@ -109,96 +109,119 @@ async function processCuration(
     data: { status: "processing" },
   });
 
-  // ─── Step 3: Fetch candidate websites ─────────────────────────────────────
+  // ─── Step 3: Fetch candidate pools ────────────────────────────────────────
   await setProgress(curationId, "fetching_sites");
 
-  const websites = await db.website.findMany({
-    where: {
-      isActive: true,
-      isExcluded: false,
-      ...(countryId
-        ? {
-            OR: [{ countryId }, { countryId: null }],
-          }
-        : {}),
-      ...(categoryId
-        ? {
-            AND: [{ OR: [{ categoryId }, { categoryId: null }] }],
-          }
-        : {}),
-      // GIN array overlap — match any keyword against tagSlugs
-      ...(keywords.length > 0
-        ? {
-            tagSlugs: {
-              hasSome: keywords.map((k) => k.toLowerCase()),
-            },
-          }
-        : {}),
-    },
-    orderBy: [{ isPinned: "desc" }, { da: "desc" }],
-    take: 200,
-    select: {
-      id: true,
-      name: true,
-      url: true,
-      da: true,
-      pa: true,
-      spamScore: true,
-      traffic: true,
-      type: true,
-      description: true,
-      tagSlugs: true,
-    },
-  });
+  // Resolve category slug for filtering new entity types
+  const [country, category] = await Promise.all([
+    countryId
+      ? db.country.findUnique({ where: { id: countryId }, select: { name: true } })
+      : Promise.resolve(null),
+    categoryId
+      ? db.category.findUnique({ where: { id: categoryId }, select: { name: true, slug: true } })
+      : Promise.resolve(null),
+  ]);
+  const categorySlugs = category ? [category.slug] : [];
+  const keywordsLower = keywords.map((k) => k.toLowerCase());
 
-  // Fallback: if too few results with keyword filter, fetch top sites globally
-  let candidateSites = websites;
-  if (candidateSites.length < 10) {
-    candidateSites = await db.website.findMany({
+  const websiteWhere = {
+    isActive: true,
+    isExcluded: false,
+    ...(countryId ? { OR: [{ countryId }, { countryId: null }] } : {}),
+    ...(categoryId ? { AND: [{ OR: [{ categoryId }, { categoryId: null }] }] } : {}),
+  };
+
+  const [rawWebsites, rawInfluencers, rawReddit, rawFunds] = await Promise.all([
+    db.website.findMany({
       where: {
-        isActive: true,
-        isExcluded: false,
-        ...(countryId
-          ? {
-              OR: [{ countryId }, { countryId: null }],
-            }
-          : {}),
-        ...(categoryId
-          ? {
-              AND: [{ OR: [{ categoryId }, { categoryId: null }] }],
-            }
-          : {}),
+        ...websiteWhere,
+        ...(keywordsLower.length > 0 ? { tagSlugs: { hasSome: keywordsLower } } : {}),
       },
       orderBy: [{ isPinned: "desc" }, { da: "desc" }],
-      take: 200,
-      select: {
-        id: true,
-        name: true,
-        url: true,
-        da: true,
-        pa: true,
-        spamScore: true,
-        traffic: true,
-        type: true,
-        description: true,
-        tagSlugs: true,
+      take: 150,
+      select: { id: true, name: true, url: true, da: true, pa: true, spamScore: true, traffic: true, type: true, description: true, tagSlugs: true },
+    }),
+
+    db.influencer.findMany({
+      where: {
+        isActive: true,
+        ...(keywordsLower.length > 0 ? { tagSlugs: { hasSome: keywordsLower } } : {}),
+        ...(categorySlugs.length > 0 ? { categorySlugs: { hasSome: categorySlugs } } : {}),
       },
+      orderBy: { followersCount: "desc" },
+      take: 80,
+      select: { id: true, name: true, platform: true, followersCount: true, categorySlugs: true, tagSlugs: true, description: true, profileLink: true },
+    }),
+
+    db.redditChannel.findMany({
+      where: {
+        isActive: true,
+        ...(keywordsLower.length > 0 ? { tagSlugs: { hasSome: keywordsLower } } : {}),
+      },
+      orderBy: { totalMembers: "desc" },
+      take: 80,
+      select: { id: true, name: true, url: true, totalMembers: true, weeklyVisitors: true, postingDifficulty: true, categorySlugs: true, tagSlugs: true, description: true },
+    }),
+
+    db.fund.findMany({
+      where: {
+        isActive: true,
+        ...(keywordsLower.length > 0 ? { tagSlugs: { hasSome: keywordsLower } } : {}),
+      },
+      orderBy: { name: "asc" },
+      take: 50,
+      select: { id: true, name: true, websiteUrl: true, investmentStage: true, ticketSize: true, categorySlugs: true, tagSlugs: true, description: true },
+    }),
+  ]);
+
+  // Fallback: if too few website results with keyword filter, fetch globally
+  let candidateSites = rawWebsites;
+  if (candidateSites.length < 10) {
+    candidateSites = await db.website.findMany({
+      where: websiteWhere,
+      orderBy: [{ isPinned: "desc" }, { da: "desc" }],
+      take: 150,
+      select: { id: true, name: true, url: true, da: true, pa: true, spamScore: true, traffic: true, type: true, description: true, tagSlugs: true },
+    });
+  }
+
+  // Fallback: if too few influencers, fetch top without keyword/category filter
+  let candidateInfluencers = rawInfluencers;
+  if (candidateInfluencers.length < 5) {
+    candidateInfluencers = await db.influencer.findMany({
+      where: { isActive: true },
+      orderBy: { followersCount: "desc" },
+      take: 80,
+      select: { id: true, name: true, platform: true, followersCount: true, categorySlugs: true, tagSlugs: true, description: true, profileLink: true },
+    });
+  }
+
+  // Fallback: if too few reddit channels, fetch top without keyword filter
+  let candidateReddit = rawReddit;
+  if (candidateReddit.length < 5) {
+    candidateReddit = await db.redditChannel.findMany({
+      where: { isActive: true },
+      orderBy: { totalMembers: "desc" },
+      take: 80,
+      select: { id: true, name: true, url: true, totalMembers: true, weeklyVisitors: true, postingDifficulty: true, categorySlugs: true, tagSlugs: true, description: true },
+    });
+  }
+
+  // Fallback: if too few funds, fetch all active
+  let candidateFunds = rawFunds;
+  if (candidateFunds.length < 5) {
+    candidateFunds = await db.fund.findMany({
+      where: { isActive: true },
+      orderBy: { name: "asc" },
+      take: 50,
+      select: { id: true, name: true, websiteUrl: true, investmentStage: true, ticketSize: true, categorySlugs: true, tagSlugs: true, description: true },
     });
   }
 
   // ─── Step 4: AI matching ───────────────────────────────────────────────────
   await setProgress(curationId, "calling_ai");
 
-  const [country, category] = await Promise.all([
-    countryId
-      ? db.country.findUnique({ where: { id: countryId }, select: { name: true } })
-      : Promise.resolve(null),
-    categoryId
-      ? db.category.findUnique({ where: { id: categoryId }, select: { name: true } })
-      : Promise.resolve(null),
-  ]);
-
-  const matchResults = await rankWebsitesForCuration(
+  const matchResults = await rankAllCandidatesForCuration(
     {
       productUrl,
       keywords,
@@ -206,7 +229,12 @@ async function processCuration(
       countryName: country?.name,
       categoryName: category?.name,
     },
-    candidateSites
+    {
+      websites: candidateSites,
+      influencers: candidateInfluencers,
+      redditChannels: candidateReddit,
+      funds: candidateFunds,
+    }
   );
 
   // ─── Step 5: Save results ──────────────────────────────────────────────────
@@ -216,7 +244,10 @@ async function processCuration(
     await db.curationResult.createMany({
       data: matchResults.map((r) => ({
         curationId,
-        websiteId: r.websiteId,
+        websiteId: r.websiteId ?? null,
+        influencerId: r.influencerId ?? null,
+        redditChannelId: r.redditChannelId ?? null,
+        fundId: r.fundId ?? null,
         matchScore: r.matchScore,
         matchReason: r.matchReason,
         section: r.section,
@@ -238,15 +269,16 @@ async function processCuration(
       results: {
         include: {
           website: {
-            select: {
-              name: true,
-              url: true,
-              da: true,
-              pa: true,
-              spamScore: true,
-              traffic: true,
-              type: true,
-            },
+            select: { name: true, url: true, da: true, pa: true, spamScore: true, traffic: true, type: true },
+          },
+          influencer: {
+            select: { name: true, platform: true, followersCount: true, profileLink: true },
+          },
+          redditChannel: {
+            select: { name: true, url: true, totalMembers: true, weeklyVisitors: true, postingDifficulty: true },
+          },
+          fund: {
+            select: { name: true, websiteUrl: true, investmentStage: true, ticketSize: true, logoUrl: true },
           },
         },
         orderBy: [{ section: "asc" }, { rank: "asc" }],

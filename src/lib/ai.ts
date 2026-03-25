@@ -117,15 +117,52 @@ interface WebsiteCandidate {
   tagSlugs: string[];
 }
 
+interface InfluencerCandidate {
+  id: string;
+  name: string;
+  platform: string;
+  followersCount: number;
+  categorySlugs: string[];
+  tagSlugs: string[];
+  description?: string | null;
+  profileLink: string;
+}
+
+interface RedditCandidate {
+  id: string;
+  name: string;
+  url: string;
+  totalMembers: number;
+  weeklyVisitors: number;
+  postingDifficulty?: string | null;
+  categorySlugs: string[];
+  tagSlugs: string[];
+  description?: string | null;
+}
+
+interface FundCandidate {
+  id: string;
+  name: string;
+  websiteUrl: string;
+  investmentStage?: string | null;
+  ticketSize?: string | null;
+  categorySlugs: string[];
+  tagSlugs: string[];
+  description?: string | null;
+}
+
 interface MatchResult {
-  websiteId: string;
+  websiteId?: string;
+  influencerId?: string;
+  redditChannelId?: string;
+  fundId?: string;
   matchScore: number; // 0.0 - 1.0
   matchReason: string;
-  section: "a" | "b" | "c"; // a=distribution, b=guest_post, c=press_release
+  section: "a" | "b" | "c" | "d" | "e" | "f";
   rank: number;
 }
 
-export async function rankWebsitesForCuration(
+export async function rankAllCandidatesForCuration(
   product: {
     productUrl: string;
     keywords: string[];
@@ -133,9 +170,19 @@ export async function rankWebsitesForCuration(
     countryName?: string;
     categoryName?: string;
   },
-  candidates: WebsiteCandidate[]
+  candidates: {
+    websites: WebsiteCandidate[];
+    influencers: InfluencerCandidate[];
+    redditChannels: RedditCandidate[];
+    funds: FundCandidate[];
+  }
 ): Promise<MatchResult[]> {
-  if (candidates.length === 0) return [];
+  const total =
+    candidates.websites.length +
+    candidates.influencers.length +
+    candidates.redditChannels.length +
+    candidates.funds.length;
+  if (total === 0) return [];
 
   const prompt = buildMatchingPrompt(product, candidates);
   const config = await getAiConfig();
@@ -144,7 +191,7 @@ export async function rankWebsitesForCuration(
     [
       {
         role: "system",
-        content: `You are an expert product launch strategist. Your job is to rank websites for product distribution.
+        content: `You are an expert product launch strategist. Your job is to rank websites, influencers, reddit communities, and investors for product distribution.
 Always respond with valid JSON only. No markdown, no explanations outside the JSON structure.`,
       },
       { role: "user", content: prompt },
@@ -163,13 +210,42 @@ function buildMatchingPrompt(
     countryName?: string;
     categoryName?: string;
   },
-  candidates: WebsiteCandidate[]
+  candidates: {
+    websites: WebsiteCandidate[];
+    influencers: InfluencerCandidate[];
+    redditChannels: RedditCandidate[];
+    funds: FundCandidate[];
+  }
 ): string {
-  const websiteList = candidates
-    .slice(0, 150) // Limit to avoid token overflow
+  const websiteList = candidates.websites
+    .slice(0, 100)
     .map(
       (w, i) =>
-        `${i + 1}. ID:${w.id} | Name:${w.name} | URL:${w.url} | Type:${w.type} | DA:${w.da} | PA:${w.pa} | Spam:${w.spamScore} | Traffic:${w.traffic} | Tags:${w.tagSlugs.join(",")} | Desc:${w.description?.slice(0, 100) ?? "N/A"}`
+        `${i + 1}. ID:W:${w.id} | Name:${w.name} | URL:${w.url} | Type:${w.type} | DA:${w.da} | PA:${w.pa} | Spam:${w.spamScore} | Traffic:${w.traffic} | Tags:${w.tagSlugs.join(",")} | Desc:${w.description?.slice(0, 100) ?? "N/A"}`
+    )
+    .join("\n");
+
+  const influencerList = candidates.influencers
+    .slice(0, 50)
+    .map(
+      (inf, i) =>
+        `${i + 1}. ID:I:${inf.id} | Name:${inf.name} | Platform:${inf.platform} | Followers:${inf.followersCount.toLocaleString()} | Categories:${inf.categorySlugs.join(",")} | Tags:${inf.tagSlugs.join(",")} | Desc:${inf.description?.slice(0, 100) ?? "N/A"}`
+    )
+    .join("\n");
+
+  const redditList = candidates.redditChannels
+    .slice(0, 50)
+    .map(
+      (r, i) =>
+        `${i + 1}. ID:R:${r.id} | Name:${r.name} | URL:${r.url} | Members:${r.totalMembers.toLocaleString()} | WeeklyVisitors:${r.weeklyVisitors.toLocaleString()} | Difficulty:${r.postingDifficulty ?? "N/A"} | Categories:${r.categorySlugs.join(",")} | Tags:${r.tagSlugs.join(",")}`
+    )
+    .join("\n");
+
+  const fundList = candidates.funds
+    .slice(0, 30)
+    .map(
+      (f, i) =>
+        `${i + 1}. ID:F:${f.id} | Name:${f.name} | Stage:${f.investmentStage ?? "N/A"} | TicketSize:${f.ticketSize ?? "N/A"} | Categories:${f.categorySlugs.join(",")} | Tags:${f.tagSlugs.join(",")} | Desc:${f.description?.slice(0, 100) ?? "N/A"}`
     )
     .join("\n");
 
@@ -181,21 +257,35 @@ Product to launch:
 ${product.countryName ? `- Target country: ${product.countryName}` : ""}
 ${product.categoryName ? `- Target category: ${product.categoryName}` : ""}
 
-Available websites (${candidates.length} total):
-${websiteList}
+${candidates.websites.length > 0 ? `Available websites (${candidates.websites.length} total, use ID prefix W:):
+${websiteList}` : ""}
 
-Task: Select the top 50 most relevant websites for this product launch and rank them.
-- Section A (distribution): Product hunt, app directories, listing sites where you submit the product
-- Section B (guest_post): Blogs, publications where you can write guest posts or get backlinks
-- Section C (press_release): Press release distribution, news sites, PR platforms
+${candidates.influencers.length > 0 ? `Available social influencers (${candidates.influencers.length} total, use ID prefix I:):
+${influencerList}` : ""}
+
+${candidates.redditChannels.length > 0 ? `Available reddit communities (${candidates.redditChannels.length} total, use ID prefix R:):
+${redditList}` : ""}
+
+${candidates.funds.length > 0 ? `Available investors/funds (${candidates.funds.length} total, use ID prefix F:):
+${fundList}` : ""}
+
+Task: Select the most relevant items from ALL categories above for this product launch and rank them.
+- Section A (distribution): Product directories, app listings, submission sites where you submit the product
+- Section B (guest_post): Blogs and publications for guest posts or backlinks
+- Section C (press_release): Press release distribution and news sites
+- Section D (social_influencer): Social media influencers to reach out to for product promotion
+- Section E (reddit_channel): Subreddits where the target audience is active and posting is viable
+- Section F (fund): Investors or funds that match the product's stage and category
+
+IMPORTANT: Use the FULL prefixed ID (e.g., "W:abc123", "I:xyz789", "R:def456", "F:ghi012") in the entityId field.
 
 Return ONLY this JSON structure:
 {
   "results": [
     {
-      "websiteId": "the-id",
+      "entityId": "W:the-website-id",
       "matchScore": 0.95,
-      "matchReason": "Brief reason why this site is relevant (max 100 chars)",
+      "matchReason": "Brief reason why this is relevant (max 100 chars)",
       "section": "a",
       "rank": 1
     }
@@ -205,8 +295,9 @@ Return ONLY this JSON structure:
 Rules:
 - matchScore: 0.0 to 1.0 (1.0 = perfect match)
 - rank: sequential within each section, starting from 1
-- Include maximum 20 sites per section
-- Only include sites with matchScore >= 0.4
+- Include maximum 20 items per section
+- Only include items with matchScore >= 0.4
+- Only include sections D, E, F if relevant items exist
 - Return valid JSON only
 `;
 }
@@ -222,19 +313,34 @@ function parseMatchingResponse(raw: string): MatchResult[] {
         (r: unknown) =>
           r &&
           typeof r === "object" &&
-          "websiteId" in (r as object) &&
+          ("entityId" in (r as object) || "websiteId" in (r as object)) &&
           "matchScore" in (r as object) &&
           "section" in (r as object)
       )
-      .map((r: Record<string, unknown>) => ({
-        websiteId: String(r.websiteId),
-        matchScore: Math.min(1, Math.max(0, Number(r.matchScore))),
-        matchReason: String(r.matchReason ?? "").slice(0, 200),
-        section: (["a", "b", "c"].includes(String(r.section))
+      .map((r: Record<string, unknown>): MatchResult | null => {
+        const rawId = String(r.entityId ?? r.websiteId ?? "");
+        const score = Math.min(1, Math.max(0, Number(r.matchScore)));
+        const reason = String(r.matchReason ?? "").slice(0, 200);
+        const section = (["a", "b", "c", "d", "e", "f"].includes(String(r.section))
           ? r.section
-          : "a") as "a" | "b" | "c",
-        rank: Number(r.rank) || 1,
-      }));
+          : "a") as MatchResult["section"];
+        const rank = Number(r.rank) || 1;
+
+        if (rawId.startsWith("W:")) {
+          return { websiteId: rawId.slice(2), matchScore: score, matchReason: reason, section, rank };
+        } else if (rawId.startsWith("I:")) {
+          return { influencerId: rawId.slice(2), matchScore: score, matchReason: reason, section, rank };
+        } else if (rawId.startsWith("R:")) {
+          return { redditChannelId: rawId.slice(2), matchScore: score, matchReason: reason, section, rank };
+        } else if (rawId.startsWith("F:")) {
+          return { fundId: rawId.slice(2), matchScore: score, matchReason: reason, section, rank };
+        } else if (rawId.length > 0) {
+          // Legacy fallback: bare ID without prefix → treat as websiteId
+          return { websiteId: rawId, matchScore: score, matchReason: reason, section, rank };
+        }
+        return null;
+      })
+      .filter((r): r is MatchResult => r !== null);
   } catch {
     throw new Error("AI returned invalid JSON response");
   }

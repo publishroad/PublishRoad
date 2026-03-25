@@ -12,10 +12,13 @@ interface StreamingCurationData {
 
 interface StreamingResult {
   id: string;
-  websiteId: string;
+  websiteId?: string | null;
+  influencerId?: string | null;
+  redditChannelId?: string | null;
+  fundId?: string | null;
   matchScore: number;
   matchReason: string | null;
-  section: "a" | "b" | "c";
+  section: "a" | "b" | "c" | "d" | "e" | "f";
   rank: number;
   userStatus: "saved" | "hidden" | null;
   masked?: boolean;
@@ -27,6 +30,26 @@ interface StreamingResult {
     spamScore: number;
     traffic: number;
     type: string;
+  };
+  influencer?: {
+    name: string;
+    platform: string;
+    followersCount: number;
+    profileLink: string;
+  };
+  redditChannel?: {
+    name: string;
+    url: string;
+    totalMembers: number;
+    weeklyVisitors: number;
+    postingDifficulty: string | null;
+  };
+  fund?: {
+    name: string;
+    websiteUrl: string;
+    investmentStage: string | null;
+    ticketSize: string | null;
+    logoUrl: string | null;
   };
 }
 

@@ -29,7 +29,10 @@ export async function PUT(
     return NextResponse.json({ error: "Invalid input" }, { status: 422 });
   }
 
-  const { tagIds, ...data } = parsed.data;
+  const { tagIds, categoryIds, ...data } = parsed.data;
+
+  // categoryId kept for curation backward compat — set to first selection
+  const primaryCategoryId = categoryIds[0] ?? null;
 
   try {
     const website = await db.$transaction(async (tx) => {
@@ -38,7 +41,7 @@ export async function PUT(
         data: {
           ...data,
           countryId: data.countryId || null,
-          categoryId: data.categoryId || null,
+          categoryId: primaryCategoryId,
           description: data.description || null,
         },
       });
@@ -46,10 +49,13 @@ export async function PUT(
       if (tagIds !== undefined) {
         await tx.websiteTag.deleteMany({ where: { websiteId: id } });
         if (tagIds.length > 0) {
-          await tx.websiteTag.createMany({
-            data: tagIds.map((tagId) => ({ websiteId: id, tagId })),
-          });
+          await tx.websiteTag.createMany({ data: tagIds.map((tagId) => ({ websiteId: id, tagId })) });
         }
+      }
+
+      await tx.websiteCategory.deleteMany({ where: { websiteId: id } });
+      if (categoryIds.length > 0) {
+        await tx.websiteCategory.createMany({ data: categoryIds.map((categoryId) => ({ websiteId: id, categoryId })) });
       }
 
       return updatedWebsite;
@@ -89,16 +95,10 @@ export async function DELETE(
         return NextResponse.json({ error: "Website not found" }, { status: 404 });
       }
 
-      // Website is referenced by historical records (e.g., curation results).
-      // Fall back to archival so users can still remove it from active usage.
       if (error.code === "P2003") {
         await db.website.update({
           where: { id },
-          data: {
-            isActive: false,
-            isExcluded: true,
-            isPinned: false,
-          },
+          data: { isActive: false, isExcluded: true, isPinned: false },
         });
 
         return NextResponse.json({
