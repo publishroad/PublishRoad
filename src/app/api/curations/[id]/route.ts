@@ -43,10 +43,17 @@ export async function GET(
                   spamScore: true,
                   traffic: true,
                   type: true,
-                  category: {
-                    select: { name: true },
-                  },
+                  category: { select: { name: true } },
                 },
+              },
+              influencer: {
+                select: { name: true, platform: true, followersCount: true, profileLink: true },
+              },
+              redditChannel: {
+                select: { name: true, url: true, totalMembers: true, weeklyVisitors: true, postingDifficulty: true },
+              },
+              fund: {
+                select: { name: true, websiteUrl: true, investmentStage: true, ticketSize: true, logoUrl: true },
               },
             },
           },

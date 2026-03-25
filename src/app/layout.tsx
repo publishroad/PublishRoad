@@ -20,6 +20,11 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
+  icons: {
+    icon: "/favicon.png",
+    shortcut: "/favicon.png",
+    apple: "/favicon.png",
+  },
   title: {
     default: "PublishRoad — Launch Your Product to the Right Places",
     template: "%s | PublishRoad",

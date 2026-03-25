@@ -36,6 +36,9 @@ enum CurationSection {
   a
   b
   c
+  d
+  e
+  f
 }
 
 enum UserResultStatus {
@@ -86,6 +89,29 @@ enum AdminRole {
   editor
 }
 
+enum InfluencerPlatform {
+  tiktok
+  instagram
+  youtube
+  twitter
+}
+
+enum PostingDifficulty {
+  easy
+  medium
+  hard
+}
+
+enum InvestmentStage {
+  pre_seed
+  seed
+  series_a
+  series_b
+  series_c
+  growth
+  late_stage
+}
+
 // ─────────────────────────────────────────────
 // LOOKUP TABLES
 // ─────────────────────────────────────────────
@@ -99,8 +125,10 @@ model Country {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  websites  Website[]
-  curations Curation[]
+  websites    Website[]
+  curations   Curation[]
+  influencers Influencer[]
+  funds       Fund[]
 
   @@map("countries")
 }
@@ -114,9 +142,13 @@ model Category {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  subCategories SubCategory[]
-  websites      Website[]
-  blogPosts     BlogPost[]
+  subCategories           SubCategory[]
+  websites                Website[]
+  blogPosts               BlogPost[]
+  websiteCategories       WebsiteCategory[]
+  influencerCategories    InfluencerCategory[]
+  redditChannelCategories RedditChannelCategory[]
+  fundCategories          FundCategory[]
 
   @@map("categories")
 }
@@ -144,7 +176,10 @@ model Tag {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  websiteTags WebsiteTag[]
+  websiteTags       WebsiteTag[]
+  influencerTags    InfluencerTag[]
+  redditChannelTags RedditChannelTag[]
+  fundTags          FundTag[]
 
   @@map("tags")
 }
@@ -262,11 +297,12 @@ model Website {
   createdAt     DateTime    @default(now()) @map("created_at")
   updatedAt     DateTime    @updatedAt @map("updated_at")
 
-  country       Country?        @relation(fields: [countryId], references: [id])
-  category      Category?       @relation(fields: [categoryId], references: [id])
-  subCategory   SubCategory?    @relation(fields: [subCategoryId], references: [id])
-  websiteTags   WebsiteTag[]
-  curationResults CurationResult[]
+  country           Country?          @relation(fields: [countryId], references: [id])
+  category          Category?         @relation(fields: [categoryId], references: [id])
+  subCategory       SubCategory?      @relation(fields: [subCategoryId], references: [id])
+  websiteTags       WebsiteTag[]
+  websiteCategories WebsiteCategory[]
+  curationResults   CurationResult[]
 
   @@index([type, isActive])
   @@index([countryId, isActive])
@@ -309,19 +345,25 @@ model Curation {
 }
 
 model CurationResult {
-  id          String            @id @default(cuid())
-  curationId  String            @map("curation_id")
-  websiteId   String            @map("website_id")
-  matchScore  Float             @map("match_score")
-  matchReason String?           @db.Text @map("match_reason")
-  section     CurationSection   // a = distribution, b = guest post, c = press release
-  rank        Int
-  userStatus  UserResultStatus? @map("user_status")
-  userNotes   String?           @db.Text @map("user_notes")
-  createdAt   DateTime          @default(now()) @map("created_at")
+  id              String            @id @default(cuid())
+  curationId      String            @map("curation_id")
+  websiteId       String?           @map("website_id")         // nullable — only set for sections a/b/c
+  influencerId    String?           @map("influencer_id")      // only set for section d
+  redditChannelId String?           @map("reddit_channel_id")  // only set for section e
+  fundId          String?           @map("fund_id")            // only set for section f
+  matchScore      Float             @map("match_score")
+  matchReason     String?           @db.Text @map("match_reason")
+  section         CurationSection   // a=distribution, b=guest_post, c=press_release, d=social, e=reddit, f=fund
+  rank            Int
+  userStatus      UserResultStatus? @map("user_status")
+  userNotes       String?           @db.Text @map("user_notes")
+  createdAt       DateTime          @default(now()) @map("created_at")
 
-  curation Curation @relation(fields: [curationId], references: [id], onDelete: Cascade)
-  website  Website  @relation(fields: [websiteId], references: [id])
+  curation      Curation       @relation(fields: [curationId], references: [id], onDelete: Cascade)
+  website       Website?       @relation(fields: [websiteId], references: [id])
+  influencer    Influencer?    @relation(fields: [influencerId], references: [id])
+  redditChannel RedditChannel? @relation(fields: [redditChannelId], references: [id])
+  fund          Fund?          @relation(fields: [fundId], references: [id])
 
   @@index([curationId, section, rank])
   @@map("curation_results")
@@ -543,6 +585,167 @@ model AiConfig {
   updatedBy AdminUser? @relation(fields: [updatedById], references: [id])
 
   @@map("ai_config")
+}
+
+// ─────────────────────────────────────────────
+// SOCIAL (INFLUENCERS)
+// ─────────────────────────────────────────────
+
+model Influencer {
+  id             String             @id @default(cuid())
+  name           String
+  platform       InfluencerPlatform
+  followersCount Int                @default(0) @map("followers_count")
+  countryId      String?            @map("country_id")
+  description    String?            @db.Text
+  profileLink    String             @map("profile_link")
+  email          String?
+  isActive       Boolean            @default(true) @map("is_active")
+  tagSlugs       String[]           @default([]) @map("tag_slugs")
+  categorySlugs  String[]           @default([]) @map("category_slugs")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+
+  country              Country?             @relation(fields: [countryId], references: [id])
+  influencerTags       InfluencerTag[]
+  influencerCategories InfluencerCategory[]
+  curationResults      CurationResult[]
+
+  @@index([platform, isActive])
+  @@map("influencers")
+}
+
+model InfluencerTag {
+  influencerId String     @map("influencer_id")
+  tagId        String     @map("tag_id")
+
+  influencer Influencer @relation(fields: [influencerId], references: [id], onDelete: Cascade)
+  tag        Tag        @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([influencerId, tagId])
+  @@map("influencer_tags")
+}
+
+// ─────────────────────────────────────────────
+// REDDIT CHANNELS
+// ─────────────────────────────────────────────
+
+model RedditChannel {
+  id                String             @id @default(cuid())
+  name              String
+  url               String             @unique
+  weeklyVisitors    Int                @default(0) @map("weekly_visitors")
+  totalMembers      Int                @default(0) @map("total_members")
+  description       String?            @db.Text
+  postingDifficulty PostingDifficulty? @map("posting_difficulty")
+  isActive          Boolean            @default(true) @map("is_active")
+  tagSlugs          String[]           @default([]) @map("tag_slugs")
+  categorySlugs     String[]           @default([]) @map("category_slugs")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  redditChannelTags       RedditChannelTag[]
+  redditChannelCategories RedditChannelCategory[]
+  curationResults         CurationResult[]
+
+  @@map("reddit_channels")
+}
+
+model RedditChannelTag {
+  redditChannelId String        @map("reddit_channel_id")
+  tagId           String        @map("tag_id")
+
+  redditChannel RedditChannel @relation(fields: [redditChannelId], references: [id], onDelete: Cascade)
+  tag           Tag           @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([redditChannelId, tagId])
+  @@map("reddit_channel_tags")
+}
+
+// ─────────────────────────────────────────────
+// FUNDS (INVESTORS)
+// ─────────────────────────────────────────────
+
+model Fund {
+  id              String           @id @default(cuid())
+  name            String
+  logoUrl         String?          @map("logo_url")
+  websiteUrl      String           @map("website_url")
+  description     String?          @db.Text
+  investmentStage InvestmentStage? @map("investment_stage")
+  ticketSize      String?          @map("ticket_size")
+  countryId       String?          @map("country_id")
+  isActive        Boolean          @default(true) @map("is_active")
+  tagSlugs        String[]         @default([]) @map("tag_slugs")
+  categorySlugs   String[]         @default([]) @map("category_slugs")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  country         Country?        @relation(fields: [countryId], references: [id])
+  fundTags        FundTag[]
+  fundCategories  FundCategory[]
+  curationResults CurationResult[]
+
+  @@map("funds")
+}
+
+model FundTag {
+  fundId String @map("fund_id")
+  tagId  String @map("tag_id")
+
+  fund Fund @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([fundId, tagId])
+  @@map("fund_tags")
+}
+
+// ─────────────────────────────────────────────
+// MULTI-CATEGORY JUNCTION TABLES
+// ─────────────────────────────────────────────
+
+model WebsiteCategory {
+  websiteId  String @map("website_id")
+  categoryId String @map("category_id")
+
+  website  Website  @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([websiteId, categoryId])
+  @@map("website_categories")
+}
+
+model InfluencerCategory {
+  influencerId String @map("influencer_id")
+  categoryId   String @map("category_id")
+
+  influencer Influencer @relation(fields: [influencerId], references: [id], onDelete: Cascade)
+  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([influencerId, categoryId])
+  @@map("influencer_categories")
+}
+
+model RedditChannelCategory {
+  redditChannelId String @map("reddit_channel_id")
+  categoryId      String @map("category_id")
+
+  redditChannel RedditChannel @relation(fields: [redditChannelId], references: [id], onDelete: Cascade)
+  category      Category      @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([redditChannelId, categoryId])
+  @@map("reddit_channel_categories")
+}
+
+model FundCategory {
+  fundId     String @map("fund_id")
+  categoryId String @map("category_id")
+
+  fund     Fund     @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([fundId, categoryId])
+  @@map("fund_categories")
 }
 
 

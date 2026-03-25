@@ -26,9 +26,9 @@ interface WebsiteFormProps {
     spamScore: number;
     traffic: number;
     tagIds: string[];
+    categoryIds: string[];
     description: string | null;
     countryId: string | null;
-    categoryId: string | null;
     isActive: boolean;
     isPinned: boolean;
     isExcluded: boolean;
@@ -41,9 +41,11 @@ interface WebsiteFormProps {
 export function WebsiteForm({ website, countries, categories, tags }: WebsiteFormProps) {
   const router = useRouter();
   const [selectedTags, setSelectedTags] = useState<string[]>(website?.tagIds ?? []);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(website?.categoryIds ?? []);
 
   useEffect(() => {
     setSelectedTags(website?.tagIds ?? []);
+    setSelectedCategories(website?.categoryIds ?? []);
   }, [website]);
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>({
@@ -59,7 +61,7 @@ export function WebsiteForm({ website, countries, categories, tags }: WebsiteFor
           traffic: website.traffic,
           description: website.description ?? "",
           countryId: website.countryId ?? "",
-          categoryId: website.categoryId ?? "",
+          categoryIds: website.categoryIds,
           isActive: website.isActive,
           isPinned: website.isPinned,
           isExcluded: website.isExcluded,
@@ -79,7 +81,7 @@ export function WebsiteForm({ website, countries, categories, tags }: WebsiteFor
   });
 
   async function onSubmit(data: FormData) {
-    const payload = { ...data, tagIds: selectedTags };
+    const payload = { ...data, tagIds: selectedTags, categoryIds: selectedCategories };
     const url = website
       ? `/api/admin/websites/${website.id}`
       : "/api/admin/websites";
@@ -172,14 +174,30 @@ export function WebsiteForm({ website, countries, categories, tags }: WebsiteFor
               ))}
             </select>
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="categoryId">Category (optional)</Label>
-            <select id="categoryId" {...register("categoryId")} className="w-full border border-border-gray rounded-lg px-3 py-2 text-sm">
-              <option value="">None</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
+          <div className="col-span-2 space-y-2">
+            <Label>Categories (optional, select multiple)</Label>
+            <div className="flex flex-wrap gap-2">
+              {categories.map((cat) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() =>
+                    setSelectedCategories((prev) =>
+                      prev.includes(cat.id)
+                        ? prev.filter((c) => c !== cat.id)
+                        : [...prev, cat.id]
+                    )
+                  }
+                  className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                    selectedCategories.includes(cat.id)
+                      ? "bg-navy text-white border-navy"
+                      : "border-border-gray text-medium-gray hover:border-navy hover:text-navy"
+                  }`}
+                >
+                  {cat.name}
+                </button>
               ))}
-            </select>
+            </div>
           </div>
           <div className="col-span-2 space-y-1.5">
             <Label htmlFor="description">Description</Label>

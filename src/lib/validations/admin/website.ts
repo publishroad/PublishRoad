@@ -18,7 +18,7 @@ export const websiteSchema = z.object({
   spamScore: z.coerce.number().int().min(0).max(100).default(0),
   traffic: z.coerce.number().int().min(0).default(0),
   countryId: z.string().optional().nullable(),
-  categoryId: z.string().optional().nullable(),
+  categoryIds: z.array(z.string()).default([]),
   subCategoryId: z.string().optional().nullable(),
   description: z.string().max(2000).optional().nullable(),
   submissionUrl: z

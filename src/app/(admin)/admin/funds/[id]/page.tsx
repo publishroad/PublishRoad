@@ -1,9 +1,8 @@
-// Cache website details for 60 seconds — admin changes are infrequent
 export const revalidate = 60;
 
 import { db } from "@/lib/db";
 import { notFound } from "next/navigation";
-import { WebsiteForm } from "@/components/admin/WebsiteForm";
+import { FundForm } from "@/components/admin/FundForm";
 
 async function getData(id: string) {
   if (id === "new") {
@@ -12,15 +11,15 @@ async function getData(id: string) {
       db.category.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
       db.tag.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
     ]);
-    return { website: null, countries, categories, tags };
+    return { fund: null, countries, categories, tags };
   }
 
-  const [website, countries, categories, tags] = await Promise.all([
-    db.website.findUnique({
+  const [fund, countries, categories, tags] = await Promise.all([
+    db.fund.findUnique({
       where: { id },
       include: {
-        websiteTags: { select: { tagId: true } },
-        websiteCategories: { select: { categoryId: true } },
+        fundTags: { select: { tagId: true } },
+        fundCategories: { select: { categoryId: true } },
       },
     }),
     db.country.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
@@ -28,12 +27,12 @@ async function getData(id: string) {
     db.tag.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
   ]);
 
-  if (!website) notFound();
+  if (!fund) notFound();
   return {
-    website: {
-      ...website,
-      tagIds: website.websiteTags.map((t) => t.tagId),
-      categoryIds: website.websiteCategories.map((c) => c.categoryId),
+    fund: {
+      ...fund,
+      tagIds: fund.fundTags.map((t) => t.tagId),
+      categoryIds: fund.fundCategories.map((c) => c.categoryId),
     },
     countries,
     categories,
@@ -41,24 +40,20 @@ async function getData(id: string) {
   };
 }
 
-export default async function WebsiteEditPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function FundEditPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { website, countries, categories, tags } = await getData(id);
+  const { fund, countries, categories, tags } = await getData(id);
 
   return (
     <div className="flex-1 flex flex-col">
       <div className="bg-white border-b border-border-gray px-6 py-4">
         <h1 className="text-lg font-semibold text-navy">
-          {website ? "Edit Website" : "Add Website"}
+          {fund ? "Edit Fund" : "Add Fund"}
         </h1>
       </div>
       <div className="flex-1 p-6 max-w-2xl">
-        <WebsiteForm
-          website={website}
+        <FundForm
+          fund={fund}
           countries={countries}
           categories={categories}
           tags={tags}
