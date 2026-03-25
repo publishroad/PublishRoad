@@ -225,10 +225,8 @@ export default function CurationDetailPage() {
     }
   }
 
-  // Only render sections that have results (or all if completed)
-  const sectionsToShow = curation?.status === "completed"
-    ? sectionOrder.filter((s) => sectionResults[s].length > 0)
-    : [];
+  // Always show all 6 sections when completed (sections with 0 results show "No results")
+  const sectionsToShow = curation?.status === "completed" ? sectionOrder : [];
 
   return (
     <>
