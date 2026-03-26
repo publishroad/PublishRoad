@@ -5,6 +5,60 @@
  */
 import type { NextAuthConfig } from "next-auth";
 
+type AuthUserLike = {
+  id?: string;
+  planSlug?: string;
+  creditsRemaining?: number;
+  isEmailVerified?: boolean;
+};
+
+export function applyUserToToken(token: Record<string, unknown>, user?: AuthUserLike) {
+  if (user?.id) {
+    token.id = user.id;
+    token.planSlug = user.planSlug ?? "free";
+    token.creditsRemaining = user.creditsRemaining ?? 0;
+    token.isEmailVerified = user.isEmailVerified ?? false;
+  }
+
+  // Ensure id is present for existing JWTs where only `sub` is available.
+  if (!token.id && typeof token.sub === "string") {
+    token.id = token.sub;
+  }
+
+  return token;
+}
+
+export function applyRefreshToToken(
+  token: Record<string, unknown>,
+  refresh: { planSlug?: string; creditsRemaining?: number }
+) {
+  if (typeof refresh.planSlug === "string") {
+    token.planSlug = refresh.planSlug;
+  }
+
+  if (typeof refresh.creditsRemaining === "number") {
+    token.creditsRemaining = refresh.creditsRemaining;
+  }
+
+  return token;
+}
+
+export function applyTokenToSession(
+  session: { user: Record<string, unknown>; [key: string]: unknown },
+  token?: Record<string, unknown>
+) {
+  if (!token) {
+    return session;
+  }
+
+  session.user.id = token.id as string;
+  session.user.planSlug = (token.planSlug as string) ?? "free";
+  session.user.creditsRemaining = (token.creditsRemaining as number) ?? 0;
+  session.user.isEmailVerified = (token.isEmailVerified as boolean) ?? false;
+
+  return session;
+}
+
 export const authConfig: NextAuthConfig = {
   providers: [], // Providers with DB access are defined in auth.ts only
   callbacks: {
@@ -17,22 +71,7 @@ export const authConfig: NextAuthConfig = {
       return true;
     },
     jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-        token.planSlug = (user as { planSlug?: string }).planSlug ?? "free";
-        token.creditsRemaining = (user as { creditsRemaining?: number }).creditsRemaining ?? 0;
-        token.isEmailVerified = (user as { isEmailVerified?: boolean }).isEmailVerified ?? false;
-      }
-      return token;
-    },
-    session({ session, token }) {
-      if (token) {
-        session.user.id = token.id as string;
-        session.user.planSlug = (token.planSlug as string) ?? "free";
-        session.user.creditsRemaining = (token.creditsRemaining as number) ?? 0;
-        session.user.isEmailVerified = (token.isEmailVerified as boolean) ?? false;
-      }
-      return session;
+      return applyUserToToken(token as Record<string, unknown>, user as AuthUserLike | undefined);
     },
   },
   pages: {

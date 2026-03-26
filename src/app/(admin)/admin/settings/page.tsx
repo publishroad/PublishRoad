@@ -41,8 +41,19 @@ async function fetchWithMissingRelationFallback<T>(
 export default async function AdminSettingsPage() {
   const [aiConfig, paymentConfigResult, emailRowsResult] = await Promise.all([
     db.aiConfig.findUnique({ where: { id: "default" } }),
-    fetchWithMissingRelationFallback("payment_gateway_config", null, async () =>
-      db.paymentGatewayConfig.findUnique({ where: { id: "default" } })
+    fetchWithMissingRelationFallback("payment_gateway_config", [], async () =>
+      db.$queryRaw<Array<{
+        provider: "stripe" | "paypal" | "razorpay";
+        is_active: boolean;
+        public_key: string | null;
+        secret_key: string | null;
+        webhook_secret: string | null;
+        additional_config: unknown;
+      }>>`
+        SELECT provider, is_active, public_key, secret_key, webhook_secret, additional_config
+        FROM payment_gateway_config
+        ORDER BY updated_at DESC
+      `
     ),
     fetchWithMissingRelationFallback("email_provider_config", [] as EmailConfigRow[], async () =>
       db.$queryRaw<EmailConfigRow[]>`
@@ -54,8 +65,15 @@ export default async function AdminSettingsPage() {
     ),
   ]);
 
-  const paymentConfig = paymentConfigResult.data;
   const paymentMigrationMissing = paymentConfigResult.migrationMissing;
+  const paymentRows = (paymentConfigResult.data ?? []) as Array<{
+    provider: "stripe" | "paypal" | "razorpay";
+    is_active: boolean;
+    public_key: string | null;
+    secret_key: string | null;
+    webhook_secret: string | null;
+    additional_config: unknown;
+  }>;
   const emailRows = emailRowsResult.data;
   const emailMigrationMissing = emailRowsResult.migrationMissing;
   const emailConfig = emailRows[0] ?? null;
@@ -70,16 +88,17 @@ export default async function AdminSettingsPage() {
       }
     : null;
 
-  const paymentInitialValues = paymentConfig
-    ? {
-        provider: paymentConfig.provider,
-        publicKey: paymentConfig.publicKey ?? "",
-        additionalConfig:
-          typeof paymentConfig.additionalConfig === "object" && paymentConfig.additionalConfig !== null
-            ? (paymentConfig.additionalConfig as Record<string, unknown>)
-            : {},
-      }
-    : null;
+  const paymentInitialConfigs = paymentRows.map((r) => ({
+    provider: r.provider,
+    isActive: r.is_active,
+    publicKey: r.public_key ?? "",
+    hasSecretKey: !!r.secret_key,
+    hasWebhookSecret: !!r.webhook_secret,
+    additionalConfig:
+      typeof r.additional_config === "object" && r.additional_config !== null
+        ? (r.additional_config as Record<string, unknown>)
+        : {},
+  }));
 
   const emailInitialValues = emailConfig
     ? {
@@ -117,16 +136,9 @@ export default async function AdminSettingsPage() {
               Payment settings table is missing in the database. Run Prisma migrations to enable this section.
             </div>
           )}
-          {paymentConfig && (
-            <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 mb-6 text-sm text-gray-500">
-              Last updated: <span className="font-medium text-gray-700">{formatDate(paymentConfig.updatedAt)}</span>
-            </div>
+          {!paymentMigrationMissing && (
+            <PaymentConfigForm initialConfigs={paymentInitialConfigs} />
           )}
-          <PaymentConfigForm
-            initialValues={paymentInitialValues}
-            hasExistingSecretKey={!!paymentConfig?.secretKey}
-            hasExistingWebhookSecret={!!paymentConfig?.webhookSecret}
-          />
         </section>
 
         <section id="email-settings" className="scroll-mt-20">

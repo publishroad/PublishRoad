@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { redis } from "@/lib/redis";
-import { rankAllCandidatesForCuration, expandCurationIntent } from "@/lib/ai";
+import { rankWebsitesForCuration, expandCurationIntent } from "@/lib/ai";
 import { sendCurationCompleteEmail } from "@/lib/email";
 import { invalidateUserProfile } from "@/lib/cache";
 
@@ -29,12 +29,35 @@ async function setProgress(curationId: string, event: ProgressEvent) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Extract meaningful words from free-form text for description overlap scoring.
+// Strips stop words and short tokens so "a CRM for small businesses" becomes
+// ["crm", "small", "businesses"] — words worth matching on.
+// ─────────────────────────────────────────────────────────────────────────────
+const STOP_WORDS = new Set([
+  "a","an","the","and","or","but","in","on","at","to","for","of","with",
+  "by","from","is","are","was","were","be","been","have","has","had",
+  "do","does","did","will","would","could","should","may","might","can",
+  "it","its","this","that","these","those","i","we","you","they","he","she",
+  "my","our","your","their","we're","it's","i'm","don't","not","no","so",
+  "as","into","out","up","about","which","who","what","how","when","where",
+]);
+
+function extractDescWords(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length >= 4 && !STOP_WORDS.has(w));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Pre-scoring: rank candidates by relevance before sending to AI.
 // Scoring signals (higher = more relevant):
 //   +3 per keyword that exactly matches a tagSlug
-//   +1.5 per keyword found in description text
-//   +1 per keyword found in name
+//   +1.5 per keyword found in entity description or name
 //   +2 per category slug match
+//   +0.5 per meaningful word from product description found in entity description
+//     (capped at +4 total — description overlap signal)
 //   up to +5 from user completion feedback (proven relevance from past curations)
 //   up to +2 quality bonus (DA for websites, normalized followers/members for others)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -48,21 +71,36 @@ function scoreCandidateRelevance(
   expandedKeywords: string[],
   targetCategorySlugs: string[],
   completionCount: number,
-  qualityBonus: number
+  qualityBonus: number,
+  productDescWords: string[] = []
 ): number {
   let score = 0;
   const descLower = (entity.description ?? "").toLowerCase();
   const nameLower = entity.name.toLowerCase();
 
+  // Keyword signals
   for (const kw of expandedKeywords) {
     if (entity.tagSlugs.includes(kw)) score += 3;
-    else if (descLower.includes(kw)) score += 1.5;
-    else if (nameLower.includes(kw)) score += 1;
+    else if (descLower.includes(kw) || nameLower.includes(kw)) score += 1.5;
   }
 
+  // Category match
   if (entity.categorySlugs && targetCategorySlugs.length > 0) {
     const hits = targetCategorySlugs.filter((cs) => entity.categorySlugs!.includes(cs)).length;
     score += hits * 2;
+  }
+
+  // Description overlap: product description words matched against entity tags and description
+  //   +2 per desc word that matches an entity tagSlug (strong signal — tags are curated)
+  //   +0.5 per desc word found in entity description text (weaker — free text)
+  // Both capped together at +6 so a long description can't overwhelm other signals
+  if (productDescWords.length > 0) {
+    let descScore = 0;
+    for (const w of productDescWords) {
+      if (entity.tagSlugs.includes(w)) descScore += 2;
+      else if (descLower.includes(w)) descScore += 0.5;
+    }
+    score += Math.min(descScore, 6);
   }
 
   // Cap feedback bonus at 5 so a heavily-completed entity doesn't dominate
@@ -185,6 +223,9 @@ async function processCuration(
   const keywordsLower = expandedKeywords.length > 0
     ? expandedKeywords
     : keywords.map((k) => k.toLowerCase());
+
+  // Extract meaningful words from product description for description-overlap scoring
+  const productDescWords = extractDescWords(description ?? "");
 
   // Build website base conditions as an AND array to avoid key conflicts
   const websiteBaseConditions: Prisma.WebsiteWhereInput[] = [
@@ -417,43 +458,43 @@ async function processCuration(
   const scoredSites = candidateSites
     .map((w) => ({
       ...w,
-      _s: scoreCandidateRelevance(w, keywordsLower, categorySlugs, wCompMap.get(w.id) ?? 0, Math.min((w.da / 100) * 2, 2)),
+      _s: scoreCandidateRelevance(w, keywordsLower, categorySlugs, wCompMap.get(w.id) ?? 0, Math.min((w.da / 100) * 2, 2), productDescWords),
     }))
     .sort((a, b) => b._s - a._s);
 
   const scoredInfluencers = candidateInfluencers
     .map((inf) => ({
       ...inf,
-      _s: scoreCandidateRelevance(inf, keywordsLower, categorySlugs, iCompMap.get(inf.id) ?? 0, Math.min((inf.followersCount / 1_000_000) * 2, 2)),
+      _s: scoreCandidateRelevance(inf, keywordsLower, categorySlugs, iCompMap.get(inf.id) ?? 0, Math.min((inf.followersCount / 1_000_000) * 2, 2), productDescWords),
     }))
     .sort((a, b) => b._s - a._s);
 
   const scoredReddit = candidateReddit
     .map((r) => ({
       ...r,
-      _s: scoreCandidateRelevance(r, keywordsLower, categorySlugs, rCompMap.get(r.id) ?? 0, Math.min((r.totalMembers / 1_000_000) * 2, 2)),
+      _s: scoreCandidateRelevance(r, keywordsLower, categorySlugs, rCompMap.get(r.id) ?? 0, Math.min((r.totalMembers / 1_000_000) * 2, 2), productDescWords),
     }))
     .sort((a, b) => b._s - a._s);
 
   const scoredFunds = candidateFunds
     .map((f) => ({
       ...f,
-      _s: scoreCandidateRelevance(f, keywordsLower, categorySlugs, fCompMap.get(f.id) ?? 0, 0),
+      _s: scoreCandidateRelevance(f, keywordsLower, categorySlugs, fCompMap.get(f.id) ?? 0, 0, productDescWords),
     }))
     .sort((a, b) => b._s - a._s);
 
-  // Strip internal score field and cap pool sizes before sending to AI
-  /* eslint-disable @typescript-eslint/no-unused-vars */
+  // Strip _s and cap pool size for AI (websites only)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const finalSites = scoredSites.slice(0, 80).map(({ _s, ...rest }) => rest);
-  const finalInfluencers = scoredInfluencers.slice(0, 40).map(({ _s, ...rest }) => rest);
-  const finalReddit = scoredReddit.slice(0, 40).map(({ _s, ...rest }) => rest);
-  const finalFunds = scoredFunds.slice(0, 25).map(({ _s, ...rest }) => rest);
-  /* eslint-enable @typescript-eslint/no-unused-vars */
 
   // ─── Step 4: AI matching ───────────────────────────────────────────────────
   await setProgress(curationId, "calling_ai");
 
-  const matchResults = await rankAllCandidatesForCuration(
+  // ─── AI ranks websites only (sections A/B/C) ─────────────────────────────
+  // Sections D/E/F are ranked directly by pre-score below.
+  // Category + country are already guaranteed by DB hard filters, so every
+  // candidate in finalInfluencers/finalReddit/finalFunds is already relevant.
+  const websiteResults = await rankWebsitesForCuration(
     {
       productUrl,
       keywords: keywordsLower,
@@ -461,20 +502,50 @@ async function processCuration(
       countryName: country?.name,
       categoryName: category?.name,
     },
-    {
-      websites: finalSites,
-      influencers: finalInfluencers,
-      redditChannels: finalReddit,
-      funds: finalFunds,
-    }
+    finalSites
   );
+
+  // ─── Build D/E/F directly from pre-scored candidates ─────────────────────
+  // Ranking signals (already applied in scoredInfluencers/scoredReddit/scoredFunds):
+  //   • Category match (+2 per matching category slug)
+  //   • Country match (enforced as a hard DB filter — only matching rows reach here)
+  //   • Keyword / tag / description match (+3/+1.5/+1)
+  //   • Quality bonus (followers, members, normalized)
+  //   • Past completion feedback boost
+  const MAX_PER_SECTION = 20;
+
+  const influencerResults = scoredInfluencers.slice(0, MAX_PER_SECTION).map((inf, idx) => ({
+    influencerId: inf.id,
+    matchScore: Math.min(0.5 + inf._s * 0.05, 1),
+    matchReason: `${inf.platform} · ${(inf.followersCount / 1000).toFixed(0)}K followers · ${inf.categorySlugs.join(", ")}`,
+    section: "d" as const,
+    rank: idx + 1,
+  }));
+
+  const redditResults = scoredReddit.slice(0, MAX_PER_SECTION).map((r, idx) => ({
+    redditChannelId: r.id,
+    matchScore: Math.min(0.5 + r._s * 0.05, 1),
+    matchReason: `${(r.totalMembers / 1000).toFixed(0)}K members · ${r.postingDifficulty ?? "N/A"} to post · ${r.categorySlugs.join(", ")}`,
+    section: "e" as const,
+    rank: idx + 1,
+  }));
+
+  const fundResults = scoredFunds.slice(0, MAX_PER_SECTION).map((f, idx) => ({
+    fundId: f.id,
+    matchScore: Math.min(0.5 + f._s * 0.05, 1),
+    matchReason: `${f.investmentStage ?? "Any"} stage · ${f.ticketSize ?? "N/A"} · ${f.categorySlugs.join(", ")}`,
+    section: "f" as const,
+    rank: idx + 1,
+  }));
+
+  const allResults = [...websiteResults, ...influencerResults, ...redditResults, ...fundResults];
 
   // ─── Step 5: Save results ──────────────────────────────────────────────────
   await setProgress(curationId, "saving_results");
 
-  if (matchResults.length > 0) {
+  if (allResults.length > 0) {
     await db.curationResult.createMany({
-      data: matchResults.map((r) => ({
+      data: allResults.map((r) => ({
         curationId,
         websiteId: r.websiteId ?? null,
         influencerId: r.influencerId ?? null,
@@ -545,7 +616,7 @@ async function processCuration(
         userId,
         type: "curation_complete",
         title: "Curation complete",
-        message: `Your curation for ${productUrl} is ready with ${matchResults.length} results.`,
+        message: `Your curation for ${productUrl} is ready with ${allResults.length} results.`,
       },
     });
   }

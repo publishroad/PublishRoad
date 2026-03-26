@@ -1,36 +1,57 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useSession } from "next-auth/react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 const navLinks = [
   { href: "/", label: "Home" },
   { href: "/pricing", label: "Pricing" },
   { href: "/blog", label: "Blog" },
-  { href: "/contact", label: "Hire Us" },
   { href: "/faq", label: "FAQ" },
   { href: "/contact", label: "Contact" },
 ];
 
-const btnPrimary: React.CSSProperties = {
-  display: "inline-block", borderRadius: "999px",
-  padding: "9px 20px", background: "#5B58F6", color: "#ffffff",
-  fontWeight: 600, fontSize: "0.875rem", textDecoration: "none",
-  boxShadow: "0 0 16px rgba(91,88,246,0.35)", transition: "all 0.2s",
-};
-
-const btnGhost: React.CSSProperties = {
-  display: "inline-block", borderRadius: "999px",
-  padding: "9px 20px", color: "#475569",
-  fontWeight: 500, fontSize: "0.875rem", textDecoration: "none",
-  transition: "all 0.2s",
-};
-
 export function Navbar() {
-  const { data: session } = useSession();
+  const { data: session, status, update } = useSession();
+  const [isValidatingSession, setIsValidatingSession] = useState(true);
+
+  useEffect(() => {
+    if (status !== "authenticated") {
+      setIsValidatingSession(false);
+      return;
+    }
+
+    if (typeof window !== "undefined" && window.sessionStorage.getItem("navbar-session-validated") === "1") {
+      setIsValidatingSession(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    update()
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled && typeof window !== "undefined") {
+          window.sessionStorage.setItem("navbar-session-validated", "1");
+        }
+
+        if (!cancelled) {
+          setIsValidatingSession(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [status, update]);
+
+  const isSessionLoading = status === "loading" || isValidatingSession;
+  const isAuthenticated = status === "authenticated" && Boolean(session?.user);
   const [open, setOpen] = useState(false);
 
   return (
@@ -60,16 +81,31 @@ export function Navbar() {
 
           {/* Desktop CTA */}
           <div className="hidden lg:flex items-center gap-3">
-            {session ? (
-              <Link href="/dashboard" style={btnPrimary}>
+            {isSessionLoading ? null : isAuthenticated ? (
+              <Link
+                href="/dashboard"
+                className={cn(
+                  buttonVariants({ variant: "default" }),
+                  "rounded-full px-5 text-sm shadow-[0_0_16px_rgba(91,88,246,0.35)]"
+                )}
+              >
                 Dashboard
               </Link>
             ) : (
               <>
-                <Link href="/login" style={btnGhost}>
+                <Link
+                  href="/login"
+                  className={cn(buttonVariants({ variant: "ghost" }), "rounded-full px-5 text-sm text-slate-600")}
+                >
                   Sign In
                 </Link>
-                <Link href="/signup" style={btnPrimary}>
+                <Link
+                  href="/signup"
+                  className={cn(
+                    buttonVariants({ variant: "default" }),
+                    "rounded-full px-5 text-sm shadow-[0_0_16px_rgba(91,88,246,0.35)]"
+                  )}
+                >
                   Get Started Free
                 </Link>
               </>
@@ -101,10 +137,13 @@ export function Navbar() {
                   </Link>
                 ))}
                 <div className="flex flex-col gap-3 mt-6 px-2">
-                  {session ? (
+                  {isSessionLoading ? null : isAuthenticated ? (
                     <Link
                       href="/dashboard"
-                      style={{ ...btnPrimary, display: "block", textAlign: "center" }}
+                      className={cn(
+                        buttonVariants({ variant: "default" }),
+                        "block rounded-full px-5 text-center text-sm shadow-[0_0_16px_rgba(91,88,246,0.35)]"
+                      )}
                       onClick={() => setOpen(false)}
                     >
                       Dashboard
@@ -113,19 +152,20 @@ export function Navbar() {
                     <>
                       <Link
                         href="/login"
-                        style={{
-                          display: "block", textAlign: "center", borderRadius: "999px",
-                          padding: "10px 20px", background: "#ffffff", color: "#475569",
-                          fontWeight: 500, fontSize: "0.875rem", textDecoration: "none",
-                          border: "1px solid #e2e8f0",
-                        }}
+                        className={cn(
+                          buttonVariants({ variant: "outline" }),
+                          "block rounded-full border-slate-200 bg-white px-5 text-center text-sm text-slate-600"
+                        )}
                         onClick={() => setOpen(false)}
                       >
                         Sign In
                       </Link>
                       <Link
                         href="/signup"
-                        style={{ ...btnPrimary, display: "block", textAlign: "center" }}
+                        className={cn(
+                          buttonVariants({ variant: "default" }),
+                          "block rounded-full px-5 text-center text-sm shadow-[0_0_16px_rgba(91,88,246,0.35)]"
+                        )}
                         onClick={() => setOpen(false)}
                       >
                         Get Started Free

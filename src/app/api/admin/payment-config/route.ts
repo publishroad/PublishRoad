@@ -7,7 +7,9 @@ import { paymentConfigSchema } from "@/lib/validations/admin/payment-config";
 import { isMissingRelationError } from "@/lib/db-error-utils";
 
 type PaymentConfigRow = {
+  id: string;
   provider: "stripe" | "razorpay" | "paypal";
+  is_active: boolean;
   public_key: string | null;
   secret_key: string | null;
   webhook_secret: string | null;
@@ -24,6 +26,7 @@ async function requireAdmin() {
   return session;
 }
 
+// GET — return all configured payment providers
 export async function GET() {
   const session = await requireAdmin();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -31,10 +34,9 @@ export async function GET() {
   let rows: PaymentConfigRow[] = [];
   try {
     rows = await db.$queryRaw<PaymentConfigRow[]>`
-      SELECT provider, public_key, secret_key, webhook_secret, additional_config, updated_at
+      SELECT id, provider, is_active, public_key, secret_key, webhook_secret, additional_config, updated_at
       FROM payment_gateway_config
-      WHERE id = 'default'
-      LIMIT 1
+      ORDER BY updated_at DESC
     `;
   } catch (error) {
     if (isMissingRelationError(error, "payment_gateway_config")) {
@@ -46,35 +48,29 @@ export async function GET() {
     throw error;
   }
 
-  const config = rows[0] ?? null;
-  if (!config) {
-    return NextResponse.json({
-      provider: "stripe",
-      publicKey: "",
-      hasSecretKey: false,
-      hasWebhookSecret: false,
-      additionalConfig: {},
-      updatedAt: null,
-    });
-  }
+  const configs = rows.map((r) => ({
+    provider: r.provider,
+    isActive: r.is_active,
+    publicKey: r.public_key ?? "",
+    hasSecretKey: !!r.secret_key,
+    hasWebhookSecret: !!r.webhook_secret,
+    additionalConfig:
+      typeof r.additional_config === "object" && r.additional_config !== null
+        ? (r.additional_config as Record<string, unknown>)
+        : {},
+    updatedAt: r.updated_at,
+  }));
 
-  return NextResponse.json({
-    provider: config.provider,
-    publicKey: config.public_key ?? "",
-    hasSecretKey: !!config.secret_key,
-    hasWebhookSecret: !!config.webhook_secret,
-    additionalConfig: config.additional_config ?? {},
-    updatedAt: config.updated_at,
-  });
+  return NextResponse.json({ configs });
 }
 
+// PUT — save/update credentials for a specific provider
 export async function PUT(req: NextRequest) {
   const session = await requireAdmin();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json().catch(() => null);
   const parsed = paymentConfigSchema.safeParse(body);
-
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid input" }, { status: 422 });
   }
@@ -94,11 +90,12 @@ export async function PUT(req: NextRequest) {
   try {
     await db.$executeRaw`
       INSERT INTO payment_gateway_config (
-        id, provider, public_key, secret_key, webhook_secret, additional_config, updated_by_id, updated_at
+        id, provider, is_active, public_key, secret_key, webhook_secret, additional_config, updated_by_id, updated_at
       )
       VALUES (
-        'default',
+        ${provider},
         ${provider}::"PaymentProvider",
+        false,
         ${publicKey?.trim() ? publicKey.trim() : null},
         ${encryptedSecretKey},
         ${encryptedWebhookSecret},
@@ -108,13 +105,13 @@ export async function PUT(req: NextRequest) {
       )
       ON CONFLICT (id)
       DO UPDATE SET
-        provider = EXCLUDED.provider,
-        public_key = EXCLUDED.public_key,
-        secret_key = COALESCE(EXCLUDED.secret_key, payment_gateway_config.secret_key),
-        webhook_secret = COALESCE(EXCLUDED.webhook_secret, payment_gateway_config.webhook_secret),
+        provider         = EXCLUDED.provider,
+        public_key       = EXCLUDED.public_key,
+        secret_key       = COALESCE(EXCLUDED.secret_key, payment_gateway_config.secret_key),
+        webhook_secret   = COALESCE(EXCLUDED.webhook_secret, payment_gateway_config.webhook_secret),
         additional_config = EXCLUDED.additional_config,
-        updated_by_id = EXCLUDED.updated_by_id,
-        updated_at = NOW()
+        updated_by_id    = EXCLUDED.updated_by_id,
+        updated_at       = NOW()
     `;
   } catch (error) {
     if (isMissingRelationError(error, "payment_gateway_config")) {
@@ -122,6 +119,56 @@ export async function PUT(req: NextRequest) {
         { error: "Payment settings migration is missing. Run Prisma migrations and refresh." },
         { status: 503 }
       );
+    }
+    throw error;
+  }
+
+  return NextResponse.json({ success: true });
+}
+
+// PATCH — activate a provider (deactivates all others)
+export async function PATCH(req: NextRequest) {
+  const session = await requireAdmin();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = await req.json().catch(() => null);
+  const provider = body?.provider as string | undefined;
+  if (!provider || !["stripe", "paypal", "razorpay"].includes(provider)) {
+    return NextResponse.json({ error: "Invalid provider" }, { status: 422 });
+  }
+
+  try {
+    // Deactivate all providers first, then activate the selected one
+    await db.$executeRaw`
+      UPDATE payment_gateway_config SET is_active = false
+    `;
+    await db.$executeRaw`
+      UPDATE payment_gateway_config SET is_active = true, updated_at = NOW()
+      WHERE id = ${provider}
+    `;
+  } catch (error) {
+    if (isMissingRelationError(error, "payment_gateway_config")) {
+      return NextResponse.json(
+        { error: "Payment settings migration is missing." },
+        { status: 503 }
+      );
+    }
+    throw error;
+  }
+
+  return NextResponse.json({ success: true });
+}
+
+// DELETE — deactivate all (disable payments)
+export async function DELETE() {
+  const session = await requireAdmin();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  try {
+    await db.$executeRaw`UPDATE payment_gateway_config SET is_active = false`;
+  } catch (error) {
+    if (isMissingRelationError(error, "payment_gateway_config")) {
+      return NextResponse.json({ error: "Payment settings migration is missing." }, { status: 503 });
     }
     throw error;
   }

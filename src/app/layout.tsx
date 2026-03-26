@@ -53,8 +53,6 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Fetch session server-side to avoid client-side API call
-  // Passed to SessionProvider so useSession() doesn't trigger /api/auth/session request
   const session = await auth();
 
   return (
