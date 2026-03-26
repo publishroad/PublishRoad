@@ -278,7 +278,7 @@ async function writeImportedWebsites(preparedRows: PreparedImportRow[]) {
         existingTagIdsByWebsite.get(websiteId)?.add(tagId);
       }
 
-      const deleteOps: Array<Promise<unknown>> = [];
+      const deleteConditions: Array<{ websiteId: string; tagId: { in: string[] } }> = [];
       const websiteTagsToCreate: Array<{ websiteId: string; tagId: string }> = [];
 
       for (const websiteId of managedWebsiteIds) {
@@ -289,14 +289,10 @@ async function writeImportedWebsites(preparedRows: PreparedImportRow[]) {
         const tagIdsToCreate = Array.from(desiredTagIds).filter((tagId) => !existingTagIds.has(tagId));
 
         if (tagIdsToDelete.length > 0) {
-          deleteOps.push(
-            tx.websiteTag.deleteMany({
-              where: {
-                websiteId,
-                tagId: { in: tagIdsToDelete },
-              },
-            })
-          );
+          deleteConditions.push({
+            websiteId,
+            tagId: { in: tagIdsToDelete },
+          });
         }
 
         for (const tagId of tagIdsToCreate) {
@@ -304,8 +300,12 @@ async function writeImportedWebsites(preparedRows: PreparedImportRow[]) {
         }
       }
 
-      if (deleteOps.length > 0) {
-        await Promise.all(deleteOps);
+      if (deleteConditions.length > 0) {
+        await tx.websiteTag.deleteMany({
+          where: {
+            OR: deleteConditions,
+          },
+        });
       }
 
       if (websiteTagsToCreate.length > 0) {
