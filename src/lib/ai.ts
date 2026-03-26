@@ -224,7 +224,10 @@ interface MatchResult {
   rank: number;
 }
 
-export async function rankAllCandidatesForCuration(
+// AI only ranks websites (sections A/B/C).
+// Sections D/E/F are ranked by pre-score in the curation engine (category + country
+// already guaranteed by DB hard filters — no need for AI to gatekeep them).
+export async function rankWebsitesForCuration(
   product: {
     productUrl: string;
     keywords: string[];
@@ -232,19 +235,9 @@ export async function rankAllCandidatesForCuration(
     countryName?: string;
     categoryName?: string;
   },
-  candidates: {
-    websites: WebsiteCandidate[];
-    influencers: InfluencerCandidate[];
-    redditChannels: RedditCandidate[];
-    funds: FundCandidate[];
-  }
+  websites: WebsiteCandidate[]
 ): Promise<MatchResult[]> {
-  const total =
-    candidates.websites.length +
-    candidates.influencers.length +
-    candidates.redditChannels.length +
-    candidates.funds.length;
-  if (total === 0) return [];
+  if (websites.length === 0) return [];
 
   const config = await getAiConfig();
   const systemMessage: OpenAI.Chat.Completions.ChatCompletionMessageParam = {
@@ -253,45 +246,12 @@ export async function rankAllCandidatesForCuration(
       "You are an expert product launch strategist. Rank items for product distribution. Always respond with valid JSON only. No markdown, no explanations outside JSON.",
   };
 
-  // Run 3 focused parallel AI calls instead of one monolithic prompt.
-  // Each call is smaller, more focused, and produces better results.
-  const calls: Promise<MatchResult[]>[] = [];
-
-  if (candidates.websites.length > 0) {
-    calls.push(
-      callAI(
-        [systemMessage, { role: "user", content: buildWebsiteMatchingPrompt(product, candidates.websites) }],
-        { maxTokens: config.maxTokens, temperature: config.temperature }
-      )
-        .then(parseMatchingResponse)
-        .catch(() => [])
-    );
-  }
-
-  if (candidates.influencers.length > 0 || candidates.redditChannels.length > 0) {
-    calls.push(
-      callAI(
-        [systemMessage, { role: "user", content: buildSocialMatchingPrompt(product, candidates.influencers, candidates.redditChannels) }],
-        { maxTokens: Math.ceil(config.maxTokens / 2), temperature: config.temperature }
-      )
-        .then(parseMatchingResponse)
-        .catch(() => [])
-    );
-  }
-
-  if (candidates.funds.length > 0) {
-    calls.push(
-      callAI(
-        [systemMessage, { role: "user", content: buildFundMatchingPrompt(product, candidates.funds) }],
-        { maxTokens: Math.ceil(config.maxTokens / 3), temperature: config.temperature }
-      )
-        .then(parseMatchingResponse)
-        .catch(() => [])
-    );
-  }
-
-  const results = await Promise.all(calls);
-  return results.flat();
+  return callAI(
+    [systemMessage, { role: "user", content: buildWebsiteMatchingPrompt(product, websites) }],
+    { maxTokens: config.maxTokens, temperature: config.temperature }
+  )
+    .then(parseMatchingResponse)
+    .catch(() => []);
 }
 
 type ProductContext = {

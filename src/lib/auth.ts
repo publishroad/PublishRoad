@@ -3,7 +3,7 @@ import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { db } from "./db";
 import { loginSchema } from "./validations/auth";
-import { authConfig } from "./auth.config";
+import { applyRefreshToToken, authConfig } from "./auth.config";
 import { evaluateLoginCredentials } from "./login-evaluator";
 import { verifyPassword } from "./server-utils";
 
@@ -77,6 +77,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
+    ...authConfig.callbacks,
     async signIn({ user, account }) {
       if (account?.provider === "google") {
         const existingUser = await db.user.findFirst({
@@ -106,26 +107,31 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return true;
     },
 
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-        token.planSlug = user.planSlug ?? "free";
-        token.creditsRemaining = user.creditsRemaining ?? 0;
-        token.isEmailVerified = user.isEmailVerified ?? false;
+    async jwt(params) {
+      let token = params.token;
+
+      if (authConfig.callbacks?.jwt) {
+        token = (await authConfig.callbacks.jwt(params)) as typeof token;
       }
 
-      // Refresh user data every hour
-      if (token.id && token.iat) {
-        const age = Date.now() / 1000 - (token.iat as number);
-        if (age > 3600) {
+      // Refresh user data at most once per hour per token.
+      if (token.id) {
+        const now = Math.floor(Date.now() / 1000);
+        const lastRefresh = Number(token.userRefreshedAt ?? token.iat ?? 0);
+
+        if (now - lastRefresh > 3600) {
           const freshUser = await db.user.findUnique({
             where: { id: token.id as string },
             include: { plan: true },
           });
           if (freshUser) {
-            token.planSlug = freshUser.plan?.slug ?? "free";
-            token.creditsRemaining = freshUser.creditsRemaining;
+            applyRefreshToToken(token as Record<string, unknown>, {
+              planSlug: freshUser.plan?.slug ?? "free",
+              creditsRemaining: freshUser.creditsRemaining,
+            });
           }
+
+          token.userRefreshedAt = now;
         }
       }
 

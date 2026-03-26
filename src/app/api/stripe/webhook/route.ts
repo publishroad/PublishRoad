@@ -15,7 +15,7 @@ const LEGACY_CUSTOMER_SCAN_LIMIT = 100;
 
 export async function POST(req: NextRequest) {
   const activeProvider = await getActivePaymentProvider();
-  if (activeProvider !== "stripe") {
+  if (!activeProvider || activeProvider !== "stripe") {
     return NextResponse.json({ received: true, skipped: true }, { status: 200 });
   }
 

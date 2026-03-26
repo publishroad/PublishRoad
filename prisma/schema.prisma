@@ -392,8 +392,9 @@ model Payment {
 }
 
 model PaymentGatewayConfig {
-  id              String          @id @default("default")
-  provider        PaymentProvider @default(stripe)
+  id              String          @id // provider name: "stripe", "paypal", "razorpay"
+  provider        PaymentProvider
+  isActive        Boolean         @default(false) @map("is_active")
   publicKey       String?         @map("public_key")
   secretKey       String?         @map("secret_key") // encrypted at app level
   webhookSecret   String?         @map("webhook_secret") // encrypted at app level
