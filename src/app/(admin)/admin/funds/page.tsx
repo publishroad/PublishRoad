@@ -20,7 +20,7 @@ const stageLabel: Record<string, string> = {
 
 export default async function AdminFundsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
-  const page = parseInt(params.page ?? "1");
+  const page = Math.max(1, parseInt(params.page ?? "1", 10) || 1);
   const skip = (page - 1) * PAGE_SIZE;
 
   const where = params.q

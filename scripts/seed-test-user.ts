@@ -54,7 +54,7 @@ async function main() {
   console.log("✅ Test user created/updated:");
   console.log(`   Email:    ${email}`);
   console.log(`   Password: ${password}`);
-  console.log(`   Plan:     Lifetime (30 credits/month)`);
+  console.log(`   Plan:     Lifetime (30 credits initial)`);
   console.log(`   User ID:  ${user.id}`);
 }
 

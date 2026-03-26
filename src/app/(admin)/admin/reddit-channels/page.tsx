@@ -15,7 +15,7 @@ const difficultyStyle: Record<string, string> = {
 
 export default async function AdminRedditChannelsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
-  const page = parseInt(params.page ?? "1");
+  const page = Math.max(1, parseInt(params.page ?? "1", 10) || 1);
   const skip = (page - 1) * PAGE_SIZE;
 
   const where = {
@@ -106,8 +106,8 @@ export default async function AdminRedditChannelsPage({ searchParams }: { search
                       <p className="text-sm font-medium text-gray-900">{ch.name}</p>
                       <a href={ch.url} target="_blank" rel="noopener noreferrer" className="text-xs text-[#465FFF] hover:underline">{ch.url}</a>
                     </td>
-                    <td className="px-5 py-4 text-sm font-semibold text-gray-700">{ch.totalMembers.toLocaleString()}</td>
-                    <td className="px-5 py-4 text-sm font-semibold text-gray-700">{ch.weeklyVisitors.toLocaleString()}</td>
+                    <td className="px-5 py-4 text-sm font-semibold text-gray-700">{(ch.totalMembers ?? 0).toLocaleString()}</td>
+                    <td className="px-5 py-4 text-sm font-semibold text-gray-700">{(ch.weeklyVisitors ?? 0).toLocaleString()}</td>
                     <td className="px-5 py-4 text-sm text-gray-600">
                       {ch.redditChannelCategories.length > 0
                         ? ch.redditChannelCategories.map((rc) => rc.category.name).join(", ")

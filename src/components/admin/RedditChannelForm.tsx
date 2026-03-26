@@ -116,13 +116,13 @@ export function RedditChannelForm({ channel, categories, tags }: RedditChannelFo
 
           <div className="space-y-1.5">
             <Label htmlFor="totalMembers">Total Members</Label>
-            <Input id="totalMembers" type="number" {...register("totalMembers")} min={0} />
+            <Input id="totalMembers" type="number" {...register("totalMembers", { valueAsNumber: true })} min={0} />
             {errors.totalMembers && <p className="text-xs text-error">{errors.totalMembers.message}</p>}
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="weeklyVisitors">Weekly Visitors</Label>
-            <Input id="weeklyVisitors" type="number" {...register("weeklyVisitors")} min={0} />
+            <Input id="weeklyVisitors" type="number" {...register("weeklyVisitors", { valueAsNumber: true })} min={0} />
             {errors.weeklyVisitors && <p className="text-xs text-error">{errors.weeklyVisitors.message}</p>}
           </div>
 

@@ -35,17 +35,17 @@ function buildWebsiteUpdateValues(rows: PreparedImportRow[]) {
   return Prisma.join(
     rows.map((row) =>
       Prisma.sql`(
-        ${row.url},
-        ${row.name},
+        CAST(${row.url} AS text),
+        CAST(${row.name} AS text),
         CAST(${row.type} AS "WebsiteType"),
-        ${row.da},
-        ${row.pa},
-        ${row.spamScore},
-        ${row.traffic},
-        ${row.description ?? null},
-        ${row.countryId},
-        ${row.categoryId},
-        ${row.tagSlugs}
+        CAST(${row.da} AS integer),
+        CAST(${row.pa} AS integer),
+        CAST(${row.spamScore} AS integer),
+        CAST(${row.traffic} AS integer),
+        CAST(${row.description ?? null} AS text),
+        CAST(${row.countryId} AS uuid),
+        CAST(${row.categoryId} AS uuid),
+        CAST(${row.tagSlugs} AS text[])
       )`
     )
   );
@@ -114,13 +114,13 @@ async function getImportLookupMaps(): Promise<ImportLookupMaps> {
   };
 }
 
-async function prepareImportRows(rawRows: ImportSourceRow[]) {
+async function prepareImportRows(rawRows: ImportSourceRow[], rowOffset: number) {
   const errors: BulkImportError[] = [];
   const preparedRows: PreparedImportRow[] = [];
   const lookupMaps = await getImportLookupMaps();
 
   for (let index = 0; index < rawRows.length; index += 1) {
-    const rowNum = index + 2;
+    const rowNum = index + rowOffset;
     const parsed = bulkImportRowSchema.safeParse(rawRows[index]);
 
     if (!parsed.success) {
@@ -255,20 +255,62 @@ async function writeImportedWebsites(preparedRows: PreparedImportRow[]) {
     const managedWebsiteIds = Array.from(websiteIdsByUrl.values());
 
     if (managedWebsiteIds.length > 0) {
-      await tx.websiteTag.deleteMany({ where: { websiteId: { in: managedWebsiteIds } } });
+      const desiredTagIdsByWebsite = new Map<string, Set<string>>();
 
-      const websiteTags = uniqueRows.flatMap((row) => {
+      for (const row of uniqueRows) {
         const websiteId = websiteIdsByUrl.get(row.url);
         if (!websiteId) {
-          return [];
+          continue;
         }
+        desiredTagIdsByWebsite.set(websiteId, new Set(row.tagIds));
+      }
 
-        return row.tagIds.map((tagId) => ({ websiteId, tagId }));
+      const existingWebsiteTags = await tx.websiteTag.findMany({
+        where: { websiteId: { in: managedWebsiteIds } },
+        select: { websiteId: true, tagId: true },
       });
 
-      if (websiteTags.length > 0) {
+      const existingTagIdsByWebsite = new Map<string, Set<string>>();
+      for (const { websiteId, tagId } of existingWebsiteTags) {
+        if (!existingTagIdsByWebsite.has(websiteId)) {
+          existingTagIdsByWebsite.set(websiteId, new Set());
+        }
+        existingTagIdsByWebsite.get(websiteId)?.add(tagId);
+      }
+
+      const deleteConditions: Array<{ websiteId: string; tagId: { in: string[] } }> = [];
+      const websiteTagsToCreate: Array<{ websiteId: string; tagId: string }> = [];
+
+      for (const websiteId of managedWebsiteIds) {
+        const desiredTagIds = desiredTagIdsByWebsite.get(websiteId) ?? new Set<string>();
+        const existingTagIds = existingTagIdsByWebsite.get(websiteId) ?? new Set<string>();
+
+        const tagIdsToDelete = Array.from(existingTagIds).filter((tagId) => !desiredTagIds.has(tagId));
+        const tagIdsToCreate = Array.from(desiredTagIds).filter((tagId) => !existingTagIds.has(tagId));
+
+        if (tagIdsToDelete.length > 0) {
+          deleteConditions.push({
+            websiteId,
+            tagId: { in: tagIdsToDelete },
+          });
+        }
+
+        for (const tagId of tagIdsToCreate) {
+          websiteTagsToCreate.push({ websiteId, tagId });
+        }
+      }
+
+      if (deleteConditions.length > 0) {
+        await tx.websiteTag.deleteMany({
+          where: {
+            OR: deleteConditions,
+          },
+        });
+      }
+
+      if (websiteTagsToCreate.length > 0) {
         await tx.websiteTag.createMany({
-          data: websiteTags,
+          data: websiteTagsToCreate,
           skipDuplicates: true,
         });
       }
@@ -286,7 +328,8 @@ export async function importWebsitesFromFile({
   text: string;
 }) {
   const rows = parseImportFile(fileName, text);
-  const { errors, preparedRows } = await prepareImportRows(rows);
+  const rowOffset = fileName.endsWith(".json") ? 1 : 2;
+  const { errors, preparedRows } = await prepareImportRows(rows, rowOffset);
 
   if (preparedRows.length === 0) {
     return { errors, imported: 0, processed: 0 };

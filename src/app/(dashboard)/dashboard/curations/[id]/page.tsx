@@ -64,6 +64,8 @@ interface CurationData {
   description: string | null;
   results: CurationResult[];
   maskedCount: number;
+  lockedSections: string[];
+  planSlug: string;
 }
 
 const sectionLabels = {
@@ -313,6 +315,8 @@ export default function CurationDetailPage() {
                     key={section}
                     section={section}
                     results={sectionResults[section]}
+                    locked={(curation.lockedSections ?? []).includes(section)}
+                    planSlug={curation.planSlug ?? "free"}
                     updatingResultId={updatingResultId}
                     onToggleComplete={handleTaskStatusChange}
                   />
@@ -336,14 +340,23 @@ export default function CurationDetailPage() {
   );
 }
 
+const upgradeTargetLabel: Record<string, string> = {
+  free: "Starter or Pro",
+  starter: "Pro",
+};
+
 function CurationSection({
   section,
   results,
+  locked,
+  planSlug,
   updatingResultId,
   onToggleComplete,
 }: {
   section: keyof typeof sectionLabels;
   results: CurationResult[];
+  locked: boolean;
+  planSlug: string;
   updatingResultId: string | null;
   onToggleComplete: (resultId: string, isComplete: boolean) => void;
 }) {
@@ -360,35 +373,63 @@ function CurationSection({
             </p>
             <div className="mt-2 flex items-center gap-2 flex-wrap">
               <h3 className="text-2xl font-semibold tracking-tight text-slate-950">{sectionLabels[section]}</h3>
-              <span className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs font-medium text-slate-500">
-                {results.length} tasks
-              </span>
+              {locked ? (
+                <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700">
+                  Locked
+                </span>
+              ) : (
+                <span className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs font-medium text-slate-500">
+                  {results.length} tasks
+                </span>
+              )}
             </div>
             <p className="mt-1.5 text-sm text-slate-600">{sectionDescriptions[section]}</p>
           </div>
 
-          <div className="min-w-[220px] rounded-3xl border border-[#dbe4ff] bg-white/95 p-4 shadow-[0_10px_30px_rgba(70,95,255,0.08)]">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Progress</p>
-                <p className="mt-1 text-lg font-semibold text-slate-950">{completionPercent}% complete</p>
+          {!locked && (
+            <div className="min-w-[220px] rounded-3xl border border-[#dbe4ff] bg-white/95 p-4 shadow-[0_10px_30px_rgba(70,95,255,0.08)]">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Progress</p>
+                  <p className="mt-1 text-lg font-semibold text-slate-950">{completionPercent}% complete</p>
+                </div>
+                <div className="rounded-2xl bg-[#EEF2FF] px-2.5 py-1 text-xs font-semibold text-[#465FFF]">
+                  {completedTasks}/{results.length}
+                </div>
               </div>
-              <div className="rounded-2xl bg-[#EEF2FF] px-2.5 py-1 text-xs font-semibold text-[#465FFF]">
-                {completedTasks}/{results.length}
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className="h-full rounded-full bg-[linear-gradient(90deg,#465FFF_0%,#7C8DFF_100%)] transition-all"
+                  style={{ width: `${completionPercent}%` }}
+                />
               </div>
+              <p className="mt-2 text-xs text-slate-500">Keep going. Each completed task moves this step forward.</p>
             </div>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
-              <div
-                className="h-full rounded-full bg-[linear-gradient(90deg,#465FFF_0%,#7C8DFF_100%)] transition-all"
-                style={{ width: `${completionPercent}%` }}
-              />
-            </div>
-            <p className="mt-2 text-xs text-slate-500">Keep going. Each completed task moves this step forward.</p>
-          </div>
+          )}
         </div>
       </div>
 
-      {results.length === 0 ? (
+      {locked ? (
+        <div className="flex flex-col items-center justify-center gap-4 px-6 py-12 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-50 text-2xl">
+            🔒
+          </div>
+          <div>
+            <p className="font-semibold text-slate-900">
+              Upgrade to unlock {sectionLabels[section]}
+            </p>
+            <p className="mt-1 text-sm text-slate-500">
+              {upgradeTargetLabel[planSlug] ?? "a higher plan"} plan includes this section with up to 20 results.
+            </p>
+          </div>
+          <a
+            href="/dashboard/billing"
+            className="inline-flex h-10 items-center justify-center rounded-full bg-[#465FFF] px-6 text-sm font-semibold text-white transition-colors hover:bg-[#3647D6]"
+          >
+            Upgrade Now
+          </a>
+        </div>
+      ) : results.length === 0 ? (
         <p className="p-8 text-center text-sm text-gray-400">No results in this section.</p>
       ) : (
         <div className="divide-y divide-gray-100">

@@ -3,8 +3,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getCachedWithLock } from "@/lib/cache";
 import { redis } from "@/lib/redis";
-
-const FREE_PLAN_VISIBLE_RESULTS = 5;
+import { applyPlanResultMasking } from "@/lib/curation-mask-policy";
 
 export async function GET(
   req: NextRequest,
@@ -75,25 +74,7 @@ export async function GET(
 
   // Determine masking based on plan
   const planSlug = session.user.planSlug ?? "free";
-  const showAll = planSlug !== "free";
-
-  type ResultItem = (typeof data.results)[number];
-  type MaskedResult = Omit<ResultItem, "website" | "matchReason"> & { masked: true; website: undefined; matchReason: null };
-  let results: (ResultItem | MaskedResult)[] = data.results;
-  let maskedCount = 0;
-
-  if (!showAll && data.results.length > FREE_PLAN_VISIBLE_RESULTS) {
-    maskedCount = data.results.length - FREE_PLAN_VISIBLE_RESULTS;
-    results = [
-      ...data.results.slice(0, FREE_PLAN_VISIBLE_RESULTS),
-      ...data.results.slice(FREE_PLAN_VISIBLE_RESULTS).map((r): MaskedResult => ({
-        ...r,
-        masked: true,
-        website: undefined,
-        matchReason: null,
-      })),
-    ];
-  }
+  const { results, maskedCount, lockedSections } = applyPlanResultMasking(data.results, planSlug);
 
   const categoryCounts = new Map<string, number>();
   for (const result of data.results) {
@@ -115,6 +96,8 @@ export async function GET(
     description: data.description,
     results,
     maskedCount,
+    lockedSections,
+    planSlug,
   });
 }
 

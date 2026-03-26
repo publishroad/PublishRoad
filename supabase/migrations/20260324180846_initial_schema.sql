@@ -6,7 +6,7 @@ create type "public"."BillingType" as enum ('free', 'one_time', 'monthly', 'life
 
 create type "public"."BlogStatus" as enum ('draft', 'published');
 
-create type "public"."CurationSection" as enum ('a', 'b', 'c');
+create type "public"."CurationSection" as enum ('a', 'b', 'c', 'd', 'e', 'f');
 
 create type "public"."CurationStatus" as enum ('pending', 'processing', 'completed', 'failed');
 
@@ -620,19 +620,6 @@ grant truncate on table "public"."_prisma_migrations" to "service_role";
 
 grant update on table "public"."_prisma_migrations" to "service_role";
 
-grant delete on table "public"."admin_users" to "anon";
-
-grant insert on table "public"."admin_users" to "anon";
-
-grant references on table "public"."admin_users" to "anon";
-
-grant select on table "public"."admin_users" to "anon";
-
-grant trigger on table "public"."admin_users" to "anon";
-
-grant truncate on table "public"."admin_users" to "anon";
-
-grant update on table "public"."admin_users" to "anon";
 
 grant delete on table "public"."admin_users" to "authenticated";
 
@@ -648,6 +635,18 @@ grant truncate on table "public"."admin_users" to "authenticated";
 
 grant update on table "public"."admin_users" to "authenticated";
 
+revoke delete on table "public"."admin_users" from "authenticated";
+
+revoke insert on table "public"."admin_users" from "authenticated";
+
+revoke references on table "public"."admin_users" from "authenticated";
+
+revoke trigger on table "public"."admin_users" from "authenticated";
+
+revoke truncate on table "public"."admin_users" from "authenticated";
+
+revoke update on table "public"."admin_users" from "authenticated";
+
 grant delete on table "public"."admin_users" to "service_role";
 
 grant insert on table "public"."admin_users" to "service_role";
@@ -662,19 +661,6 @@ grant truncate on table "public"."admin_users" to "service_role";
 
 grant update on table "public"."admin_users" to "service_role";
 
-grant delete on table "public"."ai_config" to "anon";
-
-grant insert on table "public"."ai_config" to "anon";
-
-grant references on table "public"."ai_config" to "anon";
-
-grant select on table "public"."ai_config" to "anon";
-
-grant trigger on table "public"."ai_config" to "anon";
-
-grant truncate on table "public"."ai_config" to "anon";
-
-grant update on table "public"."ai_config" to "anon";
 
 grant delete on table "public"."ai_config" to "authenticated";
 
@@ -689,6 +675,18 @@ grant trigger on table "public"."ai_config" to "authenticated";
 grant truncate on table "public"."ai_config" to "authenticated";
 
 grant update on table "public"."ai_config" to "authenticated";
+
+revoke delete on table "public"."ai_config" from "authenticated";
+
+revoke insert on table "public"."ai_config" from "authenticated";
+
+revoke references on table "public"."ai_config" from "authenticated";
+
+revoke trigger on table "public"."ai_config" from "authenticated";
+
+revoke truncate on table "public"."ai_config" from "authenticated";
+
+revoke update on table "public"."ai_config" from "authenticated";
 
 grant delete on table "public"."ai_config" to "service_role";
 
@@ -1124,19 +1122,6 @@ grant truncate on table "public"."payment_gateway_config" to "service_role";
 
 grant update on table "public"."payment_gateway_config" to "service_role";
 
-grant delete on table "public"."payments" to "anon";
-
-grant insert on table "public"."payments" to "anon";
-
-grant references on table "public"."payments" to "anon";
-
-grant select on table "public"."payments" to "anon";
-
-grant trigger on table "public"."payments" to "anon";
-
-grant truncate on table "public"."payments" to "anon";
-
-grant update on table "public"."payments" to "anon";
 
 grant delete on table "public"."payments" to "authenticated";
 
@@ -1151,6 +1136,18 @@ grant trigger on table "public"."payments" to "authenticated";
 grant truncate on table "public"."payments" to "authenticated";
 
 grant update on table "public"."payments" to "authenticated";
+
+revoke delete on table "public"."payments" from "authenticated";
+
+revoke insert on table "public"."payments" from "authenticated";
+
+revoke references on table "public"."payments" from "authenticated";
+
+revoke trigger on table "public"."payments" from "authenticated";
+
+revoke truncate on table "public"."payments" from "authenticated";
+
+revoke update on table "public"."payments" from "authenticated";
 
 grant delete on table "public"."payments" to "service_role";
 
@@ -1418,19 +1415,6 @@ grant truncate on table "public"."tags" to "service_role";
 
 grant update on table "public"."tags" to "service_role";
 
-grant delete on table "public"."users" to "anon";
-
-grant insert on table "public"."users" to "anon";
-
-grant references on table "public"."users" to "anon";
-
-grant select on table "public"."users" to "anon";
-
-grant trigger on table "public"."users" to "anon";
-
-grant truncate on table "public"."users" to "anon";
-
-grant update on table "public"."users" to "anon";
 
 grant delete on table "public"."users" to "authenticated";
 
@@ -1445,6 +1429,18 @@ grant trigger on table "public"."users" to "authenticated";
 grant truncate on table "public"."users" to "authenticated";
 
 grant update on table "public"."users" to "authenticated";
+
+revoke delete on table "public"."users" from "authenticated";
+
+revoke insert on table "public"."users" from "authenticated";
+
+revoke references on table "public"."users" from "authenticated";
+
+revoke trigger on table "public"."users" from "authenticated";
+
+revoke truncate on table "public"."users" from "authenticated";
+
+revoke update on table "public"."users" from "authenticated";
 
 grant delete on table "public"."users" to "service_role";
 

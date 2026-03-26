@@ -8,6 +8,8 @@ interface StreamingCurationData {
   description: string | null;
   results: StreamingResult[];
   maskedCount: number;
+  lockedSections?: string[];
+  planSlug?: string;
 }
 
 interface StreamingResult {

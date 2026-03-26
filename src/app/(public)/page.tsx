@@ -1,15 +1,72 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { PRICING_PLANS } from "@/lib/pricing-plans";
+import { PublicPricingCard } from "@/components/public/PublicPricingCard";
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://publishroad.com";
 
 export const metadata: Metadata = {
-  title: "PublishRoad — Launch Your Product to the Right Places",
+  title: "PublishRoad — AI-Powered Product Launch Distribution",
   description:
-    "AI-powered distribution plans for product launches. Get curated lists of the best sites to submit your product, get backlinks, and get press coverage.",
+    "Generate a complete AI-powered distribution plan for your product launch. Get curated lists of the best directories, guest post sites, press release platforms, influencers, subreddits, and investors — matched to your product in minutes.",
+  alternates: { canonical: `${APP_URL}/` },
+  openGraph: {
+    title: "PublishRoad — AI-Powered Product Launch Distribution",
+    description:
+      "Generate a complete AI-powered distribution plan for your product launch. Directories, guest posts, press, influencers, Reddit & investors — all matched to your product.",
+    url: `${APP_URL}/`,
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "PublishRoad" }],
+  },
+};
+
+const softwareSchema = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "PublishRoad",
+  applicationCategory: "BusinessApplication",
+  operatingSystem: "Web",
+  url: APP_URL,
+  description:
+    "AI-powered SaaS platform that generates curated distribution plans for product launches. Get directories, guest post sites, press release platforms, social influencers, Reddit communities, and investors matched to your product.",
+  offers: [
+    {
+      "@type": "Offer",
+      name: "Free",
+      price: "0",
+      priceCurrency: "USD",
+      description: "1 curation, 5 results shown per section.",
+    },
+    {
+      "@type": "Offer",
+      name: "Starter",
+      price: "9",
+      priceCurrency: "USD",
+      description: "1 full curation with all results unlocked.",
+    },
+    {
+      "@type": "Offer",
+      name: "Pro",
+      price: "39",
+      priceCurrency: "USD",
+      description: "10 curations per month, all sections including influencers and investors.",
+    },
+    {
+      "@type": "Offer",
+      name: "Lifetime",
+      price: "599",
+      priceCurrency: "USD",
+      description: "Unlimited curations forever, one-time payment.",
+    },
+  ],
 };
 
 export default function LandingPage() {
   return (
     <div style={{ fontFamily: "var(--font-sans)" }}>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareSchema) }}
+      />
 
       {/* ══════════════════════════════════════
           HERO
@@ -331,107 +388,8 @@ export default function LandingPage() {
 
           {/* Pricing cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5" style={{ maxWidth: "1100px", margin: "0 auto" }}>
-            {pricingPlans.map((plan, i) => (
-              <div
-                key={i}
-                style={{
-                  position: "relative",
-                  borderRadius: "2rem",
-                  padding: "1.75rem",
-                  display: "flex",
-                  flexDirection: "column",
-                  ...(plan.popular
-                    ? { background: "#020617", boxShadow: "0 12px 48px rgba(91,88,246,0.3)" }
-                    : { background: "#ffffff", border: "1px solid rgba(226,232,240,0.9)", boxShadow: "0 4px 20px rgba(91,88,246,0.06)" }),
-                }}
-              >
-                {/* Badge */}
-                {plan.popular && (
-                  <div style={{ position: "absolute", top: "-14px", left: "50%", transform: "translateX(-50%)" }}>
-                    <span style={{ background: "#5B58F6", color: "#fff", fontSize: "0.72rem", fontWeight: 700, padding: "5px 14px", borderRadius: "999px", display: "inline-block" }}>
-                      Most Popular
-                    </span>
-                  </div>
-                )}
-                {plan.badge && !plan.popular && (
-                  <div style={{ position: "absolute", top: "-14px", left: "50%", transform: "translateX(-50%)" }}>
-                    <span style={{ background: "#7c3aed", color: "#fff", fontSize: "0.72rem", fontWeight: 700, padding: "5px 14px", borderRadius: "999px", display: "inline-block" }}>
-                      {plan.badge}
-                    </span>
-                  </div>
-                )}
-
-                {/* Plan name */}
-                <p style={{ fontFamily: "var(--font-heading)", fontWeight: 600, fontSize: "1rem", color: plan.popular ? "#ffffff" : "#020617", marginBottom: "0.5rem" }}>
-                  {plan.name}
-                </p>
-
-                {/* Price */}
-                <div style={{ display: "flex", alignItems: "baseline", gap: "4px", marginBottom: "4px" }}>
-                  <span style={{ fontFamily: "var(--font-heading)", fontSize: "2.25rem", fontWeight: 700, color: plan.popular ? "#ffffff" : "#020617", lineHeight: 1 }}>
-                    {plan.price}
-                  </span>
-                  {plan.period && (
-                    <span style={{ fontSize: "0.875rem", color: plan.popular ? "#94a3b8" : "#94a3b8", fontWeight: 300 }}>
-                      {plan.period}
-                    </span>
-                  )}
-                </div>
-
-                {/* Billing note */}
-                <p style={{ fontSize: "0.75rem", color: plan.popular ? "#64748b" : "#94a3b8", fontWeight: 300, marginBottom: "0.75rem" }}>
-                  {plan.billingNote}
-                </p>
-
-                {/* Credits pill */}
-                <div
-                  style={{
-                    background: plan.popular ? "rgba(91,88,246,0.25)" : "rgba(91,88,246,0.08)",
-                    borderRadius: "0.75rem",
-                    padding: "6px 12px",
-                    marginBottom: "1.25rem",
-                    display: "inline-block",
-                  }}
-                >
-                  <span style={{ color: plan.popular ? "#a5b4fc" : "#5B58F6", fontSize: "0.78rem", fontWeight: 600 }}>
-                    {plan.credits}
-                  </span>
-                </div>
-
-                {/* Features */}
-                <ul style={{ listStyle: "none", padding: 0, margin: "0 0 1.5rem 0", flex: 1, display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-                  {plan.features.map((f, j) => (
-                    <li key={j} style={{ display: "flex", alignItems: "flex-start", gap: "8px", fontSize: "0.82rem", color: plan.popular ? "#cbd5e1" : "#64748b", fontWeight: 300 }}>
-                      <svg width="14" height="14" style={{ marginTop: "2px", flexShrink: 0, color: plan.popular ? "#a5b4fc" : "#27AE60" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                      </svg>
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-
-                {/* CTA button */}
-                <Link
-                  href={plan.slug === "free" ? "/signup" : `/signup?plan=${plan.slug}`}
-                  style={{
-                    display: "block",
-                    textAlign: "center",
-                    borderRadius: "999px",
-                    padding: "11px 20px",
-                    fontWeight: 600,
-                    fontSize: "0.875rem",
-                    textDecoration: "none",
-                    transition: "all 0.2s",
-                    ...(plan.popular
-                      ? { background: "#5B58F6", color: "#ffffff", boxShadow: "0 0 20px rgba(91,88,246,0.5)" }
-                      : plan.slug === "lifetime"
-                      ? { background: "#7c3aed", color: "#ffffff" }
-                      : { background: "#020617", color: "#ffffff" }),
-                  }}
-                >
-                  {plan.cta}
-                </Link>
-              </div>
+            {PRICING_PLANS.map((plan) => (
+              <PublicPricingCard key={plan.slug} plan={plan} />
             ))}
           </div>
 
@@ -695,56 +653,6 @@ const curationSections = [
   },
 ];
 
-const pricingPlans = [
-  {
-    name: "Free",
-    slug: "free",
-    price: "$0",
-    period: "",
-    billingNote: "Forever free",
-    credits: "1 curation included",
-    popular: false,
-    badge: null,
-    cta: "Get Started Free",
-    features: ["1 curation", "5 results shown", "All 3 sections", "Basic filtering"],
-  },
-  {
-    name: "Starter",
-    slug: "starter",
-    price: "$9",
-    period: "",
-    billingNote: "One-time payment",
-    credits: "1 full curation",
-    popular: false,
-    badge: null,
-    cta: "Get Starter",
-    features: ["1 full curation", "50+ results", "All 3 sections", "Export results"],
-  },
-  {
-    name: "Pro",
-    slug: "pro",
-    price: "$39",
-    period: "/mo",
-    billingNote: "Billed monthly",
-    credits: "10 curations/month",
-    popular: true,
-    badge: null,
-    cta: "Get Pro",
-    features: ["10 curations/month", "50+ results each", "Priority matching", "Export results", "Email notifications"],
-  },
-  {
-    name: "Lifetime",
-    slug: "lifetime",
-    price: "$599",
-    period: "",
-    billingNote: "One-time, forever",
-    credits: "Unlimited curations",
-    popular: false,
-    badge: "Best Value",
-    cta: "Get Lifetime",
-    features: ["Unlimited curations", "50+ results each", "Priority matching", "All future features", "Priority support"],
-  },
-];
 
 const testimonials = [
   {

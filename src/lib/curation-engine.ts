@@ -113,26 +113,59 @@ function scoreCandidateRelevance(
 export async function runCuration(input: RunCurationInput) {
   const { userId, productUrl, countryId, categoryId, keywords, description } = input;
 
+  const LIFETIME_MONTHLY_CREDITS = 15;
+
   // ─── Step 1: Credit check + deduction in a single transaction ─────────────
   // We use a raw transaction with SELECT FOR UPDATE to prevent race conditions
   // when two requests arrive simultaneously with credits=1.
   const result = await db.$transaction(async (tx) => {
-    const user = await tx.$queryRaw<Array<{ credits_remaining: number }>>(
-      Prisma.sql`SELECT credits_remaining FROM "users" WHERE id::text = ${userId} FOR UPDATE`
+    const user = await tx.$queryRaw<Array<{
+      credits_remaining: number;
+      credits_reset_at: Date | null;
+      plan_id: string | null;
+    }>>(
+      Prisma.sql`SELECT credits_remaining, credits_reset_at, plan_id FROM "users" WHERE id::text = ${userId} FOR UPDATE`
     );
 
-    const credits = user[0]?.credits_remaining ?? 0;
+    const row = user[0];
+    let credits = row?.credits_remaining ?? 0;
+
+    // ── Lifetime monthly reset ──────────────────────────────────────────────
+    // Lifetime users get 15 curations/month. Auto-reset if 30+ days have passed.
+    const isLifetime = row?.plan_id != null && (
+      await tx.$queryRaw<Array<{ slug: string }>>(
+        Prisma.sql`SELECT slug FROM "plan_configs" WHERE id = ${row.plan_id} LIMIT 1`
+      )
+    )[0]?.slug === "lifetime";
+
+    if (isLifetime) {
+      const lastReset = row?.credits_reset_at;
+      const now = new Date();
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const needsReset = !lastReset || lastReset < thirtyDaysAgo;
+
+      if (needsReset && credits === 0) {
+        // Reset credits for a new month
+        await tx.$executeRaw(
+          Prisma.sql`UPDATE "users" SET credits_remaining = ${LIFETIME_MONTHLY_CREDITS}, credits_reset_at = ${now} WHERE id::text = ${userId}`
+        );
+        credits = LIFETIME_MONTHLY_CREDITS;
+      } else if (needsReset && credits > 0) {
+        // First-time or reset without running out — just stamp the reset date
+        await tx.$executeRaw(
+          Prisma.sql`UPDATE "users" SET credits_reset_at = ${now} WHERE id::text = ${userId}`
+        );
+      }
+    }
 
     if (credits === 0) {
       throw new Error("INSUFFICIENT_CREDITS");
     }
 
-    // Deduct 1 credit (unless unlimited = -1)
-    if (credits !== -1) {
-      await tx.$executeRaw(
-        Prisma.sql`UPDATE "users" SET credits_remaining = credits_remaining - 1 WHERE id::text = ${userId}`
-      );
-    }
+    // Deduct 1 credit
+    await tx.$executeRaw(
+      Prisma.sql`UPDATE "users" SET credits_remaining = credits_remaining - 1 WHERE id::text = ${userId}`
+    );
 
     // Create curation record
     const curation = await tx.curation.create({
@@ -447,10 +480,26 @@ async function processCuration(
       }),
     ]);
 
-  const wCompMap = new Map(websiteCompletions.map((c) => [c.websiteId!, c._count.id]));
-  const iCompMap = new Map(influencerCompletions.map((c) => [c.influencerId!, c._count.id]));
-  const rCompMap = new Map(redditCompletions.map((c) => [c.redditChannelId!, c._count.id]));
-  const fCompMap = new Map(fundCompletions.map((c) => [c.fundId!, c._count.id]));
+  const wCompMap = new Map(
+    websiteCompletions
+      .filter((c): c is typeof c & { websiteId: string } => c.websiteId != null)
+      .map((c) => [c.websiteId, c._count.id])
+  );
+  const iCompMap = new Map(
+    influencerCompletions
+      .filter((c): c is typeof c & { influencerId: string } => c.influencerId != null)
+      .map((c) => [c.influencerId, c._count.id])
+  );
+  const rCompMap = new Map(
+    redditCompletions
+      .filter((c): c is typeof c & { redditChannelId: string } => c.redditChannelId != null)
+      .map((c) => [c.redditChannelId, c._count.id])
+  );
+  const fCompMap = new Map(
+    fundCompletions
+      .filter((c): c is typeof c & { fundId: string } => c.fundId != null)
+      .map((c) => [c.fundId, c._count.id])
+  );
 
   // ─── Step 3c: Pre-score + sort candidates ─────────────────────────────────
   // Sort each pool by relevance score so the AI always sees the best candidates

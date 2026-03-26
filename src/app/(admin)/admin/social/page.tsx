@@ -23,12 +23,14 @@ const platformLabel: Record<string, string> = {
 
 export default async function AdminSocialPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
-  const page = parseInt(params.page ?? "1");
+  const page = Math.max(1, parseInt(params.page ?? "1", 10) || 1);
   const skip = (page - 1) * PAGE_SIZE;
+  const allowedPlatforms = new Set(["tiktok", "instagram", "youtube", "twitter"]);
+  const platform = params.platform && allowedPlatforms.has(params.platform) ? params.platform : undefined;
 
   const where = {
     ...(params.q ? { name: { contains: params.q, mode: "insensitive" as const } } : {}),
-    ...(params.platform ? { platform: params.platform as "tiktok" | "instagram" | "youtube" | "twitter" } : {}),
+    ...(platform ? { platform: platform as "tiktok" | "instagram" | "youtube" | "twitter" } : {}),
   };
 
   const [influencers, total] = await Promise.all([
@@ -73,7 +75,7 @@ export default async function AdminSocialPage({ searchParams }: { searchParams: 
             />
             <select
               name="platform"
-              defaultValue={params.platform}
+              defaultValue={platform}
               className="h-9 rounded-xl border border-gray-200 px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#465FFF]/20 focus:border-[#465FFF]"
             >
               <option value="">All Platforms</option>
@@ -149,7 +151,7 @@ export default async function AdminSocialPage({ searchParams }: { searchParams: 
             <div className="flex gap-2">
               {page > 1 && (
                 <Link
-                  href={`/admin/social?${new URLSearchParams({ ...(params.q ? { q: params.q } : {}), ...(params.platform ? { platform: params.platform } : {}), page: String(page - 1) })}`}
+                  href={`/admin/social?${new URLSearchParams({ ...(params.q ? { q: params.q } : {}), ...(platform ? { platform } : {}), page: String(page - 1) })}`}
                   className="h-9 px-4 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium hover:bg-gray-50 flex items-center transition-colors"
                 >
                   Previous
@@ -157,7 +159,7 @@ export default async function AdminSocialPage({ searchParams }: { searchParams: 
               )}
               {page < totalPages && (
                 <Link
-                  href={`/admin/social?${new URLSearchParams({ ...(params.q ? { q: params.q } : {}), ...(params.platform ? { platform: params.platform } : {}), page: String(page + 1) })}`}
+                  href={`/admin/social?${new URLSearchParams({ ...(params.q ? { q: params.q } : {}), ...(platform ? { platform } : {}), page: String(page + 1) })}`}
                   className="h-9 px-4 rounded-xl bg-[#465FFF] text-white text-sm font-medium flex items-center transition-colors"
                 >
                   Next

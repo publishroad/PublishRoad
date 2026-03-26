@@ -23,11 +23,16 @@ function PostHogPageView() {
 }
 
 if (typeof window !== "undefined") {
-  posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY!, {
-    api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST,
-    capture_pageview: false, // handled manually via PostHogPageView
-    capture_pageleave: true,
-  });
+  const posthogKey = process.env.NEXT_PUBLIC_POSTHOG_KEY;
+  if (posthogKey) {
+    posthog.init(posthogKey, {
+      api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST,
+      capture_pageview: false, // handled manually via PostHogPageView
+      capture_pageleave: true,
+    });
+  } else {
+    console.warn("PostHog disabled: NEXT_PUBLIC_POSTHOG_KEY is missing.");
+  }
 }
 
 export function PostHogProvider({ children }: { children: React.ReactNode }) {
