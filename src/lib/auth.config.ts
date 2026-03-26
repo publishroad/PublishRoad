@@ -51,7 +51,9 @@ export function applyTokenToSession(
     return session;
   }
 
-  session.user.id = token.id as string;
+  if (token.id !== undefined && token.id !== null) {
+    session.user.id = token.id as string;
+  }
   session.user.planSlug = (token.planSlug as string) ?? "free";
   session.user.creditsRemaining = (token.creditsRemaining as number) ?? 0;
   session.user.isEmailVerified = (token.isEmailVerified as boolean) ?? false;
@@ -64,8 +66,16 @@ export const authConfig: NextAuthConfig = {
   callbacks: {
     authorized({ auth, request }) {
       const { pathname } = request.nextUrl;
-      // Dashboard requires a logged-in user
-      if (pathname.startsWith("/dashboard")) {
+      const protectedPrefixes = [
+        "/dashboard",
+        "/onboarding",
+        "/api/user",
+        "/api/curations",
+        "/api/notifications",
+        "/api/payments",
+      ];
+
+      if (protectedPrefixes.some((prefix) => pathname.startsWith(prefix))) {
         return !!auth?.user;
       }
       return true;

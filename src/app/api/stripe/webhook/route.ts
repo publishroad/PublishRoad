@@ -207,7 +207,13 @@ async function findUserByStripeCustomer(customerId: string) {
   const customerHash = hashLookupValue(customerId);
   const cacheKey = `stripe-customer:${customerHash}`;
 
-  const cachedUserId = await redis.get<string>(cacheKey);
+  let cachedUserId: string | null = null;
+  try {
+    cachedUserId = await redis.get<string>(cacheKey);
+  } catch (error) {
+    console.warn("Redis get failed for stripe customer cache", { cacheKey, error });
+  }
+
   if (cachedUserId) {
     const cachedUser = await db.user.findUnique({
       where: { id: cachedUserId },
@@ -225,7 +231,11 @@ async function findUserByStripeCustomer(customerId: string) {
   });
 
   if (byHash) {
-    await redis.set(cacheKey, byHash.id, { ex: LEGACY_CUSTOMER_LOOKUP_CACHE_TTL_SECONDS });
+    redis
+      .set(cacheKey, byHash.id, { ex: LEGACY_CUSTOMER_LOOKUP_CACHE_TTL_SECONDS })
+      .catch((error) => {
+        console.warn("Redis set failed for stripe customer byHash cache", { cacheKey, error });
+      });
     return byHash;
   }
 
@@ -242,7 +252,11 @@ async function findUserByStripeCustomer(customerId: string) {
           where: { id: user.id },
           data: { stripeCustomerHash: customerHash },
         });
-        await redis.set(cacheKey, user.id, { ex: LEGACY_CUSTOMER_LOOKUP_CACHE_TTL_SECONDS });
+        redis
+          .set(cacheKey, user.id, { ex: LEGACY_CUSTOMER_LOOKUP_CACHE_TTL_SECONDS })
+          .catch((error) => {
+            console.warn("Redis set failed for stripe customer legacy cache", { cacheKey, error });
+          });
         return user;
       }
     } catch {

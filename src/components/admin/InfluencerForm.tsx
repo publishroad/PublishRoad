@@ -128,7 +128,7 @@ export function InfluencerForm({ influencer, countries, categories, tags }: Infl
 
           <div className="space-y-1.5">
             <Label htmlFor="followersCount">Followers Count</Label>
-            <Input id="followersCount" type="number" {...register("followersCount")} min={0} />
+            <Input id="followersCount" type="number" {...register("followersCount", { valueAsNumber: true })} min={0} />
             {errors.followersCount && <p className="text-xs text-error">{errors.followersCount.message}</p>}
           </div>
 

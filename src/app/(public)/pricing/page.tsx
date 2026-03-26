@@ -1,14 +1,25 @@
 import { db } from "@/lib/db";
 import { getCachedWithLock, CacheKeys, CacheTTL } from "@/lib/cache";
-import { PricingCard } from "@/components/public/PricingCard";
+import { PublicPricingCard } from "@/components/public/PublicPricingCard";
+import { PRICING_PLANS } from "@/lib/pricing-plans";
 import { auth } from "@/lib/auth";
 import Link from "next/link";
 import type { Metadata } from "next";
 
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://publishroad.com";
+
 export const metadata: Metadata = {
-  title: "Pricing — PublishRoad",
+  title: "Pricing — Free, Starter, Pro & Lifetime Plans | PublishRoad",
   description:
-    "Simple, transparent pricing. Start free, upgrade when you need more curations.",
+    "Simple, transparent pricing. Start free with 1 curation. Upgrade to Starter ($9), Pro ($39/month), or Lifetime ($599) for full access to distribution sites, influencers, Reddit, and investors.",
+  alternates: { canonical: `${APP_URL}/pricing` },
+  openGraph: {
+    title: "Pricing — Free, Starter, Pro & Lifetime Plans | PublishRoad",
+    description:
+      "Start free. Get full AI-powered distribution plans with Starter from $9. Pro from $39/month. Lifetime deal at $599.",
+    url: `${APP_URL}/pricing`,
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "PublishRoad Pricing" }],
+  },
 };
 
 export const revalidate = 30;
@@ -21,7 +32,8 @@ async function getPlans() {
         orderBy: { sortOrder: "asc" },
       });
     });
-  } catch {
+  } catch (error) {
+    console.error("Error fetching plans", error);
     return [];
   }
 }
@@ -34,57 +46,13 @@ async function getOptionalSession() {
   }
 }
 
-// Static fallback plans shown when DB has no plans yet
-const fallbackPlans = [
-  {
-    id: "free",
-    name: "Free",
-    slug: "free",
-    priceCents: 0,
-    billingType: "free" as const,
-    credits: 1,
-    features: ["1 curation", "5 results shown", "All 3 sections", "Basic filtering"],
-    isPopular: false,
-  },
-  {
-    id: "starter",
-    name: "Starter",
-    slug: "starter",
-    priceCents: 900,
-    billingType: "one_time" as const,
-    credits: 1,
-    features: ["1 full curation", "50+ results", "All 3 sections", "Export results"],
-    isPopular: false,
-  },
-  {
-    id: "pro",
-    name: "Pro",
-    slug: "pro",
-    priceCents: 3900,
-    billingType: "monthly" as const,
-    credits: 10,
-    features: ["10 curations/month", "50+ results each", "Priority AI matching", "Export results", "Email notifications"],
-    isPopular: true,
-  },
-  {
-    id: "lifetime",
-    name: "Lifetime",
-    slug: "lifetime",
-    priceCents: 59900,
-    billingType: "lifetime" as const,
-    credits: -1,
-    features: ["Unlimited curations", "50+ results each", "Priority AI matching", "All future features", "Priority support"],
-    isPopular: false,
-  },
-];
 
 export default async function PricingPage() {
   const [dbPlans, session] = await Promise.all([getPlans(), getOptionalSession()]);
 
   const currentPlanSlug = session?.user?.planSlug;
 
-  // Use DB plans if available, otherwise show fallback
-  const plans = dbPlans.length > 0 ? dbPlans : fallbackPlans;
+  const plans = dbPlans;
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "var(--background)" }}>
@@ -110,21 +78,18 @@ export default async function PricingPage() {
       <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-20">
         {/* ─── Pricing Cards ─── */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto mb-20">
-          {plans.map((plan) => (
-            <PricingCard
-              key={plan.id}
-              planId={plan.id}
-              name={plan.name}
-              slug={plan.slug}
-              priceCents={plan.priceCents}
-              billingType={plan.billingType as "free" | "one_time" | "monthly" | "lifetime"}
-              credits={plan.credits}
-              features={(plan.features as string[]) ?? []}
-              isPopular={plan.slug === "pro"}
-              currentPlanSlug={currentPlanSlug}
-              isAuthenticated={!!session?.user?.id}
-            />
-          ))}
+          {PRICING_PLANS.map((displayPlan) => {
+            const dbPlan = plans.find((p) => p.slug === displayPlan.slug);
+            return (
+              <PublicPricingCard
+                key={displayPlan.slug}
+                plan={displayPlan}
+                planId={dbPlan?.id}
+                currentPlanSlug={currentPlanSlug}
+                isAuthenticated={!!session?.user?.id}
+              />
+            );
+          })}
         </div>
 
         {/* ─── Feature Comparison ─── */}
@@ -308,15 +273,17 @@ export default async function PricingPage() {
 }
 
 const comparisonRows = [
-  { feature: "Curations included", values: ["1", "1", "10/mo", "Unlimited"] },
-  { feature: "Results per curation", values: ["5 (masked)", "50+", "50+", "50+"] },
-  { feature: "Distribution sites (A)", values: [true, true, true, true] },
-  { feature: "Guest post sites (B)", values: [true, true, true, true] },
-  { feature: "Press release sites (C)", values: [true, true, true, true] },
+  { feature: "Curations included", values: ["1", "1", "1 + all sections", "15/month"] },
+  { feature: "Results per section", values: ["Up to 5", "Up to 20", "Up to 20", "Up to 20"] },
+  { feature: "Distribution Sites", values: [true, true, true, true] },
+  { feature: "Guest Post & Backlinks", values: [true, true, true, true] },
+  { feature: "Press Release Sites", values: [true, true, true, true] },
+  { feature: "Social Influencers", values: [false, false, true, true] },
+  { feature: "Reddit Communities", values: [false, true, true, true] },
+  { feature: "Investors & Funds", values: [false, false, true, true] },
   { feature: "Country targeting", values: [true, true, true, true] },
-  { feature: "Export results", values: [false, true, true, true] },
-  { feature: "Priority AI matching", values: [false, false, true, true] },
-  { feature: "Email notifications", values: [false, false, true, true] },
+  { feature: "AI-powered matching", values: [true, true, true, true] },
+  { feature: "Credits roll over", values: [false, false, false, true] },
   { feature: "All future features", values: [false, false, false, true] },
   { feature: "Priority support", values: [false, false, false, true] },
 ];
@@ -324,18 +291,22 @@ const comparisonRows = [
 const faqItems = [
   {
     q: "What counts as one curation?",
-    a: "A curation is one request to generate a distribution plan. You submit your product URL, country, keywords, and description — we return a full categorized list of matching sites. Each submission uses 1 credit.",
+    a: "A curation is one AI-powered analysis of your product. You submit your product URL, target country, keywords, and description — we return a categorised plan across up to 6 sections: Distribution Sites, Guest Post & Backlinks, Press Release Sites, Social Influencers, Reddit Communities, and Investors & Funds. Each submission uses 1 credit.",
   },
   {
-    q: "Do Pro credits roll over?",
-    a: "No. Pro plan credits (10/month) reset on your billing anniversary each month and do not roll over to the next month.",
+    q: "What sections does each plan unlock?",
+    a: "Free unlocks Steps 1–3 (websites) with up to 5 results per section. Starter unlocks Steps 1–3 fully (up to 20 results) plus Step 5 (Reddit Communities). Pro and Lifetime unlock all 6 steps including Social Influencers (Step 4) and Investors & Funds (Step 6) with up to 20 results each.",
   },
   {
-    q: "Can I switch plans?",
-    a: "You can upgrade at any time. Downgrading takes effect at the end of the current billing period. You keep access until then.",
+    q: "What is the difference between Starter, Pro, and Lifetime?",
+    a: "All three are one-time payments. Starter ($9) gives 1 curation with Steps 1–3 and Reddit unlocked. Pro ($39) gives 1 curation with all 6 sections unlocked — including Social Influencers and Investors & Funds. Lifetime ($599) gives you 15 curations every month, forever, with all sections unlocked.",
+  },
+  {
+    q: "Can I upgrade after running a free curation?",
+    a: "Yes. When you upgrade, your existing curations are immediately updated to show all results for your new plan — you don't need to re-run them.",
   },
   {
     q: "What's the refund policy?",
-    a: "Due to the nature of digital content, we do not offer refunds on any plan. We strongly recommend using the free plan first to verify quality before purchasing.",
+    a: "Due to the digital nature of our service, we do not offer refunds on any plan. We strongly recommend using the free plan first to verify the quality of results before purchasing.",
   },
 ];

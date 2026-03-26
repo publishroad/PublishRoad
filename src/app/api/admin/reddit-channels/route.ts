@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { db } from "@/lib/db";
 import { verifyAdminSession } from "@/lib/admin-auth";
+import { createEntityWithRelations, resolveTagAndCategorySlugs } from "@/lib/admin/entity-relations";
 import { redditChannelSchema } from "@/lib/validations/admin/reddit-channel";
 
 async function requireAdmin() {
@@ -24,35 +24,31 @@ export async function POST(req: NextRequest) {
   }
 
   const { tagIds, categoryIds, ...data } = parsed.data;
-
-  const [tags, categories] = await Promise.all([
-    tagIds.length > 0
-      ? db.tag.findMany({ where: { id: { in: tagIds } }, select: { slug: true } })
-      : Promise.resolve([]),
-    categoryIds.length > 0
-      ? db.category.findMany({ where: { id: { in: categoryIds } }, select: { slug: true } })
-      : Promise.resolve([]),
-  ]);
+  const { tagSlugs, categorySlugs } = await resolveTagAndCategorySlugs({ tagIds, categoryIds });
 
   try {
-    const channel = await db.redditChannel.create({
-      data: {
-        ...data,
-        description: data.description || null,
-        postingDifficulty: data.postingDifficulty || null,
-        tagSlugs: tags.map((t) => t.slug),
-        categorySlugs: categories.map((c) => c.slug),
-      },
+    const channel = await createEntityWithRelations({
+      tagIds,
+      categoryIds,
+      createEntity: (tx) =>
+        tx.redditChannel.create({
+          data: {
+            ...data,
+            description: data.description || null,
+            postingDifficulty: data.postingDifficulty || null,
+            tagSlugs,
+            categorySlugs,
+          },
+        }),
+      createTagRelations: (tx, createdChannel, inputTagIds) =>
+        tx.redditChannelTag.createMany({
+          data: inputTagIds.map((tagId) => ({ redditChannelId: createdChannel.id, tagId })),
+        }),
+      createCategoryRelations: (tx, createdChannel, inputCategoryIds) =>
+        tx.redditChannelCategory.createMany({
+          data: inputCategoryIds.map((categoryId) => ({ redditChannelId: createdChannel.id, categoryId })),
+        }),
     });
-
-    await Promise.all([
-      tagIds.length > 0
-        ? db.redditChannelTag.createMany({ data: tagIds.map((tagId) => ({ redditChannelId: channel.id, tagId })) })
-        : Promise.resolve(),
-      categoryIds.length > 0
-        ? db.redditChannelCategory.createMany({ data: categoryIds.map((categoryId) => ({ redditChannelId: channel.id, categoryId })) })
-        : Promise.resolve(),
-    ]);
 
     return NextResponse.json(channel, { status: 201 });
   } catch (error: unknown) {

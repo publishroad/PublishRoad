@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { db } from "@/lib/db";
 import { verifyAdminSession } from "@/lib/admin-auth";
+import { createEntityWithRelations, resolveTagAndCategorySlugs } from "@/lib/admin/entity-relations";
 import { fundSchema } from "@/lib/validations/admin/fund";
 
 async function requireAdmin() {
@@ -24,37 +24,33 @@ export async function POST(req: NextRequest) {
   }
 
   const { tagIds, categoryIds, ...data } = parsed.data;
+  const { tagSlugs, categorySlugs } = await resolveTagAndCategorySlugs({ tagIds, categoryIds });
 
-  const [tags, categories] = await Promise.all([
-    tagIds.length > 0
-      ? db.tag.findMany({ where: { id: { in: tagIds } }, select: { slug: true } })
-      : Promise.resolve([]),
-    categoryIds.length > 0
-      ? db.category.findMany({ where: { id: { in: categoryIds } }, select: { slug: true } })
-      : Promise.resolve([]),
-  ]);
-
-  const fund = await db.fund.create({
-    data: {
-      ...data,
-      logoUrl: data.logoUrl || null,
-      countryId: data.countryId || null,
-      description: data.description || null,
-      investmentStage: data.investmentStage || null,
-      ticketSize: data.ticketSize || null,
-      tagSlugs: tags.map((t) => t.slug),
-      categorySlugs: categories.map((c) => c.slug),
-    },
+  const fund = await createEntityWithRelations({
+    tagIds,
+    categoryIds,
+    createEntity: (tx) =>
+      tx.fund.create({
+        data: {
+          ...data,
+          logoUrl: data.logoUrl || null,
+          countryId: data.countryId || null,
+          description: data.description || null,
+          investmentStage: data.investmentStage || null,
+          ticketSize: data.ticketSize || null,
+          tagSlugs,
+          categorySlugs,
+        },
+      }),
+    createTagRelations: (tx, createdFund, inputTagIds) =>
+      tx.fundTag.createMany({
+        data: inputTagIds.map((tagId) => ({ fundId: createdFund.id, tagId })),
+      }),
+    createCategoryRelations: (tx, createdFund, inputCategoryIds) =>
+      tx.fundCategory.createMany({
+        data: inputCategoryIds.map((categoryId) => ({ fundId: createdFund.id, categoryId })),
+      }),
   });
-
-  await Promise.all([
-    tagIds.length > 0
-      ? db.fundTag.createMany({ data: tagIds.map((tagId) => ({ fundId: fund.id, tagId })) })
-      : Promise.resolve(),
-    categoryIds.length > 0
-      ? db.fundCategory.createMany({ data: categoryIds.map((categoryId) => ({ fundId: fund.id, categoryId })) })
-      : Promise.resolve(),
-  ]);
 
   return NextResponse.json(fund, { status: 201 });
 }

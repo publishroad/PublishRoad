@@ -11,6 +11,8 @@ interface Props {
   params: Promise<{ slug: string }>;
 }
 
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://publishroad.com";
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   let post = null;
@@ -18,7 +20,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   try {
     post = await db.blogPost.findUnique({
       where: { slug, status: "published" },
-      select: { title: true, metaTitle: true, metaDescription: true, excerpt: true },
+      select: {
+        title: true, metaTitle: true, metaDescription: true, excerpt: true,
+        featuredImage: true, publishDate: true,
+        author: { select: { name: true } },
+      },
     });
   } catch {
     return {};
@@ -26,9 +32,31 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   if (!post) return {};
 
+  const title = post.metaTitle ?? post.title;
+  const description = post.metaDescription ?? post.excerpt ?? undefined;
+  const canonicalUrl = `${APP_URL}/blog/${slug}`;
+  const ogImage = post.featuredImage ?? "/og-image.png";
+
   return {
-    title: post.metaTitle ?? post.title,
-    description: post.metaDescription ?? post.excerpt ?? undefined,
+    title,
+    description,
+    alternates: { canonical: canonicalUrl },
+    openGraph: {
+      title,
+      description,
+      url: canonicalUrl,
+      type: "article",
+      publishedTime: post.publishDate?.toISOString(),
+      authors: post.author?.name ? [post.author.name] : ["PublishRoad"],
+      siteName: "PublishRoad",
+      images: [{ url: ogImage, width: 1200, height: 630, alt: title }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [ogImage],
+    },
   };
 }
 
@@ -48,6 +76,38 @@ export default async function BlogPostPage({ params }: Props) {
 
   if (!post) notFound();
 
+  const canonicalUrl = `${APP_URL}/blog/${slug}`;
+  const blogPostingSchema = {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    headline: post.title,
+    description: post.excerpt ?? "",
+    url: canonicalUrl,
+    datePublished: post.publishDate?.toISOString(),
+    dateModified: post.updatedAt?.toISOString(),
+    image: post.featuredImage ?? `${APP_URL}/og-image.png`,
+    author: {
+      "@type": "Person",
+      name: post.author?.name ?? "PublishRoad",
+    },
+    publisher: {
+      "@type": "Organization",
+      name: "PublishRoad",
+      logo: { "@type": "ImageObject", url: `${APP_URL}/favicon.png` },
+    },
+    mainEntityOfPage: { "@type": "WebPage", "@id": canonicalUrl },
+  };
+
+  const breadcrumbSchema = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: APP_URL },
+      { "@type": "ListItem", position: 2, name: "Blog", item: `${APP_URL}/blog` },
+      { "@type": "ListItem", position: 3, name: post.title, item: canonicalUrl },
+    ],
+  };
+
   const sanitizedContent = sanitizeHtml(post.content, {
     allowedTags: sanitizeHtml.defaults.allowedTags.concat(["img", "h1", "h2", "span"]),
     allowedAttributes: {
@@ -64,6 +124,8 @@ export default async function BlogPostPage({ params }: Props) {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "var(--background)" }}>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(blogPostingSchema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }} />
       {/* Hero header for post */}
       <div className="bg-mesh relative overflow-hidden py-16">
         <div className="absolute inset-0 bg-dot-grid opacity-30 pointer-events-none" />

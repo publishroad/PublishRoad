@@ -1,8 +1,18 @@
 import type { Metadata } from "next";
 
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://publishroad.com";
+
 export const metadata: Metadata = {
-  title: "FAQ — PublishRoad",
-  description: "Frequently asked questions about PublishRoad.",
+  title: "FAQ — Frequently Asked Questions | PublishRoad",
+  description:
+    "Get answers to the most common questions about PublishRoad — how curations work, pricing plans, credits, refund policy, AI matching, and more.",
+  alternates: { canonical: `${APP_URL}/faq` },
+  openGraph: {
+    title: "FAQ — Frequently Asked Questions | PublishRoad",
+    description:
+      "Everything you need to know about PublishRoad — curations, pricing, credits, AI matching, and how to get the most from your distribution plan.",
+    url: `${APP_URL}/faq`,
+  },
 };
 
 const faqs = [
@@ -44,9 +54,26 @@ const faqs = [
   },
 ];
 
+const faqSchema = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: faqs.map((faq) => ({
+    "@type": "Question",
+    name: faq.q,
+    acceptedAnswer: {
+      "@type": "Answer",
+      text: faq.a,
+    },
+  })),
+};
+
 export default function FaqPage() {
   return (
     <div className="min-h-screen" style={{ backgroundColor: "var(--background)" }}>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
+      />
       {/* Header */}
       <div className="bg-mesh relative overflow-hidden py-20">
         <div className="absolute inset-0 bg-dot-grid opacity-30 pointer-events-none" />

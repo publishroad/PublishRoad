@@ -6,9 +6,20 @@ import { db } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
 import type { Metadata } from "next";
 
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://publishroad.com";
+
 export const metadata: Metadata = {
-  title: "Blog — PublishRoad",
-  description: "Product launch tips, distribution strategies, and SEO advice.",
+  title: "Blog — Product Launch Tips, Distribution & SEO Strategies | PublishRoad",
+  description:
+    "Actionable guides on product launch distribution, getting your product listed on directories, guest posting, press coverage, social influencer outreach, and startup growth strategies.",
+  alternates: { canonical: `${APP_URL}/blog` },
+  openGraph: {
+    title: "Blog — Product Launch Tips & Distribution Strategies | PublishRoad",
+    description:
+      "Guides on product distribution, directory submissions, guest posts, press releases, and launch growth strategies.",
+    url: `${APP_URL}/blog`,
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "PublishRoad Blog" }],
+  },
 };
 
 export const revalidate = 60; // ISR: revalidate every 60 seconds
@@ -40,7 +51,8 @@ async function getPosts(page = 1) {
     ]);
 
     return { posts, total, pageSize };
-  } catch {
+  } catch (error) {
+    console.error("Failed to fetch posts", error);
     return { posts: [], total: 0, pageSize };
   }
 }

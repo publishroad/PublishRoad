@@ -220,6 +220,7 @@ model User {
   authProvider       AuthProvider @default(email) @map("auth_provider")
   planId             String?      @map("plan_id")
   creditsRemaining   Int          @default(1) @map("credits_remaining")
+  creditsResetAt     DateTime?    @map("credits_reset_at")
   stripeCustomerId   String?      @map("stripe_customer_id") // encrypted at app level
   stripeCustomerHash String?      @map("stripe_customer_hash")
   emailVerifiedAt    DateTime?    @map("email_verified_at")

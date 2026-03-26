@@ -7,21 +7,26 @@ interface UpsellBannerProps {
 
 export function UpsellBanner({ maskedCount, planSlug }: UpsellBannerProps) {
   if (planSlug !== "free" && planSlug !== "starter") return null;
+  if (maskedCount === 0) return null;
+
+  const isFree = planSlug === "free";
+
+  const heading = isFree
+    ? `${maskedCount} results are hidden on the Free plan`
+    : `${maskedCount} results are locked on your current plan`;
+
+  const body = isFree
+    ? "Upgrade to Starter to unlock all Distribution, Guest Post, and Reddit results. Upgrade to Pro to unlock Social Influencers and Investors too."
+    : "Upgrade to Pro to unlock Social Influencer and Investor & Fund sections with up to 20 results each.";
+
+  const ctaLabel = isFree ? "Upgrade to Starter" : "Upgrade to Pro";
 
   return (
     <div className="bg-gradient-to-r from-navy to-blue rounded-xl p-5 text-white">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="font-semibold text-base mb-1">
-            {maskedCount} more sites are hidden
-          </p>
-          <p className="text-blue/90 text-sm">
-            Upgrade to unlock all results including{" "}
-            {planSlug === "free"
-              ? `${maskedCount} additional sites`
-              : "unlimited curations"}
-            .
-          </p>
+          <p className="font-semibold text-base mb-1">{heading}</p>
+          <p className="text-white/75 text-sm">{body}</p>
         </div>
         <Link
           href="/dashboard/billing"
@@ -32,7 +37,7 @@ export function UpsellBanner({ maskedCount, planSlug }: UpsellBannerProps) {
             flexShrink: 0,
           }}
         >
-          Unlock All
+          {ctaLabel}
         </Link>
       </div>
     </div>

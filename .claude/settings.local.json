@@ -60,10 +60,10 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:api.github.com)",
-      "Bash(ls \"c:\\\\Users\\\\shubi\\\\OneDrive\\\\Desktop\\\\PublishRoad\\\\src\"\" 2>/dev/null && echo \"---\" && ls \"c:UsersshubiOneDriveDesktopPublishRoadsrcmiddleware.ts\" 2>/dev/null || echo \"NO middleware.ts \")",
-      "Bash(find /c/Users/shubi/OneDrive/Desktop/PublishRoad/src/app/api/admin -type f -name *.ts)",
+      "Bash(ls \"c:\\\\Users\\\\shubi\\\\OneDrive\\\\Desktop\\\\PublishRoad\\\\src\" 2>/dev/null && echo \"---\" && ls \"c:\\\\Users\\\\shubi\\\\OneDrive\\\\Desktop\\\\PublishRoad\\\\src\\\\middleware.ts\" 2>/dev/null || echo \"NO middleware.ts\")",
+      "Bash(find /c/Users/shubi/OneDrive/Desktop/PublishRoad/src/app/api/admin -type f -name '*.ts')",
       "Bash(find \"c:\\\\Users\\\\shubi\\\\OneDrive\\\\Desktop\\\\PublishRoad\\\\src\\\\app\" -type d -name \"*\\(admin\\)*\")",
-      "Bash(ls -la \"c:\\\\Users\\\\shubi\\\\OneDrive\\\\Desktop\\\\PublishRoad\\\\src\\\\app\"\" | grep -E \"^\\\\\\( \")",
+      "Bash(ls -la \"c:\\\\Users\\\\shubi\\\\OneDrive\\\\Desktop\\\\PublishRoad\\\\src\\\\app\" | grep -E \"\\\\(\")",
       "Bash(ls -la '/c/Users/shubi/OneDrive/Desktop/PublishRoad/src/app/\\(admin\\)/admin/tags/')",
       "Bash(cat '/c/Users/shubi/OneDrive/Desktop/PublishRoad/src/app/\\(admin\\)/admin/tags/page.tsx')"
     ],
