@@ -545,17 +545,20 @@ async function processCuration(
 
   if (allResults.length > 0) {
     await db.curationResult.createMany({
-      data: allResults.map((r) => ({
-        curationId,
-        websiteId: r.websiteId ?? null,
-        influencerId: r.influencerId ?? null,
-        redditChannelId: r.redditChannelId ?? null,
-        fundId: r.fundId ?? null,
-        matchScore: r.matchScore,
-        matchReason: r.matchReason,
-        section: r.section,
-        rank: r.rank,
-      })),
+      data: allResults.map((r) => {
+        const row = r as Record<string, unknown>;
+        return {
+          curationId,
+          websiteId: (row.websiteId as string | undefined) ?? null,
+          influencerId: (row.influencerId as string | undefined) ?? null,
+          redditChannelId: (row.redditChannelId as string | undefined) ?? null,
+          fundId: (row.fundId as string | undefined) ?? null,
+          matchScore: r.matchScore,
+          matchReason: r.matchReason,
+          section: r.section,
+          rank: r.rank,
+        };
+      }),
     });
   }
 
