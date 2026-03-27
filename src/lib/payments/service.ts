@@ -185,10 +185,15 @@ export async function createCheckoutForActiveProvider(args: {
       cancelUrl: args.cancelUrl,
     });
 
-    // Store { planId, userId } for 30 minutes — long enough for any checkout
+    // Store { planId, userId, successUrl, cancelUrl } for 30 minutes
     await redis.set(
       `paypal:order:${orderId}`,
-      JSON.stringify({ planId: args.planId, userId: args.userId }),
+      JSON.stringify({
+        planId: args.planId,
+        userId: args.userId,
+        successUrl: args.successUrl,
+        cancelUrl: args.cancelUrl,
+      }),
       { ex: 1800 }
     );
 

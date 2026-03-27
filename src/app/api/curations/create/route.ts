@@ -32,7 +32,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { productUrl, countryId, categoryId, keywords, description } = parsed.data;
+  const { productUrl, countryId: rawCountryId, categoryId, keywords, description } = parsed.data;
+  const countryId = rawCountryId === "worldwide" ? null : rawCountryId;
 
   // Check credits with SELECT FOR UPDATE (handled in engine)
   try {

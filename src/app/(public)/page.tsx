@@ -1,7 +1,9 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { PRICING_PLANS } from "@/lib/pricing-plans";
+import { PRICING_PLANS, dbPlanToDisplay } from "@/lib/pricing-plans";
 import { PublicPricingCard } from "@/components/public/PublicPricingCard";
+import { db } from "@/lib/db";
+import { getCachedWithLock, CacheKeys, CacheTTL } from "@/lib/cache";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://publishroad.com";
 
@@ -60,7 +62,18 @@ const softwareSchema = {
   ],
 };
 
-export default function LandingPage() {
+async function getPlans() {
+  try {
+    return await getCachedWithLock(CacheKeys.plans, CacheTTL.PLAN, async () =>
+      db.planConfig.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } })
+    );
+  } catch {
+    return [];
+  }
+}
+
+export default async function LandingPage() {
+  const dbPlans = await getPlans();
   return (
     <div style={{ fontFamily: "var(--font-sans)" }}>
       <script
@@ -388,7 +401,7 @@ export default function LandingPage() {
 
           {/* Pricing cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5" style={{ maxWidth: "1100px", margin: "0 auto" }}>
-            {PRICING_PLANS.map((plan) => (
+            {(dbPlans.length > 0 ? dbPlans.map(dbPlanToDisplay) : PRICING_PLANS).map((plan) => (
               <PublicPricingCard key={plan.slug} plan={plan} />
             ))}
           </div>

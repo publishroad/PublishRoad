@@ -48,7 +48,7 @@ export function PublicPricingCard({
       const res = await fetch("/api/payments/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId }),
+        body: JSON.stringify({ planId, successPath: "/dashboard", cancelPath: "/pricing" }),
       });
       const payload = await res.json().catch(() => null);
       if (!res.ok || !payload?.url) {

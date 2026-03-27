@@ -8,7 +8,8 @@ export async function GET() {
     select: { id: true, name: true, slug: true, flagEmoji: true },
   });
 
-  const response = NextResponse.json(countries);
+  const worldwide = { id: "worldwide", name: "Worldwide", slug: "worldwide", flagEmoji: "🌍" };
+  const response = NextResponse.json([worldwide, ...countries]);
   // Static lookup data: long-lived browser/proxy cache.
   response.headers.set(
     "Cache-Control",
