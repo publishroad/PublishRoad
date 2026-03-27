@@ -7,7 +7,7 @@ config({ path: ".env" });
 /**
  * Prisma v7 configuration.
  *
- * DATABASE_URL  — pooled connection (PgBouncer) for runtime queries (used in db.ts via PrismaNeon adapter)
+ * DATABASE_URL  — pooled connection (PgBouncer) for runtime queries (used in db.ts via PrismaPg adapter)
  * DIRECT_URL    — direct connection for migrations (bypasses PgBouncer)
  */
 export default defineConfig({
