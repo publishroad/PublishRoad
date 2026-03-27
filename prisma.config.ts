@@ -11,6 +11,18 @@ config({ path: ".env" });
  * DIRECT_URL    — direct connection for migrations (bypasses PgBouncer)
  */
 export default defineConfig({
-  earlyAccess: true,
   schema: "prisma/schema.prisma",
+  migrate: {
+    async adapter(env) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { Pool } = require("pg");
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { PrismaPg } = require("@prisma/adapter-pg");
+      const pool = new Pool({
+        connectionString: env.DIRECT_URL ?? env.DATABASE_URL ?? "",
+        max: 2,
+      });
+      return new PrismaPg(pool);
+    },
+  },
 });
