@@ -3,6 +3,7 @@ import { redis } from "@/lib/redis";
 import { createCheckoutSession, createPortalSession } from "@/lib/stripe";
 import { decryptField } from "@/lib/server-utils";
 import { getPayPalAccessToken, createPayPalOrder } from "@/lib/payments/paypal";
+import { createRazorpayOrder } from "@/lib/payments/razorpay";
 
 export type ActivePaymentProvider = "stripe" | "razorpay" | "paypal";
 
@@ -27,8 +28,6 @@ type PaymentConfigRow = {
 };
 
 export async function getPaymentConfigRow(): Promise<PaymentConfigRow | null> {
-  // Only return the row that is explicitly activated — no fallback.
-  // If no gateway is active, payments are disabled.
   const rows = await db.$queryRaw<PaymentConfigRow[]>`
     SELECT provider, secret_key, webhook_secret
     FROM payment_gateway_config
@@ -36,6 +35,13 @@ export async function getPaymentConfigRow(): Promise<PaymentConfigRow | null> {
     LIMIT 1
   `;
   return rows[0] ?? null;
+}
+
+export async function getActivePaymentProvidersList(): Promise<ActivePaymentProvider[]> {
+  const rows = await db.$queryRaw<Array<{ provider: ActivePaymentProvider }>>`
+    SELECT provider FROM payment_gateway_config WHERE is_active = true
+  `;
+  return rows.map((r) => r.provider);
 }
 
 function getDecryptedValueOrThrow(value: string | null, missingMessage: string, invalidMessage: string): string {
@@ -55,18 +61,16 @@ function getDecryptedValueOrThrow(value: string | null, missingMessage: string, 
 }
 
 async function getStripeSecretKeyForRuntime(): Promise<string> {
-  const config = await getPaymentConfigRow();
-
+  const rows = await db.$queryRaw<PaymentConfigRow[]>`
+    SELECT provider, secret_key, webhook_secret
+    FROM payment_gateway_config
+    WHERE is_active = true AND id = 'stripe'
+    LIMIT 1
+  `;
+  const config = rows[0] ?? null;
   if (!config) {
-    throw new PaymentConfigurationError(
-      "No payment gateway is active. Go to Admin → Settings → Payment and activate one."
-    );
+    throw new PaymentConfigurationError("Stripe is not active. Go to Admin → Settings → Payment and activate it.");
   }
-
-  if (config.provider !== "stripe") {
-    throw new UnsupportedPaymentProviderError(config.provider);
-  }
-
   return getDecryptedValueOrThrow(
     config.secret_key,
     "Stripe secret key is not configured in Payment Settings.",
@@ -121,12 +125,14 @@ export async function getActivePaymentProvider(): Promise<ActivePaymentProvider 
 }
 
 export async function getStripeWebhookSecret(): Promise<string | null> {
-  const config = await getPaymentConfigRow();
-
-  // No active gateway or active gateway is not Stripe
-  if (!config || config.provider !== "stripe") {
-    return null;
-  }
+  const rows = await db.$queryRaw<PaymentConfigRow[]>`
+    SELECT provider, secret_key, webhook_secret
+    FROM payment_gateway_config
+    WHERE is_active = true AND provider = 'stripe'
+    LIMIT 1
+  `;
+  const config = rows[0] ?? null;
+  if (!config) return null;
 
   return getDecryptedValueOrThrow(
     config.webhook_secret,
@@ -135,27 +141,80 @@ export async function getStripeWebhookSecret(): Promise<string | null> {
   );
 }
 
+export type CheckoutResult =
+  | { type: "redirect"; url: string }
+  | { type: "razorpay"; orderId: string; amount: number; currency: string; keyId: string; planName: string; successUrl: string; cancelUrl: string };
+
+async function getRazorpayCredentials(): Promise<{ keyId: string; keySecret: string; currency: string }> {
+  const rows = await db.$queryRaw<Array<{
+    secret_key: string | null;
+    public_key: string | null;
+    is_active: boolean;
+    additional_config: unknown;
+  }>>`
+    SELECT secret_key, public_key, is_active, additional_config
+    FROM payment_gateway_config
+    WHERE id = 'razorpay'
+    LIMIT 1
+  `;
+  const row = rows[0];
+
+  if (!row) throw new PaymentConfigurationError("Razorpay credentials are not configured in Payment Settings.");
+  if (!row.is_active) throw new PaymentConfigurationError("Razorpay is not the active payment gateway. Activate it in Admin → Settings → Payment.");
+
+  const keyId = row.public_key?.trim();
+  if (!keyId) throw new PaymentConfigurationError("Razorpay Key ID (Public Key) is not configured in Payment Settings.");
+
+  const keySecret = getDecryptedValueOrThrow(
+    row.secret_key,
+    "Razorpay Key Secret is not configured in Payment Settings.",
+    "Razorpay Key Secret in Payment Settings is invalid."
+  );
+
+  const additionalConfig = (typeof row.additional_config === "object" && row.additional_config !== null)
+    ? row.additional_config as Record<string, unknown>
+    : {};
+  const currency = typeof additionalConfig.currency === "string" ? additionalConfig.currency.toUpperCase() : "INR";
+
+  return { keyId, keySecret, currency };
+}
+
 export async function createCheckoutForActiveProvider(args: {
   userId: string;
   planId: string;
   stripeCustomerId?: string | null;
   successUrl: string;
   cancelUrl: string;
-}): Promise<string> {
-  const config = await getPaymentConfigRow();
+  provider?: ActivePaymentProvider; // if omitted and multiple active, caller should pick
+}): Promise<CheckoutResult> {
+  let provider: ActivePaymentProvider;
 
-  if (!config) {
-    throw new PaymentConfigurationError(
-      "No payment gateway is active. Go to Admin → Settings → Payment and activate one."
-    );
+  if (args.provider) {
+    // Verify the requested provider is actually active
+    const rows = await db.$queryRaw<Array<{ provider: ActivePaymentProvider }>>`
+      SELECT provider FROM payment_gateway_config
+      WHERE is_active = true AND id = ${args.provider}
+      LIMIT 1
+    `;
+    if (!rows[0]) {
+      throw new PaymentConfigurationError(`Payment provider "${args.provider}" is not active.`);
+    }
+    provider = rows[0].provider;
+  } else {
+    const config = await getPaymentConfigRow();
+    if (!config) {
+      throw new PaymentConfigurationError(
+        "No payment gateway is active. Go to Admin → Settings → Payment and activate one."
+      );
+    }
+    provider = config.provider;
   }
-
-  const provider = config.provider;
 
   // ── Stripe ────────────────────────────────────────────────────────────────
   if (provider === "stripe") {
     const stripeSecretKey = await getStripeSecretKeyForRuntime();
-    return createCheckoutSession({ ...args, stripeSecretKey });
+    const url = await createCheckoutSession({ ...args, stripeSecretKey });
+    return { type: "redirect", url };
   }
 
   // ── PayPal ────────────────────────────────────────────────────────────────
@@ -171,9 +230,6 @@ export async function createCheckoutForActiveProvider(args: {
     const amountUsd = (plan.priceCents / 100).toFixed(2);
     const accessToken = await getPayPalAccessToken(clientId, secret, mode);
 
-    // Capture URL — PayPal redirects here after the user approves payment.
-    // We store planId + userId in Redis (keyed by orderId) so the capture
-    // endpoint doesn't need to trust user-supplied URL parameters.
     const captureBase = `${process.env.NEXT_PUBLIC_APP_URL}/api/payments/paypal-capture`;
 
     const { orderId, approveUrl } = await createPayPalOrder({
@@ -185,7 +241,6 @@ export async function createCheckoutForActiveProvider(args: {
       cancelUrl: args.cancelUrl,
     });
 
-    // Store { planId, userId, successUrl, cancelUrl } for 30 minutes
     await redis.set(
       `paypal:order:${orderId}`,
       JSON.stringify({
@@ -197,7 +252,40 @@ export async function createCheckoutForActiveProvider(args: {
       { ex: 1800 }
     );
 
-    return approveUrl;
+    return { type: "redirect", url: approveUrl };
+  }
+
+  // ── Razorpay ──────────────────────────────────────────────────────────────
+  if (provider === "razorpay") {
+    const { keyId, keySecret, currency } = await getRazorpayCredentials();
+
+    const plan = await db.planConfig.findUnique({
+      where: { id: args.planId },
+      select: { priceCents: true, name: true },
+    });
+    if (!plan) throw new PaymentConfigurationError("Plan not found.");
+
+    const { orderId, amount } = await createRazorpayOrder({
+      keyId,
+      keySecret,
+      amountSmallestUnit: plan.priceCents, // cents = paise for INR; same unit
+      currency,
+      receipt: `plan_${args.planId.slice(-8)}_${Date.now()}`,
+    });
+
+    // Store planId + userId for capture verification
+    await redis.set(
+      `razorpay:order:${orderId}`,
+      JSON.stringify({
+        planId: args.planId,
+        userId: args.userId,
+        successUrl: args.successUrl,
+        cancelUrl: args.cancelUrl,
+      }),
+      { ex: 1800 }
+    );
+
+    return { type: "razorpay", orderId, amount, currency, keyId, planName: plan.name, successUrl: args.successUrl, cancelUrl: args.cancelUrl };
   }
 
   throw new UnsupportedPaymentProviderError(provider);

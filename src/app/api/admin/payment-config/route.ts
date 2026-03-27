@@ -126,32 +126,26 @@ export async function PUT(req: NextRequest) {
   return NextResponse.json({ success: true });
 }
 
-// PATCH — activate a provider (deactivates all others)
+// PATCH — toggle a single provider's active state (others unaffected)
 export async function PATCH(req: NextRequest) {
   const session = await requireAdmin();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json().catch(() => null);
   const provider = body?.provider as string | undefined;
-  if (!provider || !["stripe", "paypal", "razorpay"].includes(provider)) {
-    return NextResponse.json({ error: "Invalid provider" }, { status: 422 });
+  const active = body?.active as boolean | undefined;
+  if (!provider || !["stripe", "paypal", "razorpay"].includes(provider) || typeof active !== "boolean") {
+    return NextResponse.json({ error: "Invalid request" }, { status: 422 });
   }
 
   try {
-    // Deactivate all providers first, then activate the selected one
     await db.$executeRaw`
-      UPDATE payment_gateway_config SET is_active = false
-    `;
-    await db.$executeRaw`
-      UPDATE payment_gateway_config SET is_active = true, updated_at = NOW()
+      UPDATE payment_gateway_config SET is_active = ${active}, updated_at = NOW()
       WHERE id = ${provider}
     `;
   } catch (error) {
     if (isMissingRelationError(error, "payment_gateway_config")) {
-      return NextResponse.json(
-        { error: "Payment settings migration is missing." },
-        { status: 503 }
-      );
+      return NextResponse.json({ error: "Payment settings migration is missing." }, { status: 503 });
     }
     throw error;
   }

@@ -4,12 +4,16 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { PRICING_PLANS, dbPlanToDisplay, type PlanDisplay } from "@/lib/pricing-plans";
+import type { ActivePaymentProvider } from "@/lib/payments/service";
+import { PaymentMethodPicker } from "@/components/public/PaymentMethodPicker";
 
 export default function OnboardingPlanPage() {
   const router = useRouter();
   const [plans, setPlans] = useState<PlanDisplay[]>(PRICING_PLANS);
   const [planIds, setPlanIds] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState<string | null>(null);
+  const [providerPicker, setProviderPicker] = useState<ActivePaymentProvider[] | null>(null);
+  const [pendingPlanId, setPendingPlanId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/lookup/plans").then(async (r) => {
@@ -28,32 +32,35 @@ export default function OnboardingPlanPage() {
   async function selectPlan(slug: string) {
     if (loading) return;
     setLoading(slug);
-
-    if (slug === "free") {
-      router.push("/onboarding/curation");
-      return;
-    }
-
+    if (slug === "free") { router.push("/onboarding/curation"); return; }
     const planId = planIds[slug];
-    if (!planId) {
-      toast.error("Plan not found. Please refresh and try again.");
-      setLoading(null);
-      return;
-    }
+    if (!planId) { toast.error("Plan not found. Please refresh and try again."); setLoading(null); return; }
+    await startCheckout(planId);
+  }
 
+  async function startCheckout(planId: string, provider?: ActivePaymentProvider) {
     try {
       const res = await fetch("/api/payments/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId }),
+        body: JSON.stringify({ planId, provider }),
       });
       const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error ?? "Failed to start checkout");
+      if (!res.ok) { toast.error(data.error ?? "Failed to start checkout"); setLoading(null); return; }
+      if (data.selectProvider) {
+        setPendingPlanId(planId);
+        setProviderPicker(data.selectProvider as ActivePaymentProvider[]);
         setLoading(null);
         return;
       }
-      window.location.href = data.url;
+      if (data.url) { window.location.href = data.url; return; }
+      if (data.razorpay) {
+        const { openRazorpayCheckout } = await import("@/lib/razorpay-checkout");
+        await openRazorpayCheckout(data.razorpay).catch(() => setLoading(null));
+        return;
+      }
+      toast.error("Unexpected checkout response. Please try again.");
+      setLoading(null);
     } catch {
       toast.error("Something went wrong. Please try again.");
       setLoading(null);
@@ -61,6 +68,14 @@ export default function OnboardingPlanPage() {
   }
 
   return (
+    <>
+    {providerPicker && pendingPlanId && (
+      <PaymentMethodPicker
+        providers={providerPicker}
+        onSelect={(p) => { setProviderPicker(null); startCheckout(pendingPlanId, p); }}
+        onCancel={() => { setProviderPicker(null); setPendingPlanId(null); }}
+      />
+    )}
     <div className="px-4 pb-20">
       {/* Step indicator */}
       <div className="flex items-center justify-center gap-2 mb-12 mt-4">
@@ -215,5 +230,6 @@ export default function OnboardingPlanPage() {
         No refunds on paid plans. Try free first to verify quality.
       </p>
     </div>
+    </>
   );
 }
