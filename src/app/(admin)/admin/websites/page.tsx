@@ -30,6 +30,7 @@ export default async function AdminWebsitesPage({ searchParams }: { searchParams
     db.website.count({ where }),
   ]);
   const totalPages = Math.ceil(total / PAGE_SIZE);
+  type WebsiteRow = (typeof websites)[number];
 
   return (
     <>
@@ -78,7 +79,7 @@ export default async function AdminWebsitesPage({ searchParams }: { searchParams
               <tbody className="divide-y divide-gray-50">
                 {websites.length === 0 ? (
                   <tr><td colSpan={9} className="text-center py-16 text-gray-400 text-sm">No websites found.</td></tr>
-                ) : websites.map((site) => (
+                ) : websites.map((site: WebsiteRow) => (
                   <tr key={site.id} className="hover:bg-gray-50/60 transition-colors">
                     <td className="px-5 py-4">
                       <p className="text-sm font-medium text-gray-900">{site.name}</p>

@@ -8,6 +8,7 @@ import { AppHeader } from "@/components/dashboard/AppHeader";
 export default async function AdminLeadsPage() {
   const leads = await db.serviceLead.findMany({ orderBy: { createdAt: "desc" }, take: 100 });
   const decrypted = leads.map((l) => ({ ...l, phone: l.phone ? decryptField(l.phone) : null }));
+  type LeadRow = (typeof decrypted)[number];
 
   const statusStyle: Record<string, string> = {
     new: "bg-[#EEF2FF] text-[#465FFF]",
@@ -34,7 +35,7 @@ export default async function AdminLeadsPage() {
               <tbody className="divide-y divide-gray-50">
                 {decrypted.length === 0 ? (
                   <tr><td colSpan={5} className="text-center py-16 text-gray-400 text-sm">No leads yet.</td></tr>
-                ) : decrypted.map((lead) => (
+                ) : decrypted.map((lead: LeadRow) => (
                   <tr key={lead.id} className="hover:bg-gray-50/60 transition-colors">
                     <td className="px-5 py-4">
                       <p className="text-sm font-medium text-gray-900">{lead.name}</p>

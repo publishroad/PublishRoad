@@ -36,6 +36,7 @@ export default async function AdminRedditChannelsPage({ searchParams }: { search
     db.redditChannel.count({ where }),
   ]);
   const totalPages = Math.ceil(total / PAGE_SIZE);
+  type ChannelRow = (typeof channels)[number];
 
   return (
     <>
@@ -100,7 +101,7 @@ export default async function AdminRedditChannelsPage({ searchParams }: { search
                   <tr>
                     <td colSpan={7} className="text-center py-16 text-gray-400 text-sm">No subreddits found.</td>
                   </tr>
-                ) : channels.map((ch) => (
+                ) : channels.map((ch: ChannelRow) => (
                   <tr key={ch.id} className="hover:bg-gray-50/60 transition-colors">
                     <td className="px-5 py-4">
                       <p className="text-sm font-medium text-gray-900">{ch.name}</p>

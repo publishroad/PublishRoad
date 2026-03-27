@@ -40,6 +40,7 @@ export default async function AdminFundsPage({ searchParams }: { searchParams: P
     db.fund.count({ where }),
   ]);
   const totalPages = Math.ceil(total / PAGE_SIZE);
+  type FundRow = (typeof funds)[number];
 
   return (
     <>
@@ -94,7 +95,7 @@ export default async function AdminFundsPage({ searchParams }: { searchParams: P
                   <tr>
                     <td colSpan={7} className="text-center py-16 text-gray-400 text-sm">No funds found.</td>
                   </tr>
-                ) : funds.map((fund) => (
+                ) : funds.map((fund: FundRow) => (
                   <tr key={fund.id} className="hover:bg-gray-50/60 transition-colors">
                     <td className="px-5 py-4">
                       {fund.logoUrl ? (
