@@ -23,10 +23,12 @@ function PostHogPageView() {
 }
 
 if (typeof window !== "undefined") {
-  const posthogKey = process.env.NEXT_PUBLIC_POSTHOG_KEY;
+  const posthogKey = process.env.NEXT_PUBLIC_POSTHOG_KEY?.trim();
+  const posthogHost = process.env.NEXT_PUBLIC_POSTHOG_HOST?.trim() || "https://us.i.posthog.com";
+
   if (posthogKey) {
     posthog.init(posthogKey, {
-      api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST,
+      api_host: posthogHost,
       capture_pageview: false, // handled manually via PostHogPageView
       capture_pageleave: true,
     });

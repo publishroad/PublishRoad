@@ -577,7 +577,7 @@ const trustBadges = [
 const stats = [
   { value: "10K+", label: "Sites in our database" },
   { value: "500+", label: "Products launched" },
-  { value: "3", label: "Result categories" },
+  { value: "6", label: "Result categories" },
   { value: "< 2min", label: "Average curation time" },
 ];
 

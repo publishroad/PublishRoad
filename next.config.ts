@@ -2,8 +2,8 @@ import type { NextConfig } from "next";
 
 const isDev = process.env.NODE_ENV !== "production";
 const scriptSrc = isDev
-  ? "'self' https://js.stripe.com 'unsafe-inline' 'unsafe-eval'"
-  : "'self' https://js.stripe.com 'unsafe-inline'";
+  ? "'self' https://js.stripe.com https://us-assets.i.posthog.com https://eu-assets.i.posthog.com https://va.vercel-scripts.com 'unsafe-inline' 'unsafe-eval'"
+  : "'self' https://js.stripe.com https://us-assets.i.posthog.com https://eu-assets.i.posthog.com https://va.vercel-scripts.com 'unsafe-inline'";
 
 const ContentSecurityPolicy = `
   default-src 'self';
@@ -12,7 +12,7 @@ const ContentSecurityPolicy = `
   img-src 'self' https://images.publishroad.com https://lh3.googleusercontent.com data: blob:;
   style-src 'self' 'unsafe-inline';
   font-src 'self';
-  connect-src 'self' https://api.stripe.com https://vitals.vercel-insights.com;
+  connect-src 'self' https://api.stripe.com https://vitals.vercel-insights.com https://us.i.posthog.com https://us-assets.i.posthog.com https://eu.i.posthog.com https://eu-assets.i.posthog.com;
   object-src 'none';
   base-uri 'self';
   form-action 'self';
