@@ -13,29 +13,35 @@ export async function GET(req: NextRequest) {
   const orderId = searchParams.get("token"); // PayPal calls this "token"
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
-  const cancelUrl = `${appUrl}/onboarding/plan`;
-  const successUrl = `${appUrl}/onboarding/curation?paid=1`;
+  const defaultCancelUrl = `${appUrl}/onboarding/plan`;
+  const defaultSuccessUrl = `${appUrl}/onboarding/curation?paid=1`;
 
   if (!orderId) {
-    return NextResponse.redirect(`${cancelUrl}?error=missing_token`);
+    return NextResponse.redirect(`${defaultCancelUrl}?error=missing_token`);
   }
 
   // Look up the pending order metadata we stored in Redis at order creation
   const raw = await redis.get<string>(`paypal:order:${orderId}`);
   if (!raw) {
     // Token expired or unknown — don't activate any plan
-    return NextResponse.redirect(`${cancelUrl}?error=order_expired`);
+    return NextResponse.redirect(`${defaultCancelUrl}?error=order_expired`);
   }
 
   let planId: string;
   let userId: string;
+  let successUrl: string;
+  let cancelUrl: string;
   try {
-    const meta = JSON.parse(typeof raw === "string" ? raw : JSON.stringify(raw)) as { planId: string; userId: string };
+    const meta = JSON.parse(typeof raw === "string" ? raw : JSON.stringify(raw)) as {
+      planId: string; userId: string; successUrl?: string; cancelUrl?: string;
+    };
     planId = meta.planId;
     userId = meta.userId;
+    successUrl = meta.successUrl ?? defaultSuccessUrl;
+    cancelUrl = meta.cancelUrl ?? defaultCancelUrl;
     if (!planId || !userId) throw new Error("missing fields");
   } catch {
-    return NextResponse.redirect(`${cancelUrl}?error=invalid_order`);
+    return NextResponse.redirect(`${defaultCancelUrl}?error=invalid_order`);
   }
 
   try {
@@ -58,25 +64,23 @@ export async function GET(req: NextRequest) {
     const mode = typeof additionalConfig.mode === "string" ? additionalConfig.mode : "live";
 
     const accessToken = await getPayPalAccessToken(clientId, secret, mode);
+
+    // ── CRITICAL: capture money + activate plan ────────────────────────────
+    // Any failure here redirects to cancel (payment not taken or plan not active)
     const { amountCents, currency } = await capturePayPalOrder({ accessToken, mode, orderId });
 
-    // Activate plan for user
     const plan = await db.planConfig.findUnique({
       where: { id: planId },
       select: { credits: true },
     });
     if (!plan) {
+      // Captured but plan missing — log for manual reconciliation
+      console.error(`PayPal order ${orderId} captured but planId ${planId} not found. userId=${userId}`);
       return NextResponse.redirect(`${cancelUrl}?error=plan_not_found`);
     }
 
     await db.payment.create({
-      data: {
-        userId,
-        planId,
-        amountCents,
-        currency,
-        status: "completed",
-      },
+      data: { userId, planId, amountCents, currency, status: "completed" },
     });
 
     await db.user.update({
@@ -84,19 +88,29 @@ export async function GET(req: NextRequest) {
       data: { planId, creditsRemaining: plan.credits },
     });
 
-    await db.notification.create({
-      data: {
-        userId,
-        type: "payment_success",
-        title: "Payment successful",
-        message: "Your plan has been upgraded via PayPal. Credits have been added to your account.",
-      },
-    });
-
-    await invalidateUserProfile(userId);
-
-    // Clean up the Redis key
+    // Clean up Redis key now that plan is activated
     await redis.del(`paypal:order:${orderId}`);
+
+    // ── NON-CRITICAL: notification + cache invalidation ───────────────────
+    // Failures here must NOT redirect to cancel — payment is already done
+    try {
+      await db.notification.create({
+        data: {
+          userId,
+          type: "payment_success",
+          title: "Payment successful",
+          message: "Your plan has been upgraded via PayPal. Credits have been added to your account.",
+        },
+      });
+    } catch (e) {
+      console.error("PayPal capture: notification create failed (non-fatal):", e);
+    }
+
+    try {
+      await invalidateUserProfile(userId);
+    } catch (e) {
+      console.error("PayPal capture: cache invalidation failed (non-fatal):", e);
+    }
 
     return NextResponse.redirect(successUrl);
   } catch (err) {

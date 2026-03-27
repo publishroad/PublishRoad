@@ -49,7 +49,7 @@ export default function OnboardingProcessingPage() {
         if (event === "complete") {
           setDone(true);
           es.close();
-          setTimeout(() => router.push("/dashboard"), 1800);
+          setTimeout(() => router.push(`/dashboard/curations/${id}`), 1800);
         }
       } catch {
         // ignore parse errors
@@ -196,7 +196,7 @@ export default function OnboardingProcessingPage() {
             </h2>
             <p className="text-slate-500 text-sm font-light">
               {done
-                ? "Redirecting you to your dashboard..."
+                ? "Redirecting you to your results..."
                 : "This usually takes 10–30 seconds. Don't close this tab."}
             </p>
           </div>

@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { getCachedWithLock, CacheKeys, CacheTTL } from "@/lib/cache";
 import { PublicPricingCard } from "@/components/public/PublicPricingCard";
-import { PRICING_PLANS } from "@/lib/pricing-plans";
+import { PRICING_PLANS, dbPlanToDisplay } from "@/lib/pricing-plans";
 import { auth } from "@/lib/auth";
 import Link from "next/link";
 import type { Metadata } from "next";
@@ -78,13 +78,14 @@ export default async function PricingPage() {
       <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-20">
         {/* ─── Pricing Cards ─── */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto mb-20">
-          {PRICING_PLANS.map((displayPlan) => {
-            const dbPlan = plans.find((p) => p.slug === displayPlan.slug);
+          {(plans.length > 0 ? plans : PRICING_PLANS).map((p) => {
+            const displayPlan = "priceCents" in p ? dbPlanToDisplay(p) : p;
+            const planId = "id" in p ? (p as { id: string }).id : undefined;
             return (
               <PublicPricingCard
                 key={displayPlan.slug}
                 plan={displayPlan}
-                planId={dbPlan?.id}
+                planId={planId}
                 currentPlanSlug={currentPlanSlug}
                 isAuthenticated={!!session?.user?.id}
               />

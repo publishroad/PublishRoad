@@ -37,7 +37,15 @@ export default function SignupPage() {
         body: JSON.stringify(data),
       });
 
-      const result = await response.json();
+      let result: { error?: string } = {};
+      const raw = await response.text();
+      if (raw) {
+        try {
+          result = JSON.parse(raw) as { error?: string };
+        } catch {
+          result = {};
+        }
+      }
 
       if (!response.ok) {
         toast.error(result.error ?? "Failed to create account");
@@ -52,6 +60,8 @@ export default function SignupPage() {
 
       toast.success("Account created! Let's get you set up.");
       router.push("/onboarding/plan");
+    } catch {
+      toast.error("Signup failed. Please try again.");
     } finally {
       setIsLoading(false);
     }

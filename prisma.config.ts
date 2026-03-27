@@ -12,6 +12,10 @@ config({ path: ".env" });
  */
 export default defineConfig({
   schema: "prisma/schema.prisma",
+  datasource: {
+    name: "db",
+    url: process.env.DATABASE_URL || process.env.DIRECT_URL || "",
+  },
   migrate: {
     async adapter(env) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports

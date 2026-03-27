@@ -3,77 +3,41 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { formatCurrency } from "@/lib/utils";
-
-interface Plan {
-  id: string;
-  name: string;
-  slug: string;
-  priceCents: number;
-  billingType: string;
-  credits: number;
-  features: string[];
-}
-
-const FALLBACK_PLANS: Plan[] = [
-  {
-    id: "plan_free",
-    name: "Free",
-    slug: "free",
-    priceCents: 0,
-    billingType: "free",
-    credits: 1,
-    features: ["1 curation", "5 results shown", "All 3 sections", "Basic filtering"],
-  },
-  {
-    id: "plan_starter",
-    name: "Starter",
-    slug: "starter",
-    priceCents: 900,
-    billingType: "one_time",
-    credits: 1,
-    features: ["1 full curation", "50+ results", "All 3 sections", "Export results"],
-  },
-  {
-    id: "plan_pro",
-    name: "Pro",
-    slug: "pro",
-    priceCents: 3900,
-    billingType: "monthly",
-    credits: 10,
-    features: ["10 curations/month", "50+ results each", "Priority AI matching", "Export results", "Email notifications"],
-  },
-  {
-    id: "plan_lifetime",
-    name: "Lifetime",
-    slug: "lifetime",
-    priceCents: 59900,
-    billingType: "one_time",
-    credits: -1,
-    features: ["Unlimited curations", "50+ results each", "Priority AI matching", "All future features", "Priority support"],
-  },
-];
+import { PRICING_PLANS, dbPlanToDisplay, type PlanDisplay } from "@/lib/pricing-plans";
 
 export default function OnboardingPlanPage() {
   const router = useRouter();
-  const [plans, setPlans] = useState<Plan[]>(FALLBACK_PLANS);
+  const [plans, setPlans] = useState<PlanDisplay[]>(PRICING_PLANS);
+  const [planIds, setPlanIds] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/lookup/plans", { cache: "force-cache" }).then(async (r) => {
+    fetch("/api/lookup/plans").then(async (r) => {
       if (r.ok) {
         const data = await r.json();
-        if (Array.isArray(data) && data.length > 0) setPlans(data);
+        if (Array.isArray(data) && data.length > 0) {
+          setPlans(data.map(dbPlanToDisplay));
+          const map: Record<string, string> = {};
+          (data as { id: string; slug: string }[]).forEach((p) => { map[p.slug] = p.id; });
+          setPlanIds(map);
+        }
       }
     }).catch(() => {});
   }, []);
 
-  async function selectPlan(plan: Plan) {
+  async function selectPlan(slug: string) {
     if (loading) return;
-    setLoading(plan.id);
+    setLoading(slug);
 
-    if (plan.slug === "free" || plan.priceCents === 0) {
+    if (slug === "free") {
       router.push("/onboarding/curation");
+      return;
+    }
+
+    const planId = planIds[slug];
+    if (!planId) {
+      toast.error("Plan not found. Please refresh and try again.");
+      setLoading(null);
       return;
     }
 
@@ -81,7 +45,7 @@ export default function OnboardingPlanPage() {
       const res = await fetch("/api/payments/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId: plan.id }),
+        body: JSON.stringify({ planId }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -102,9 +66,7 @@ export default function OnboardingPlanPage() {
       <div className="flex items-center justify-center gap-2 mb-12 mt-4">
         {["Plan", "Details", "Processing"].map((step, i) => (
           <div key={step} className="flex items-center gap-2">
-            <div
-              className="flex items-center gap-1.5"
-            >
+            <div className="flex items-center gap-1.5">
               <div
                 className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold"
                 style={
@@ -115,16 +77,11 @@ export default function OnboardingPlanPage() {
               >
                 {i + 1}
               </div>
-              <span
-                className="text-sm font-medium"
-                style={{ color: i === 0 ? "var(--dark)" : "#94a3b8" }}
-              >
+              <span className="text-sm font-medium" style={{ color: i === 0 ? "var(--dark)" : "#94a3b8" }}>
                 {step}
               </span>
             </div>
-            {i < 2 && (
-              <div className="w-8 h-px" style={{ backgroundColor: "#e2e8f0" }} />
-            )}
+            {i < 2 && <div className="w-8 h-px" style={{ backgroundColor: "#e2e8f0" }} />}
           </div>
         ))}
       </div>
@@ -146,122 +103,108 @@ export default function OnboardingPlanPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
         {plans.map((plan) => {
-          const isFree = plan.priceCents === 0;
-          const isPro = plan.slug === "pro";
+          const isFree = plan.slug === "free";
           const isLifetime = plan.slug === "lifetime";
-          const isLoading = loading === plan.id;
+          const isLoading = loading === plan.slug;
 
-          const priceLabel = isFree
-            ? "Free"
-            : plan.billingType === "monthly"
-            ? `${formatCurrency(plan.priceCents)}/mo`
-            : formatCurrency(plan.priceCents);
+          const cardStyle: React.CSSProperties = {
+            position: "relative",
+            borderRadius: "2rem",
+            padding: "1.75rem",
+            display: "flex",
+            flexDirection: "column",
+            transition: "all 0.3s",
+            ...(plan.popular
+              ? { background: "#020617", boxShadow: "0 12px 48px rgba(91,88,246,0.3)" }
+              : { background: "#ffffff", border: "1px solid rgba(226,232,240,0.9)", boxShadow: "0 4px 20px rgba(91,88,246,0.06)" }),
+          };
 
-          const creditLabel =
-            plan.credits === -1
-              ? "Unlimited curations"
-              : plan.credits === 1
-              ? "1 curation"
-              : `${plan.credits} curations/month`;
+          const ctaStyle: React.CSSProperties = {
+            display: "block",
+            width: "100%",
+            borderRadius: "999px",
+            padding: "11px 20px",
+            textAlign: "center",
+            fontWeight: 600,
+            fontSize: "0.875rem",
+            transition: "all 0.2s",
+            border: "none",
+            cursor: loading ? "not-allowed" : "pointer",
+            opacity: loading && !isLoading ? 0.6 : 1,
+            ...(plan.popular
+              ? { background: "#5B58F6", color: "#ffffff", boxShadow: "0 0 20px rgba(91,88,246,0.5)" }
+              : isLifetime
+              ? { background: "#7c3aed", color: "#ffffff" }
+              : { background: "#020617", color: "#ffffff" }),
+          };
 
           return (
-            <div
-              key={plan.id}
-              className="relative bg-white rounded-[2rem] p-6 flex flex-col transition-all duration-300"
-              style={{
-                boxShadow: isPro
-                  ? "0 8px 40px rgba(91,88,246,0.15)"
-                  : "0 4px 24px rgba(91,88,246,0.06)",
-                border: isPro ? "none" : "1px solid rgba(226,232,240,0.8)",
-                ...(isPro ? { outline: "2px solid var(--indigo)", outlineOffset: "-2px" } : {}),
-              }}
-            >
-              {isPro && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                  <span
-                    className="inline-flex items-center px-4 py-1.5 rounded-full text-xs font-semibold text-white"
-                    style={{ backgroundColor: "var(--indigo)" }}
-                  >
+            <div key={plan.slug} style={cardStyle}>
+              {/* Badge */}
+              {plan.popular && (
+                <div style={{ position: "absolute", top: "-14px", left: "50%", transform: "translateX(-50%)" }}>
+                  <span style={{ background: "#5B58F6", color: "#fff", fontSize: "0.72rem", fontWeight: 700, padding: "5px 14px", borderRadius: "999px", display: "inline-block" }}>
                     Most Popular
                   </span>
                 </div>
               )}
-              {isLifetime && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                  <span
-                    className="inline-flex items-center px-4 py-1.5 rounded-full text-xs font-semibold text-white"
-                    style={{ backgroundColor: "#7c3aed" }}
-                  >
-                    Best Value
+              {plan.badge && !plan.popular && (
+                <div style={{ position: "absolute", top: "-14px", left: "50%", transform: "translateX(-50%)" }}>
+                  <span style={{ background: "#7c3aed", color: "#fff", fontSize: "0.72rem", fontWeight: 700, padding: "5px 14px", borderRadius: "999px", display: "inline-block" }}>
+                    {plan.badge}
                   </span>
                 </div>
               )}
 
-              <div className="mb-6">
-                <h3
-                  className="text-base font-semibold mb-1"
-                  style={{ fontFamily: "var(--font-heading)", color: "var(--dark)" }}
-                >
-                  {plan.name}
-                </h3>
-                <div className="flex items-baseline gap-1">
-                  <span
-                    className="text-3xl font-bold"
-                    style={{ color: "var(--dark)", fontFamily: "var(--font-heading)" }}
-                  >
-                    {priceLabel}
+              {/* Plan name */}
+              <p style={{ fontFamily: "var(--font-heading)", fontWeight: 600, fontSize: "1rem", color: plan.popular ? "#ffffff" : "#020617", marginBottom: "0.5rem" }}>
+                {plan.name}
+              </p>
+
+              {/* Price */}
+              <div style={{ display: "flex", alignItems: "baseline", gap: "4px", marginBottom: "4px" }}>
+                <span style={{ fontFamily: "var(--font-heading)", fontSize: "2.25rem", fontWeight: 700, color: plan.popular ? "#ffffff" : "#020617", lineHeight: 1 }}>
+                  {plan.price}
+                </span>
+                {plan.period && (
+                  <span style={{ fontSize: "0.875rem", color: "#94a3b8", fontWeight: 300 }}>
+                    {plan.period}
                   </span>
-                </div>
-                {plan.billingType === "monthly" && (
-                  <p className="text-xs text-slate-400 mt-1 font-light">Billed monthly</p>
                 )}
-                {plan.billingType === "one_time" && plan.priceCents > 0 && (
-                  <p className="text-xs text-slate-400 mt-1 font-light">One-time payment</p>
-                )}
-                <div
-                  className="mt-3 px-3 py-2 rounded-xl"
-                  style={{ backgroundColor: "var(--indigo-light)" }}
-                >
-                  <span className="text-xs font-medium" style={{ color: "var(--indigo)" }}>
-                    {creditLabel}
-                  </span>
-                </div>
               </div>
 
-              <ul className="space-y-2.5 flex-1 mb-6">
-                {(plan.features as string[]).map((feature, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-slate-600 font-light">
-                    <svg className="w-4 h-4 mt-0.5 shrink-0" style={{ color: "var(--success)" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              {/* Billing note */}
+              <p style={{ fontSize: "0.75rem", color: plan.popular ? "#64748b" : "#94a3b8", fontWeight: 300, marginBottom: "0.75rem" }}>
+                {plan.billingNote}
+              </p>
+
+              {/* Credits pill */}
+              <div style={{ background: plan.popular ? "rgba(91,88,246,0.25)" : "rgba(91,88,246,0.08)", borderRadius: "0.75rem", padding: "6px 12px", marginBottom: "1.25rem", display: "inline-block" }}>
+                <span style={{ color: plan.popular ? "#a5b4fc" : "#5B58F6", fontSize: "0.78rem", fontWeight: 600 }}>
+                  {plan.credits}
+                </span>
+              </div>
+
+              {/* Features */}
+              <ul style={{ listStyle: "none", padding: 0, margin: "0 0 1.5rem 0", flex: 1, display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                {plan.features.map((f, j) => (
+                  <li key={j} style={{ display: "flex", alignItems: "flex-start", gap: "8px", fontSize: "0.82rem", color: plan.popular ? "#cbd5e1" : "#64748b", fontWeight: 300 }}>
+                    <svg width="14" height="14" style={{ marginTop: "2px", flexShrink: 0, color: plan.popular ? "#a5b4fc" : "#27AE60" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                     </svg>
-                    {feature}
+                    {f}
                   </li>
                 ))}
               </ul>
 
+              {/* CTA */}
               <button
-                onClick={() => selectPlan(plan)}
+                type="button"
+                onClick={() => selectPlan(plan.slug)}
                 disabled={!!loading}
-                style={{
-                  display: "block", width: "100%", borderRadius: "999px",
-                  padding: "10px 20px", textAlign: "center",
-                  fontWeight: 600, fontSize: "0.875rem", transition: "all 0.2s",
-                  border: "none", cursor: loading ? "not-allowed" : "pointer",
-                  opacity: loading && !isLoading ? 0.6 : 1,
-                  ...(isPro
-                    ? { background: "#5B58F6", color: "#fff", boxShadow: "0 0 20px rgba(91,88,246,0.35)" }
-                    : isLifetime
-                    ? { background: "#7c3aed", color: "#fff" }
-                    : isFree
-                    ? { background: "#020617", color: "#fff" }
-                    : { background: "#020617", color: "#fff" }),
-                }}
+                style={ctaStyle}
               >
-                {isLoading
-                  ? "Loading..."
-                  : isFree
-                  ? "Start Free →"
-                  : `Get ${plan.name} →`}
+                {isLoading ? "Loading..." : isFree ? "Start Free →" : `${plan.cta} →`}
               </button>
             </div>
           );

@@ -5,7 +5,13 @@ import { decryptField } from "@/lib/server-utils";
 import { createCheckoutForActiveProvider, PaymentConfigurationError, UnsupportedPaymentProviderError } from "@/lib/payments/service";
 import { z } from "zod";
 
-const schema = z.object({ planId: z.string().min(1) });
+const schema = z.object({
+  planId: z.string().min(1),
+  // Optional paths (must start with "/") — used to control where user lands after payment.
+  // Defaults to the onboarding flow if omitted.
+  successPath: z.string().startsWith("/").optional(),
+  cancelPath: z.string().startsWith("/").optional(),
+});
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -20,16 +26,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid plan ID" }, { status: 422 });
   }
 
-  const { planId } = parsed.data;
+  const { planId, successPath, cancelPath } = parsed.data;
   const userId = session.user.id;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+  const successUrl = `${appUrl}${successPath ?? "/onboarding/curation"}?paid=1`;
+  const cancelUrl = `${appUrl}${cancelPath ?? "/onboarding/plan"}`;
 
   const [user, plan] = await Promise.all([
     db.user.findUnique({ where: { id: userId }, select: { stripeCustomerId: true } }),
     db.planConfig.findUnique({ where: { id: planId, isActive: true } }),
   ]);
 
-  if (!user || !plan) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!user) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+  if (!plan) {
+    return NextResponse.json({ error: "Plan not found or inactive" }, { status: 404 });
   }
 
   const stripeCustomerId = user.stripeCustomerId
@@ -41,8 +53,8 @@ export async function POST(req: NextRequest) {
       userId,
       planId,
       stripeCustomerId,
-      successUrl: `${process.env.NEXT_PUBLIC_APP_URL}/onboarding/curation?paid=1`,
-      cancelUrl: `${process.env.NEXT_PUBLIC_APP_URL}/onboarding/plan`,
+      successUrl,
+      cancelUrl,
     });
 
     return NextResponse.json({ url: checkoutUrl });
