@@ -12,7 +12,11 @@ export default async function AdminAuditLogsPage({ searchParams }: { searchParam
   const params = await searchParams;
   const page = parseInt(params.page ?? "1");
   const skip = (page - 1) * PAGE_SIZE;
-  const [logs, total] = await Promise.all([db.auditLog.findMany({ orderBy: { createdAt: "desc" }, skip, take: PAGE_SIZE }), db.auditLog.count()]);
+  const [logs, total] = await Promise.all([
+    db.auditLog.findMany({ orderBy: { createdAt: "desc" }, skip, take: PAGE_SIZE }),
+    db.auditLog.count(),
+  ]);
+  type AuditLogRow = (typeof logs)[number];
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
   return (
@@ -32,7 +36,7 @@ export default async function AdminAuditLogsPage({ searchParams }: { searchParam
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {logs.map((log) => (
+                {logs.map((log: AuditLogRow) => (
                   <tr key={log.id} className="hover:bg-gray-50/60 transition-colors">
                     <td className="px-5 py-4"><span className="font-mono text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-lg">{log.action}</span></td>
                     <td className="px-5 py-4 text-sm text-gray-600 capitalize">{log.entity}{log.entityId && <span className="text-xs ml-1 font-mono text-gray-400">{log.entityId.slice(0, 8)}…</span>}</td>
