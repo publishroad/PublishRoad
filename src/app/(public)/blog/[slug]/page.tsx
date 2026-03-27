@@ -13,12 +13,9 @@ interface Props {
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://publishroad.com";
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { slug } = await params;
-  let post = null;
-
+async function getPostMeta(slug: string) {
   try {
-    post = await db.blogPost.findUnique({
+    return await db.blogPost.findUnique({
       where: { slug, status: "published" },
       select: {
         title: true, metaTitle: true, metaDescription: true, excerpt: true,
@@ -27,8 +24,24 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       },
     });
   } catch {
-    return {};
+    return null;
   }
+}
+
+async function getPost(slug: string) {
+  try {
+    return await db.blogPost.findUnique({
+      where: { slug, status: "published" },
+      include: { author: { select: { name: true } } },
+    });
+  } catch {
+    return null;
+  }
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
+  const post = await getPostMeta(slug);
 
   if (!post) return {};
 
@@ -62,17 +75,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function BlogPostPage({ params }: Props) {
   const { slug } = await params;
-
-  let post = null;
-
-  try {
-    post = await db.blogPost.findUnique({
-      where: { slug, status: "published" },
-      include: { author: { select: { name: true } } },
-    });
-  } catch {
-    notFound();
-  }
+  const post = await getPost(slug);
 
   if (!post) notFound();
 

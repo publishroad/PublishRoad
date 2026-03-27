@@ -37,6 +37,7 @@ function createPrismaClient() {
   });
 
   // Prisma v7: use $extends for soft-delete middleware (replaces $use)
+  // Cast to PrismaClient so $transaction callbacks stay typed as Prisma.TransactionClient
   return client.$extends({
     query: {
       user: {
@@ -54,7 +55,7 @@ function createPrismaClient() {
         },
       },
     },
-  }) as PrismaClient;
+  }) as unknown as PrismaClient;
 }
 
 const globalForPrisma = globalThis as unknown as {

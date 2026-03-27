@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Analytics } from "@vercel/analytics/next";
 import { Inter, Playfair_Display } from "next/font/google";
 import { auth } from "@/lib/auth";
 import "./globals.css";
@@ -140,6 +141,7 @@ export default async function RootLayout({
       </head>
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <Providers session={session}>{children}</Providers>
+        <Analytics />
       </body>
     </html>
   );

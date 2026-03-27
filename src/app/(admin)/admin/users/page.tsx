@@ -23,6 +23,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
     db.user.count({ where }),
   ]);
   const totalPages = Math.ceil(total / PAGE_SIZE);
+  type UserRow = (typeof users)[number];
 
   const planColors: Record<string, string> = {
     free: "bg-gray-100 text-gray-600",
@@ -66,7 +67,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
               <tbody className="divide-y divide-gray-50">
                 {users.length === 0 ? (
                   <tr><td colSpan={5} className="text-center py-16 text-gray-400 text-sm">No users found.</td></tr>
-                ) : users.map((user) => (
+                ) : users.map((user: UserRow) => (
                   <tr key={user.id} className="hover:bg-gray-50/60 transition-colors">
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">

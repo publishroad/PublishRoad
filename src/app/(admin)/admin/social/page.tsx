@@ -47,6 +47,7 @@ export default async function AdminSocialPage({ searchParams }: { searchParams: 
     db.influencer.count({ where }),
   ]);
   const totalPages = Math.ceil(total / PAGE_SIZE);
+  type InfluencerRow = (typeof influencers)[number];
 
   return (
     <>
@@ -112,7 +113,7 @@ export default async function AdminSocialPage({ searchParams }: { searchParams: 
                   <tr>
                     <td colSpan={7} className="text-center py-16 text-gray-400 text-sm">No influencers found.</td>
                   </tr>
-                ) : influencers.map((inf) => (
+                ) : influencers.map((inf: InfluencerRow) => (
                   <tr key={inf.id} className="hover:bg-gray-50/60 transition-colors">
                     <td className="px-5 py-4">
                       <p className="text-sm font-medium text-gray-900">{inf.name}</p>

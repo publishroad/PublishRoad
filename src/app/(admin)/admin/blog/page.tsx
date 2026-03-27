@@ -7,6 +7,7 @@ import { AppHeader } from "@/components/dashboard/AppHeader";
 
 export default async function AdminBlogPage() {
   const posts = await db.blogPost.findMany({ orderBy: { createdAt: "desc" }, take: 50 });
+  type PostRow = (typeof posts)[number];
 
   return (
     <>
@@ -34,7 +35,7 @@ export default async function AdminBlogPage() {
               <tbody className="divide-y divide-gray-50">
                 {posts.length === 0 ? (
                   <tr><td colSpan={4} className="text-center py-16 text-gray-400 text-sm">No posts yet. Create your first post.</td></tr>
-                ) : posts.map((post) => (
+                ) : posts.map((post: PostRow) => (
                   <tr key={post.id} className="hover:bg-gray-50/60 transition-colors">
                     <td className="px-5 py-4">
                       <p className="text-sm font-medium text-gray-900">{post.title}</p>

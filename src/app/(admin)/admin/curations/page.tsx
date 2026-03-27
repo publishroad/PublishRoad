@@ -27,6 +27,7 @@ export default async function AdminCurationsPage({ searchParams }: { searchParam
     db.curation.count({ where }),
   ]);
   const totalPages = Math.ceil(total / PAGE_SIZE);
+  type CurationRow = (typeof curations)[number];
 
   return (
     <>
@@ -60,7 +61,7 @@ export default async function AdminCurationsPage({ searchParams }: { searchParam
               <tbody className="divide-y divide-gray-50">
                 {curations.length === 0 ? (
                   <tr><td colSpan={5} className="text-center py-16 text-gray-400 text-sm">No curations found.</td></tr>
-                ) : curations.map((c) => (
+                ) : curations.map((c: CurationRow) => (
                   <tr key={c.id} className="hover:bg-gray-50/60 transition-colors">
                     <td className="px-5 py-4 text-sm font-medium text-gray-900">{c.user.name ?? c.user.email}</td>
                     <td className="px-5 py-4 max-w-[200px]">

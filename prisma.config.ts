@@ -12,7 +12,17 @@ config({ path: ".env" });
  */
 export default defineConfig({
   schema: "prisma/schema.prisma",
-  datasource: {
-    url: process.env.DIRECT_URL ?? process.env.DATABASE_URL,
+  migrate: {
+    async adapter(env) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { Pool } = require("pg");
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { PrismaPg } = require("@prisma/adapter-pg");
+      const pool = new Pool({
+        connectionString: env.DIRECT_URL ?? env.DATABASE_URL ?? "",
+        max: 2,
+      });
+      return new PrismaPg(pool);
+    },
   },
 });
