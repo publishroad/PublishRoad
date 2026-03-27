@@ -11,8 +11,6 @@ config({ path: ".env" });
  * DIRECT_URL    — direct connection for migrations (bypasses PgBouncer)
  */
 export default defineConfig({
+  earlyAccess: true,
   schema: "prisma/schema.prisma",
-  datasource: {
-    url: process.env.DIRECT_URL ?? process.env.DATABASE_URL,
-  },
 });
