@@ -2,13 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { decryptField } from "@/lib/server-utils";
-import { createCheckoutForActiveProvider, PaymentConfigurationError, UnsupportedPaymentProviderError } from "@/lib/payments/service";
+import {
+  createCheckoutForActiveProvider,
+  getActivePaymentProvidersList,
+  PaymentConfigurationError,
+  UnsupportedPaymentProviderError,
+  type ActivePaymentProvider,
+} from "@/lib/payments/service";
 import { z } from "zod";
 
 const schema = z.object({
   planId: z.string().min(1),
+  // If multiple gateways are active, the frontend re-calls with this set
+  provider: z.enum(["stripe", "razorpay", "paypal"]).optional(),
   // Optional paths (must start with "/") — used to control where user lands after payment.
-  // Defaults to the onboarding flow if omitted.
   successPath: z.string().startsWith("/").optional(),
   cancelPath: z.string().startsWith("/").optional(),
 });
@@ -26,7 +33,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid plan ID" }, { status: 422 });
   }
 
-  const { planId, successPath, cancelPath } = parsed.data;
+  const { planId, provider, successPath, cancelPath } = parsed.data;
   const userId = session.user.id;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
   const successUrl = `${appUrl}${successPath ?? "/onboarding/curation"}?paid=1`;
@@ -37,27 +44,38 @@ export async function POST(req: NextRequest) {
     db.planConfig.findUnique({ where: { id: planId, isActive: true } }),
   ]);
 
-  if (!user) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
-  }
-  if (!plan) {
-    return NextResponse.json({ error: "Plan not found or inactive" }, { status: 404 });
+  if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+  if (!plan) return NextResponse.json({ error: "Plan not found or inactive" }, { status: 404 });
+
+  // If no provider specified, check how many are active
+  if (!provider) {
+    const activeProviders = await getActivePaymentProvidersList();
+    if (activeProviders.length === 0) {
+      return NextResponse.json({ error: "No payment gateway is active. Contact support." }, { status: 400 });
+    }
+    if (activeProviders.length > 1) {
+      // Let the frontend show a payment method picker
+      return NextResponse.json({ selectProvider: activeProviders });
+    }
+    // Exactly 1 active — fall through to checkout with that provider
   }
 
-  const stripeCustomerId = user.stripeCustomerId
-    ? decryptField(user.stripeCustomerId)
-    : null;
+  const stripeCustomerId = user.stripeCustomerId ? decryptField(user.stripeCustomerId) : null;
 
   try {
-    const checkoutUrl = await createCheckoutForActiveProvider({
+    const result = await createCheckoutForActiveProvider({
       userId,
       planId,
       stripeCustomerId,
       successUrl,
       cancelUrl,
+      provider: provider as ActivePaymentProvider | undefined,
     });
 
-    return NextResponse.json({ url: checkoutUrl });
+    if (result.type === "razorpay") {
+      return NextResponse.json({ razorpay: result });
+    }
+    return NextResponse.json({ url: result.url });
   } catch (error) {
     if (error instanceof UnsupportedPaymentProviderError) {
       return NextResponse.json({ error: error.message }, { status: 501 });

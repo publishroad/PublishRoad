@@ -4,6 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import type { PlanDisplay } from "@/lib/pricing-plans";
+import type { ActivePaymentProvider } from "@/lib/payments/service";
+import { PaymentMethodPicker } from "@/components/public/PaymentMethodPicker";
 
 interface PublicPricingCardProps {
   plan: PlanDisplay;
@@ -20,6 +22,8 @@ export function PublicPricingCard({
   isAuthenticated = false,
 }: PublicPricingCardProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [providerPicker, setProviderPicker] = useState<ActivePaymentProvider[] | null>(null);
+  const [pendingPlanId, setPendingPlanId] = useState<string | null>(null);
   const isCurrent = currentPlanSlug === plan.slug;
   const isFree = plan.slug === "free";
   const isLifetime = plan.slug === "lifetime";
@@ -43,18 +47,37 @@ export function PublicPricingCard({
       return;
     }
 
+    await startCheckout(planId);
+  }
+
+  async function startCheckout(pid: string, provider?: ActivePaymentProvider) {
     setIsSubmitting(true);
     try {
       const res = await fetch("/api/payments/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId, successPath: "/dashboard", cancelPath: "/pricing" }),
+        body: JSON.stringify({ planId: pid, provider, successPath: "/dashboard", cancelPath: "/pricing" }),
       });
       const payload = await res.json().catch(() => null);
-      if (!res.ok || !payload?.url) {
+      if (!res.ok) {
         throw new Error(payload?.error ?? "Failed to start checkout");
       }
-      window.location.href = payload.url;
+      if (payload?.selectProvider) {
+        setPendingPlanId(pid);
+        setProviderPicker(payload.selectProvider as ActivePaymentProvider[]);
+        setIsSubmitting(false);
+        return;
+      }
+      if (payload?.url) {
+        window.location.href = payload.url;
+        return;
+      }
+      if (payload?.razorpay) {
+        const { openRazorpayCheckout } = await import("@/lib/razorpay-checkout");
+        await openRazorpayCheckout(payload.razorpay).catch(() => setIsSubmitting(false));
+        return;
+      }
+      throw new Error("Invalid checkout response");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to start checkout");
       setIsSubmitting(false);
@@ -94,6 +117,14 @@ export function PublicPricingCard({
   };
 
   return (
+    <>
+    {providerPicker && pendingPlanId && (
+      <PaymentMethodPicker
+        providers={providerPicker}
+        onSelect={(p) => { setProviderPicker(null); startCheckout(pendingPlanId, p); }}
+        onCancel={() => { setProviderPicker(null); setPendingPlanId(null); }}
+      />
+    )}
     <div style={cardStyle}>
       {/* Badge */}
       {plan.popular && (
@@ -166,5 +197,6 @@ export function PublicPricingCard({
         </button>
       )}
     </div>
+    </>
   );
 }

@@ -59,16 +59,15 @@ const PROVIDER_META = {
 
 function ProviderCard({
   config,
-  onActivate,
-  onDeactivate,
+  onToggle,
   onSave,
 }: {
   config: ProviderConfig;
-  onActivate: (provider: string) => Promise<void>;
-  onDeactivate: () => Promise<void>;
+  onToggle: (provider: string, active: boolean) => Promise<void>;
   onSave: (provider: string, data: CredentialsForm) => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [toggling, setToggling] = useState(false);
   const [testing, setTesting] = useState(false);
   const meta = PROVIDER_META[config.provider];
   const isConfigured = config.hasSecretKey;
@@ -130,26 +129,28 @@ function ProviderCard({
         </div>
 
         <div className="flex items-center gap-2">
-          {config.isActive && (
-            <Button
+          {/* Toggle switch */}
+          {isConfigured && (
+            <button
               type="button"
-              variant="outline"
-              size="sm"
-              className="text-xs h-7 text-error border-error hover:bg-red-50"
-              onClick={onDeactivate}
+              role="switch"
+              aria-checked={config.isActive}
+              disabled={toggling}
+              onClick={async () => {
+                setToggling(true);
+                await onToggle(config.provider, !config.isActive);
+                setToggling(false);
+              }}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
+                config.isActive ? "bg-navy" : "bg-gray-300"
+              } ${toggling ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
             >
-              Deactivate
-            </Button>
-          )}
-          {isConfigured && !config.isActive && (
-            <Button
-              type="button"
-              size="sm"
-              className="text-xs h-7 bg-navy hover:bg-blue text-white"
-              onClick={() => onActivate(config.provider)}
-            >
-              Set as Active
-            </Button>
+              <span
+                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                  config.isActive ? "translate-x-4.5" : "translate-x-0.5"
+                }`}
+              />
+            </button>
           )}
           {isConfigured && config.provider === "paypal" && (
             <Button
@@ -263,30 +264,21 @@ export function PaymentConfigForm({ initialConfigs }: PaymentConfigFormProps) {
     );
   });
 
-  const activeProvider = configs.find((c) => c.isActive);
+  const activeProviders = configs.filter((c) => c.isActive);
 
-  async function handleActivate(provider: string) {
+  async function handleToggle(provider: string, active: boolean) {
     const res = await fetch("/api/admin/payment-config", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider }),
+      body: JSON.stringify({ provider, active }),
     });
     if (!res.ok) {
-      toast.error("Failed to activate provider");
+      toast.error("Failed to update provider");
       return;
     }
-    setConfigs((prev) => prev.map((c) => ({ ...c, isActive: c.provider === provider })));
-    toast.success(`${PROVIDER_META[provider as ProviderConfig["provider"]].label} is now the active payment gateway`);
-  }
-
-  async function handleDeactivate() {
-    const res = await fetch("/api/admin/payment-config", { method: "DELETE" });
-    if (!res.ok) {
-      toast.error("Failed to deactivate");
-      return;
-    }
-    setConfigs((prev) => prev.map((c) => ({ ...c, isActive: false })));
-    toast.success("Payment gateway deactivated — payments are now disabled");
+    setConfigs((prev) => prev.map((c) => c.provider === provider ? { ...c, isActive: active } : c));
+    const label = PROVIDER_META[provider as ProviderConfig["provider"]].label;
+    toast.success(active ? `${label} enabled` : `${label} disabled`);
   }
 
   async function handleSave(provider: string, data: CredentialsForm) {
@@ -343,10 +335,10 @@ export function PaymentConfigForm({ initialConfigs }: PaymentConfigFormProps) {
   return (
     <div className="space-y-4">
       {/* Active gateway banner */}
-      <div className={`rounded-lg px-4 py-3 text-sm ${activeProvider ? "bg-navy/5 border border-navy/20 text-navy" : "bg-yellow-50 border border-yellow-200 text-yellow-800"}`}>
-        {activeProvider
-          ? <>Active gateway: <span className="font-semibold">{PROVIDER_META[activeProvider.provider].label}</span> — payments are enabled.</>
-          : <>No payment gateway is active. Configure and activate one below to enable payments.</>
+      <div className={`rounded-lg px-4 py-3 text-sm ${activeProviders.length > 0 ? "bg-navy/5 border border-navy/20 text-navy" : "bg-yellow-50 border border-yellow-200 text-yellow-800"}`}>
+        {activeProviders.length > 0
+          ? <>Active: <span className="font-semibold">{activeProviders.map((p) => PROVIDER_META[p.provider].label).join(" + ")}</span> — payments enabled. {activeProviders.length > 1 && "Customers will choose at checkout."}</>
+          : <>No payment gateway is active. Configure and enable one below to accept payments.</>
         }
       </div>
 
@@ -355,8 +347,7 @@ export function PaymentConfigForm({ initialConfigs }: PaymentConfigFormProps) {
         <ProviderCard
           key={config.provider}
           config={config}
-          onActivate={handleActivate}
-          onDeactivate={handleDeactivate}
+          onToggle={handleToggle}
           onSave={handleSave}
         />
       ))}
