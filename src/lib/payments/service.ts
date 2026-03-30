@@ -186,6 +186,7 @@ export async function createCheckoutForActiveProvider(args: {
   successUrl: string;
   cancelUrl: string;
   provider?: ActivePaymentProvider; // if omitted and multiple active, caller should pick
+  metadata?: Record<string, string>;
 }): Promise<CheckoutResult> {
   let provider: ActivePaymentProvider;
 
@@ -248,6 +249,7 @@ export async function createCheckoutForActiveProvider(args: {
         userId: args.userId,
         successUrl: args.successUrl,
         cancelUrl: args.cancelUrl,
+        metadata: args.metadata ?? null,
       }),
       { ex: 1800 }
     );
@@ -281,6 +283,7 @@ export async function createCheckoutForActiveProvider(args: {
         userId: args.userId,
         successUrl: args.successUrl,
         cancelUrl: args.cancelUrl,
+        metadata: args.metadata ?? null,
       }),
       { ex: 1800 }
     );

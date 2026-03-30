@@ -239,19 +239,25 @@ export async function rankWebsitesForCuration(
 ): Promise<MatchResult[]> {
   if (websites.length === 0) return [];
 
-  const config = await getAiConfig();
-  const systemMessage: OpenAI.Chat.Completions.ChatCompletionMessageParam = {
-    role: "system",
-    content:
-      "You are an expert product launch strategist. Rank items for product distribution. Always respond with valid JSON only. No markdown, no explanations outside JSON.",
-  };
+  try {
+    const config = await getAiConfig();
+    const systemMessage: OpenAI.Chat.Completions.ChatCompletionMessageParam = {
+      role: "system",
+      content:
+        "You are an expert product launch strategist. Rank items for product distribution. Always respond with valid JSON only. No markdown, no explanations outside JSON.",
+    };
 
-  return callAI(
-    [systemMessage, { role: "user", content: buildWebsiteMatchingPrompt(product, websites) }],
-    { maxTokens: config.maxTokens, temperature: config.temperature }
-  )
-    .then(parseMatchingResponse)
-    .catch(() => []);
+    return await callAI(
+      [systemMessage, { role: "user", content: buildWebsiteMatchingPrompt(product, websites) }],
+      { maxTokens: config.maxTokens, temperature: config.temperature }
+    )
+      .then(parseMatchingResponse)
+      .catch(() => []);
+  } catch {
+    // Fail-open: missing AI config should not block curation.
+    // The curation engine will apply deterministic website fallback for A/B/C.
+    return [];
+  }
 }
 
 type ProductContext = {

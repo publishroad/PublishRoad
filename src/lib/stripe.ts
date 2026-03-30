@@ -16,6 +16,7 @@ export async function createCheckoutSession({
   successUrl,
   cancelUrl,
   stripeSecretKey,
+  metadata,
 }: {
   userId: string;
   planId: string;
@@ -23,6 +24,7 @@ export async function createCheckoutSession({
   successUrl: string;
   cancelUrl: string;
   stripeSecretKey?: string;
+  metadata?: Record<string, string>;
 }): Promise<string> {
   const plan = await db.planConfig.findUnique({
     where: { id: planId, isActive: true },
@@ -42,7 +44,7 @@ export async function createCheckoutSession({
     line_items: [{ price: plan.stripePriceId, quantity: 1 }],
     success_url: successUrl,
     cancel_url: cancelUrl,
-    metadata: { userId, planId },
+    metadata: { userId, planId, ...(metadata ?? {}) },
     allow_promotion_codes: true,
     billing_address_collection: "auto",
     customer_creation: stripeCustomerId ? undefined : "always",

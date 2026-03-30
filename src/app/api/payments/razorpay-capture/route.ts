@@ -5,6 +5,7 @@ import { invalidateUserProfile } from "@/lib/cache";
 import { verifyRazorpaySignature } from "@/lib/payments/razorpay";
 import { getPaymentConfigRow } from "@/lib/payments/service";
 import { decryptField } from "@/lib/server-utils";
+import { finalizeHireUsPurchase, parseHireUsPackageSlug } from "@/lib/hire-us";
 import { z } from "zod";
 
 const schema = z.object({
@@ -35,14 +36,20 @@ export async function POST(req: NextRequest) {
   let userId: string;
   let successUrl: string;
   let cancelUrl: string;
+  let hireUsPackage: string | undefined;
   try {
     const meta = JSON.parse(typeof raw === "string" ? raw : JSON.stringify(raw)) as {
-      planId: string; userId: string; successUrl?: string; cancelUrl?: string;
+      planId: string;
+      userId: string;
+      successUrl?: string;
+      cancelUrl?: string;
+      metadata?: { hireUsPackage?: string };
     };
     planId = meta.planId;
     userId = meta.userId;
     successUrl = meta.successUrl ?? `${appUrl}/onboarding/curation?paid=1`;
     cancelUrl = meta.cancelUrl ?? `${appUrl}/onboarding/plan`;
+    hireUsPackage = meta.metadata?.hireUsPackage;
     if (!planId || !userId) throw new Error("missing fields");
   } catch {
     return NextResponse.json({ error: "invalid_order", redirectUrl: defaultCancelUrl }, { status: 400 });
@@ -97,6 +104,11 @@ export async function POST(req: NextRequest) {
       where: { id: userId },
       data: { planId, creditsRemaining: plan.credits },
     });
+
+    const packageSlug = parseHireUsPackageSlug(hireUsPackage);
+    if (packageSlug) {
+      await finalizeHireUsPurchase({ userId, packageSlug });
+    }
 
     await redis.del(`razorpay:order:${razorpay_order_id}`);
   } catch (err) {

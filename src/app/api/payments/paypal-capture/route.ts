@@ -4,6 +4,7 @@ import { redis } from "@/lib/redis";
 import { invalidateUserProfile } from "@/lib/cache";
 import { getPayPalAccessToken, capturePayPalOrder } from "@/lib/payments/paypal";
 import { getPaymentConfigRow } from "@/lib/payments/service";
+import { finalizeHireUsPurchase, parseHireUsPackageSlug } from "@/lib/hire-us";
 
 // PayPal redirects here after the user approves payment on PayPal's site.
 // Query params from PayPal: token (= orderId), PayerID
@@ -31,14 +32,20 @@ export async function GET(req: NextRequest) {
   let userId: string;
   let successUrl: string;
   let cancelUrl: string;
+  let hireUsPackage: string | undefined;
   try {
     const meta = JSON.parse(typeof raw === "string" ? raw : JSON.stringify(raw)) as {
-      planId: string; userId: string; successUrl?: string; cancelUrl?: string;
+      planId: string;
+      userId: string;
+      successUrl?: string;
+      cancelUrl?: string;
+      metadata?: { hireUsPackage?: string };
     };
     planId = meta.planId;
     userId = meta.userId;
     successUrl = meta.successUrl ?? defaultSuccessUrl;
     cancelUrl = meta.cancelUrl ?? defaultCancelUrl;
+    hireUsPackage = meta.metadata?.hireUsPackage;
     if (!planId || !userId) throw new Error("missing fields");
   } catch {
     return NextResponse.redirect(`${defaultCancelUrl}?error=invalid_order`);
@@ -87,6 +94,11 @@ export async function GET(req: NextRequest) {
       where: { id: userId },
       data: { planId, creditsRemaining: plan.credits },
     });
+
+    const packageSlug = parseHireUsPackageSlug(hireUsPackage);
+    if (packageSlug) {
+      await finalizeHireUsPurchase({ userId, packageSlug });
+    }
 
     // Clean up Redis key now that plan is activated
     await redis.del(`paypal:order:${orderId}`);

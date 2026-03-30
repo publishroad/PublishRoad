@@ -51,63 +51,133 @@ function extractDescWords(text: string): string[] {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Pre-scoring: rank candidates by relevance before sending to AI.
-// Scoring signals (higher = more relevant):
-//   +3 per keyword that exactly matches a tagSlug
-//   +1.5 per keyword found in entity description or name
-//   +2 per category slug match
-//   +0.5 per meaningful word from product description found in entity description
-//     (capped at +4 total — description overlap signal)
-//   up to +5 from user completion feedback (proven relevance from past curations)
-//   up to +2 quality bonus (DA for websites, normalized followers/members for others)
+// Normalize a string for consistent matching across all scoring rules:
+// lowercase → trim → strip non-alphanumeric (except spaces and hyphens) → trim.
 // ─────────────────────────────────────────────────────────────────────────────
-function scoreCandidateRelevance(
+function normalizeStr(s: string): string {
+  return s.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, "").trim();
+}
+
+// ─── Scoring Rule 1: Category match ──────────────────────────────────────────
+// +3 per entity category slug that equals the user's selected category slug.
+// Deduplication via Set prevents the same slug scoring more than once.
+function scoreCategoryMatch(entityCategorySlugs: string[], userCategorySlug: string): number {
+  if (!userCategorySlug) return 0;
+  const normUser = normalizeStr(userCategorySlug);
+  const seen = new Set<string>();
+  let score = 0;
+  for (const slug of entityCategorySlugs) {
+    const norm = normalizeStr(slug);
+    if (!seen.has(norm) && norm === normUser) {
+      score += 3;
+      seen.add(norm);
+    }
+  }
+  return score;
+}
+
+// ─── Scoring Rule 2: Keyword-to-tag match ────────────────────────────────────
+// +2 per unique user keyword that exactly matches an entity tag slug.
+// Uses a Set for O(1) tag lookup; deduplicates keywords before counting.
+function scoreKeywordTagMatch(entityTagSlugs: string[], userKeywords: string[]): number {
+  const tagSet = new Set(entityTagSlugs.map(normalizeStr));
+  const seen = new Set<string>();
+  let score = 0;
+  for (const kw of userKeywords) {
+    const norm = normalizeStr(kw);
+    if (!seen.has(norm) && tagSet.has(norm)) {
+      score += 2;
+      seen.add(norm);
+    }
+  }
+  return score;
+}
+
+// ─── Scoring Rule 3: Country match ───────────────────────────────────────────
+// +2 if the entity's countryId equals the user's selected countryId.
+// Returns 0 when either value is absent.
+function scoreCountryMatch(
+  entityCountryId: string | null | undefined,
+  userCountryId: string | null | undefined
+): number {
+  if (!entityCountryId || !userCountryId) return 0;
+  return entityCountryId === userCountryId ? 2 : 0;
+}
+
+// ─── Scoring Rule 4: Description word match ──────────────────────────────────
+// +1 per unique meaningful word in the product description that matches an entity
+// tag slug or category slug. Stop-word filtering is applied upstream by
+// extractDescWords(), so all words passed here are already meaningful.
+function scoreDescriptionMatch(
+  entityTagSlugs: string[],
+  entityCategorySlugs: string[],
+  descWords: string[]
+): number {
+  const entityTokens = new Set([
+    ...entityTagSlugs.map(normalizeStr),
+    ...entityCategorySlugs.map(normalizeStr),
+  ]);
+  const seen = new Set<string>();
+  let score = 0;
+  for (const w of descWords) {
+    const norm = normalizeStr(w);
+    if (!seen.has(norm) && entityTokens.has(norm)) {
+      score += 1;
+      seen.add(norm);
+    }
+  }
+  return score;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Aggregates all four scoring rules into a final integer score with a breakdown
+// object for traceability. All rules are independent — order doesn't matter.
+// ─────────────────────────────────────────────────────────────────────────────
+interface ScoreBreakdown {
+  category: number;
+  keyword: number;
+  country: number;
+  description: number;
+}
+
+function computeEntityScore(
   entity: {
     tagSlugs: string[];
-    categorySlugs?: string[];
-    description?: string | null;
-    name: string;
+    categorySlugs: string[];
+    countryId?: string | null;
   },
-  expandedKeywords: string[],
-  targetCategorySlugs: string[],
-  completionCount: number,
-  qualityBonus: number,
-  productDescWords: string[] = []
-): number {
-  let score = 0;
-  const descLower = (entity.description ?? "").toLowerCase();
-  const nameLower = entity.name.toLowerCase();
+  userCategorySlug: string,
+  userKeywords: string[],
+  userCountryId: string | null | undefined,
+  descWords: string[]
+): { finalScore: number; breakdown: ScoreBreakdown } {
+  const category = scoreCategoryMatch(entity.categorySlugs, userCategorySlug);
+  const keyword = scoreKeywordTagMatch(entity.tagSlugs, userKeywords);
+  const country = scoreCountryMatch(entity.countryId, userCountryId);
+  const description = scoreDescriptionMatch(entity.tagSlugs, entity.categorySlugs, descWords);
+  return {
+    finalScore: category + keyword + country + description,
+    breakdown: { category, keyword, country, description },
+  };
+}
 
-  // Keyword signals
-  for (const kw of expandedKeywords) {
-    if (entity.tagSlugs.includes(kw)) score += 3;
-    else if (descLower.includes(kw) || nameLower.includes(kw)) score += 1.5;
+// ─────────────────────────────────────────────────────────────────────────────
+// Sorts entities with country-priority grouping:
+//   - When userCountryId is set: country-matched entities come first (sorted by
+//     _score desc), then non-matching entities fill the remainder (also by _score).
+//     Slicing to MAX_PER_SECTION naturally implements "fill-up to 20" behaviour.
+//   - When userCountryId is null (worldwide): pure descending score sort.
+// ─────────────────────────────────────────────────────────────────────────────
+function sortWithCountryPriority<T extends { _score: number; _cntryMatch: boolean }>(
+  entities: T[],
+  userCountryId: string | null | undefined
+): T[] {
+  if (!userCountryId) {
+    return [...entities].sort((a, b) => b._score - a._score);
   }
-
-  // Category match
-  if (entity.categorySlugs && targetCategorySlugs.length > 0) {
-    const hits = targetCategorySlugs.filter((cs) => entity.categorySlugs!.includes(cs)).length;
-    score += hits * 2;
-  }
-
-  // Description overlap: product description words matched against entity tags and description
-  //   +2 per desc word that matches an entity tagSlug (strong signal — tags are curated)
-  //   +0.5 per desc word found in entity description text (weaker — free text)
-  // Both capped together at +6 so a long description can't overwhelm other signals
-  if (productDescWords.length > 0) {
-    let descScore = 0;
-    for (const w of productDescWords) {
-      if (entity.tagSlugs.includes(w)) descScore += 2;
-      else if (descLower.includes(w)) descScore += 0.5;
-    }
-    score += Math.min(descScore, 6);
-  }
-
-  // Cap feedback bonus at 5 so a heavily-completed entity doesn't dominate
-  score += Math.min(completionCount * 0.5, 5);
-  score += qualityBonus;
-
-  return score;
+  const matched = entities.filter((e) => e._cntryMatch).sort((a, b) => b._score - a._score);
+  const rest = entities.filter((e) => !e._cntryMatch).sort((a, b) => b._score - a._score);
+  return [...matched, ...rest];
 }
 
 export async function runCuration(input: RunCurationInput) {
@@ -167,12 +237,27 @@ export async function runCuration(input: RunCurationInput) {
       Prisma.sql`UPDATE "users" SET credits_remaining = credits_remaining - 1 WHERE id::text = ${userId}`
     );
 
+    // Validate country ID exists (if provided)
+    let validCountryId: string | null = null;
+    if (countryId) {
+      const country = await tx.country.findUnique({
+        where: { id: countryId },
+        select: { id: true },
+      });
+      if (!country) {
+        console.warn(`Country ID "${countryId}" not found, setting to null`);
+        validCountryId = null;
+      } else {
+        validCountryId = countryId;
+      }
+    }
+
     // Create curation record
     const curation = await tx.curation.create({
       data: {
         userId,
         productUrl,
-        countryId: countryId || null,
+        countryId: validCountryId,
         keywords,
         description,
         status: "pending",
@@ -257,6 +342,12 @@ async function processCuration(
     ? expandedKeywords
     : keywords.map((k) => k.toLowerCase());
 
+  // Resolved slug for the effective category — used as the target in scoreCategoryMatch
+  const userCategorySlug = category?.slug ?? "";
+
+  // Map from category ID → slug; resolves website.categoryId (FK) to a slug for scoring
+  const categorySlugMap = new Map(availableCategories.map((c) => [c.id, c.slug]));
+
   // Extract meaningful words from product description for description-overlap scoring
   const productDescWords = extractDescWords(description ?? "");
 
@@ -286,7 +377,7 @@ async function processCuration(
       },
       orderBy: [{ isPinned: "desc" }, { da: "desc" }],
       take: 150,
-      select: { id: true, name: true, url: true, da: true, pa: true, spamScore: true, traffic: true, type: true, description: true, tagSlugs: true },
+      select: { id: true, name: true, url: true, da: true, pa: true, spamScore: true, traffic: true, type: true, description: true, tagSlugs: true, categoryId: true, countryId: true },
     }),
 
     db.influencer.findMany({
@@ -311,7 +402,7 @@ async function processCuration(
       },
       orderBy: { followersCount: "desc" },
       take: 80,
-      select: { id: true, name: true, platform: true, followersCount: true, categorySlugs: true, tagSlugs: true, description: true, profileLink: true },
+      select: { id: true, name: true, platform: true, followersCount: true, categorySlugs: true, tagSlugs: true, description: true, profileLink: true, countryId: true },
     }),
 
     db.redditChannel.findMany({
@@ -359,7 +450,7 @@ async function processCuration(
       },
       orderBy: { name: "asc" },
       take: 50,
-      select: { id: true, name: true, websiteUrl: true, investmentStage: true, ticketSize: true, categorySlugs: true, tagSlugs: true, description: true },
+      select: { id: true, name: true, websiteUrl: true, investmentStage: true, ticketSize: true, categorySlugs: true, tagSlugs: true, description: true, countryId: true },
     }),
   ]);
 
@@ -370,7 +461,16 @@ async function processCuration(
       where: { AND: websiteBaseConditions },
       orderBy: [{ isPinned: "desc" }, { da: "desc" }],
       take: 150,
-      select: { id: true, name: true, url: true, da: true, pa: true, spamScore: true, traffic: true, type: true, description: true, tagSlugs: true },
+      select: { id: true, name: true, url: true, da: true, pa: true, spamScore: true, traffic: true, type: true, description: true, tagSlugs: true, categoryId: true, countryId: true },
+    });
+  }
+  // Last resort: if still empty, drop all optional filters and use top active websites.
+  if (candidateSites.length === 0) {
+    candidateSites = await db.website.findMany({
+      where: { isActive: true, isExcluded: false },
+      orderBy: [{ isPinned: "desc" }, { da: "desc" }],
+      take: 150,
+      select: { id: true, name: true, url: true, da: true, pa: true, spamScore: true, traffic: true, type: true, description: true, tagSlugs: true, categoryId: true, countryId: true },
     });
   }
 
@@ -388,7 +488,7 @@ async function processCuration(
       },
       orderBy: { followersCount: "desc" },
       take: 80,
-      select: { id: true, name: true, platform: true, followersCount: true, categorySlugs: true, tagSlugs: true, description: true, profileLink: true },
+      select: { id: true, name: true, platform: true, followersCount: true, categorySlugs: true, tagSlugs: true, description: true, profileLink: true, countryId: true },
     });
   }
   // Last resort: if still empty, return top influencers globally (let AI judge relevance)
@@ -397,7 +497,7 @@ async function processCuration(
       where: { isActive: true },
       orderBy: { followersCount: "desc" },
       take: 40,
-      select: { id: true, name: true, platform: true, followersCount: true, categorySlugs: true, tagSlugs: true, description: true, profileLink: true },
+      select: { id: true, name: true, platform: true, followersCount: true, categorySlugs: true, tagSlugs: true, description: true, profileLink: true, countryId: true },
     });
   }
 
@@ -440,7 +540,7 @@ async function processCuration(
       },
       orderBy: { name: "asc" },
       take: 50,
-      select: { id: true, name: true, websiteUrl: true, investmentStage: true, ticketSize: true, categorySlugs: true, tagSlugs: true, description: true },
+      select: { id: true, name: true, websiteUrl: true, investmentStage: true, ticketSize: true, categorySlugs: true, tagSlugs: true, description: true, countryId: true },
     });
   }
   if (candidateFunds.length === 0) {
@@ -448,93 +548,76 @@ async function processCuration(
       where: { isActive: true },
       orderBy: { name: "asc" },
       take: 25,
-      select: { id: true, name: true, websiteUrl: true, investmentStage: true, ticketSize: true, categorySlugs: true, tagSlugs: true, description: true },
+      select: { id: true, name: true, websiteUrl: true, investmentStage: true, ticketSize: true, categorySlugs: true, tagSlugs: true, description: true, countryId: true },
     });
   }
 
-  // ─── Step 3b: Feedback loop ────────────────────────────────────────────────
-  // Look up how many times each candidate has been marked complete (userStatus="saved")
-  // by past users. Entities with more completions get a pre-score boost since they've
-  // been proven relevant in real curations.
-  const [websiteCompletions, influencerCompletions, redditCompletions, fundCompletions] =
-    await Promise.all([
-      db.curationResult.groupBy({
-        by: ["websiteId"],
-        where: { websiteId: { in: candidateSites.map((w) => w.id) }, userStatus: "saved" },
-        _count: { id: true },
-      }),
-      db.curationResult.groupBy({
-        by: ["influencerId"],
-        where: { influencerId: { in: candidateInfluencers.map((i) => i.id) }, userStatus: "saved" },
-        _count: { id: true },
-      }),
-      db.curationResult.groupBy({
-        by: ["redditChannelId"],
-        where: { redditChannelId: { in: candidateReddit.map((r) => r.id) }, userStatus: "saved" },
-        _count: { id: true },
-      }),
-      db.curationResult.groupBy({
-        by: ["fundId"],
-        where: { fundId: { in: candidateFunds.map((f) => f.id) }, userStatus: "saved" },
-        _count: { id: true },
-      }),
-    ]);
-
-  const wCompMap = new Map(
-    websiteCompletions
-      .filter((c): c is typeof c & { websiteId: string } => c.websiteId != null)
-      .map((c) => [c.websiteId, c._count.id])
-  );
-  const iCompMap = new Map(
-    influencerCompletions
-      .filter((c): c is typeof c & { influencerId: string } => c.influencerId != null)
-      .map((c) => [c.influencerId, c._count.id])
-  );
-  const rCompMap = new Map(
-    redditCompletions
-      .filter((c): c is typeof c & { redditChannelId: string } => c.redditChannelId != null)
-      .map((c) => [c.redditChannelId, c._count.id])
-  );
-  const fCompMap = new Map(
-    fundCompletions
-      .filter((c): c is typeof c & { fundId: string } => c.fundId != null)
-      .map((c) => [c.fundId, c._count.id])
+  // ─── Step 3b: Pre-score + sort candidates ─────────────────────────────────
+  // Each entity is scored using four independent rules (category, keyword, country,
+  // description) and sorted with country-priority grouping: country-matched entities
+  // rank first within their score tier, filling up to the section cap of 20.
+  const scoredSites = sortWithCountryPriority(
+    candidateSites.map((w) => {
+      const entityCatSlugs = w.categoryId && categorySlugMap.has(w.categoryId)
+        ? [categorySlugMap.get(w.categoryId)!]
+        : [];
+      const { finalScore, breakdown } = computeEntityScore(
+        { tagSlugs: w.tagSlugs, categorySlugs: entityCatSlugs, countryId: w.countryId },
+        userCategorySlug,
+        keywordsLower,
+        countryId,
+        productDescWords
+      );
+      return { ...w, _score: finalScore, _breakdown: breakdown, _cntryMatch: scoreCountryMatch(w.countryId, countryId) > 0 };
+    }),
+    countryId
   );
 
-  // ─── Step 3c: Pre-score + sort candidates ─────────────────────────────────
-  // Sort each pool by relevance score so the AI always sees the best candidates
-  // first (important when we truncate to fit token limits).
-  const scoredSites = candidateSites
-    .map((w) => ({
-      ...w,
-      _s: scoreCandidateRelevance(w, keywordsLower, categorySlugs, wCompMap.get(w.id) ?? 0, Math.min((w.da / 100) * 2, 2), productDescWords),
-    }))
-    .sort((a, b) => b._s - a._s);
+  const scoredInfluencers = sortWithCountryPriority(
+    candidateInfluencers.map((inf) => {
+      const { finalScore, breakdown } = computeEntityScore(
+        { tagSlugs: inf.tagSlugs, categorySlugs: inf.categorySlugs, countryId: inf.countryId },
+        userCategorySlug,
+        keywordsLower,
+        countryId,
+        productDescWords
+      );
+      return { ...inf, _score: finalScore, _breakdown: breakdown, _cntryMatch: scoreCountryMatch(inf.countryId, countryId) > 0 };
+    }),
+    countryId
+  );
 
-  const scoredInfluencers = candidateInfluencers
-    .map((inf) => ({
-      ...inf,
-      _s: scoreCandidateRelevance(inf, keywordsLower, categorySlugs, iCompMap.get(inf.id) ?? 0, Math.min((inf.followersCount / 1_000_000) * 2, 2), productDescWords),
-    }))
-    .sort((a, b) => b._s - a._s);
+  const scoredReddit = sortWithCountryPriority(
+    candidateReddit.map((r) => {
+      const { finalScore, breakdown } = computeEntityScore(
+        { tagSlugs: r.tagSlugs, categorySlugs: r.categorySlugs, countryId: null },
+        userCategorySlug,
+        keywordsLower,
+        null, // Reddit is a global platform — country scoring disabled
+        productDescWords
+      );
+      return { ...r, _score: finalScore, _breakdown: breakdown, _cntryMatch: false };
+    }),
+    null // No country grouping for Reddit (global platform)
+  );
 
-  const scoredReddit = candidateReddit
-    .map((r) => ({
-      ...r,
-      _s: scoreCandidateRelevance(r, keywordsLower, categorySlugs, rCompMap.get(r.id) ?? 0, Math.min((r.totalMembers / 1_000_000) * 2, 2), productDescWords),
-    }))
-    .sort((a, b) => b._s - a._s);
+  const scoredFunds = sortWithCountryPriority(
+    candidateFunds.map((f) => {
+      const { finalScore, breakdown } = computeEntityScore(
+        { tagSlugs: f.tagSlugs, categorySlugs: f.categorySlugs, countryId: f.countryId },
+        userCategorySlug,
+        keywordsLower,
+        countryId,
+        productDescWords
+      );
+      return { ...f, _score: finalScore, _breakdown: breakdown, _cntryMatch: scoreCountryMatch(f.countryId, countryId) > 0 };
+    }),
+    countryId
+  );
 
-  const scoredFunds = candidateFunds
-    .map((f) => ({
-      ...f,
-      _s: scoreCandidateRelevance(f, keywordsLower, categorySlugs, fCompMap.get(f.id) ?? 0, 0, productDescWords),
-    }))
-    .sort((a, b) => b._s - a._s);
-
-  // Strip _s and cap pool size for AI (websites only)
+  // Strip internal scoring flags and cap pool size for AI (websites only)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const finalSites = scoredSites.slice(0, 80).map(({ _s, ...rest }) => rest);
+  const finalSites = scoredSites.slice(0, 80).map(({ _score, _breakdown, _cntryMatch, ...rest }) => rest);
 
   // ─── Step 4: AI matching ───────────────────────────────────────────────────
   await setProgress(curationId, "calling_ai");
@@ -543,7 +626,7 @@ async function processCuration(
   // Sections D/E/F are ranked directly by pre-score below.
   // Category + country are already guaranteed by DB hard filters, so every
   // candidate in finalInfluencers/finalReddit/finalFunds is already relevant.
-  const websiteResults = await rankWebsitesForCuration(
+  let websiteResults = await rankWebsitesForCuration(
     {
       productUrl,
       keywords: keywordsLower,
@@ -553,6 +636,67 @@ async function processCuration(
     },
     finalSites
   );
+
+  // UI requirement: for A/B/C show only the saved short description.
+  // If website description is empty, keep matchReason null (render nothing).
+  const websiteDescriptionById = new Map(
+    scoredSites.map((site) => [site.id, site.description?.trim() || null])
+  );
+
+  // If AI ranking is unavailable/fails, fall back to deterministic pre-scored websites
+  // so sections A/B/C never render blank when candidates exist in DB.
+  if (websiteResults.length === 0 && scoredSites.length > 0) {
+    const MAX_WEBSITES_PER_SECTION = 20;
+    const usedWebsiteIds = new Set<string>();
+
+    const sectionTypeAliases: Record<"a" | "b" | "c", string[]> = {
+      a: ["distribution", "distribution_site", "distribution-sites"],
+      b: ["guest_post", "guest-post", "guest post"],
+      c: ["press_release", "press-release", "press release"],
+    };
+
+    const normalizeType = (value: string) => value.toLowerCase().trim();
+
+    const buildWebsiteFallback = (
+      section: "a" | "b" | "c"
+    ) => {
+      const aliases = new Set(sectionTypeAliases[section].map(normalizeType));
+
+      const typedMatches = scoredSites
+        .filter((site) => aliases.has(normalizeType(site.type)) && !usedWebsiteIds.has(site.id))
+        .slice(0, MAX_WEBSITES_PER_SECTION);
+
+      const pool =
+        typedMatches.length > 0
+          ? typedMatches
+          : scoredSites
+              .filter((site) => !usedWebsiteIds.has(site.id))
+              .slice(0, MAX_WEBSITES_PER_SECTION);
+
+      return pool.map((site, index) => {
+        usedWebsiteIds.add(site.id);
+        return {
+          websiteId: site.id,
+          matchScore: Math.min(0.5 + site._score * 0.05, 1),
+          matchReason: "",
+          section,
+          rank: index + 1,
+        };
+      });
+    };
+
+    websiteResults = [
+      ...buildWebsiteFallback("a"),
+      ...buildWebsiteFallback("b"),
+      ...buildWebsiteFallback("c"),
+    ];
+  }
+
+  // Always enforce description-only reason for website sections, including AI output.
+  websiteResults = websiteResults.map((result) => ({
+    ...result,
+    matchReason: websiteDescriptionById.get(result.websiteId ?? "") ?? "",
+  }));
 
   // ─── Build D/E/F directly from pre-scored candidates ─────────────────────
   // Ranking signals (already applied in scoredInfluencers/scoredReddit/scoredFunds):
@@ -565,24 +709,24 @@ async function processCuration(
 
   const influencerResults = scoredInfluencers.slice(0, MAX_PER_SECTION).map((inf, idx) => ({
     influencerId: inf.id,
-    matchScore: Math.min(0.5 + inf._s * 0.05, 1),
-    matchReason: `${inf.platform} · ${(inf.followersCount / 1000).toFixed(0)}K followers · ${inf.categorySlugs.join(", ")}`,
+    matchScore: Math.min(0.5 + inf._score * 0.05, 1),
+    matchReason: inf.description?.trim() || "",
     section: "d" as const,
     rank: idx + 1,
   }));
 
   const redditResults = scoredReddit.slice(0, MAX_PER_SECTION).map((r, idx) => ({
     redditChannelId: r.id,
-    matchScore: Math.min(0.5 + r._s * 0.05, 1),
-    matchReason: `${(r.totalMembers / 1000).toFixed(0)}K members · ${r.postingDifficulty ?? "N/A"} to post · ${r.categorySlugs.join(", ")}`,
+    matchScore: Math.min(0.5 + r._score * 0.05, 1),
+    matchReason: r.description?.trim() || "",
     section: "e" as const,
     rank: idx + 1,
   }));
 
   const fundResults = scoredFunds.slice(0, MAX_PER_SECTION).map((f, idx) => ({
     fundId: f.id,
-    matchScore: Math.min(0.5 + f._s * 0.05, 1),
-    matchReason: `${f.investmentStage ?? "Any"} stage · ${f.ticketSize ?? "N/A"} · ${f.categorySlugs.join(", ")}`,
+    matchScore: Math.min(0.5 + f._score * 0.05, 1),
+    matchReason: f.description?.trim() || "",
     section: "f" as const,
     rank: idx + 1,
   }));

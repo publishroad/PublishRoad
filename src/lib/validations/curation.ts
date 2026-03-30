@@ -24,6 +24,8 @@ export const createCurationSchema = z.object({
     .trim()
     .min(1, "Description is required")
     .max(1000, "Description must be under 1000 characters"),
+  hireUs: z.boolean().optional(),
+  hireUsPackage: z.enum(["starter", "complete"]).optional(),
 });
 
 export const updateCurationResultSchema = z.object({

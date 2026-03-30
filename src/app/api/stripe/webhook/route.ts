@@ -5,6 +5,7 @@ import { redis } from "@/lib/redis";
 import { encryptField, decryptField, hashLookupValue } from "@/lib/server-utils";
 import { invalidateUserProfile } from "@/lib/cache";
 import { getActivePaymentProvider, getStripeWebhookSecret } from "@/lib/payments/service";
+import { finalizeHireUsPurchase, parseHireUsPackageSlug } from "@/lib/hire-us";
 import type Stripe from "stripe";
 
 export const dynamic = "force-dynamic";
@@ -82,6 +83,9 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const planId = session.metadata?.planId;
   if (!userId || !planId) return;
 
+  const isHireUsFlow = session.metadata?.flow === "hire_us";
+  const hireUsPackage = parseHireUsPackageSlug(session.metadata?.hireUsPackage);
+
   const plan = await db.planConfig.findUnique({
     where: { id: planId },
     select: { credits: true },
@@ -124,6 +128,13 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       message: "Your plan has been upgraded. Credits have been added to your account.",
     },
   });
+
+  if (isHireUsFlow && hireUsPackage) {
+    await finalizeHireUsPurchase({
+      userId,
+      packageSlug: hireUsPackage,
+    });
+  }
 
   await invalidateUserProfile(userId);
 }

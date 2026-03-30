@@ -7,7 +7,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import {
   Form,
@@ -329,7 +328,7 @@ export default function LoginPage() {
 
           <p style={{ textAlign: "center", fontSize: "0.875rem", color: "#64748b", marginTop: "1.5rem", fontWeight: 300 }}>
             Don&apos;t have an account?{" "}
-            <Link href="/signup" style={{ color: "#5B58F6", fontWeight: 500, textDecoration: "none" }}>
+            <Link href={`/signup?${new URLSearchParams({ callbackUrl }).toString()}`} style={{ color: "#5B58F6", fontWeight: 500, textDecoration: "none" }}>
               Create one free
             </Link>
           </p>

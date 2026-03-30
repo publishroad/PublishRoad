@@ -6,10 +6,19 @@ interface StreamingCurationData {
   status: "pending" | "processing" | "completed" | "failed";
   keywords: string[];
   description: string | null;
+  countryName?: string | null;
+  categoryName?: string | null;
   results: StreamingResult[];
   maskedCount: number;
   lockedSections?: string[];
   planSlug?: string;
+  hireUsLead?: {
+    id: string;
+    status: string;
+    packageSlug: "complete" | "starter";
+    createdAt: string;
+    message: string | null;
+  } | null;
 }
 
 interface StreamingResult {

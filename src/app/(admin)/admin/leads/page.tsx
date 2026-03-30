@@ -1,6 +1,7 @@
 // Cache leads for 60 seconds — admin list, changes are infrequent
 export const revalidate = 60;
 import { db } from "@/lib/db";
+import Link from "next/link";
 import { formatDate } from "@/lib/utils";
 import { decryptField } from "@/lib/server-utils";
 import { AppHeader } from "@/components/dashboard/AppHeader";
@@ -30,11 +31,12 @@ export default async function AdminLeadsPage() {
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Date</th>
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Message</th>
+                  <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {decrypted.length === 0 ? (
-                  <tr><td colSpan={5} className="text-center py-16 text-gray-400 text-sm">No leads yet.</td></tr>
+                  <tr><td colSpan={6} className="text-center py-16 text-gray-400 text-sm">No leads yet.</td></tr>
                 ) : decrypted.map((lead: LeadRow) => (
                   <tr key={lead.id} className="hover:bg-gray-50/60 transition-colors">
                     <td className="px-5 py-4">
@@ -49,6 +51,14 @@ export default async function AdminLeadsPage() {
                     <td className="px-5 py-4 text-xs text-gray-400">{formatDate(lead.createdAt)}</td>
                     <td className="px-5 py-4 max-w-xs">
                       <p className="text-xs text-gray-500 truncate">{lead.message ?? "—"}</p>
+                    </td>
+                    <td className="px-5 py-4">
+                      <Link
+                        href={`/admin/leads/${lead.id}`}
+                        className="inline-flex items-center h-8 px-3 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:text-[#465FFF] hover:border-[#dbe4ff] transition-colors"
+                      >
+                        Manage
+                      </Link>
                     </td>
                   </tr>
                 ))}

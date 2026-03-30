@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useForm } from "react-hook-form";
@@ -19,8 +19,25 @@ import {
 } from "@/components/ui/form";
 import { signupSchema, type SignupInput } from "@/lib/validations/auth";
 
+function extractHireUsPackageFromCallback(callbackUrl: string | null): "starter" | "complete" | null {
+  if (!callbackUrl) return null;
+  try {
+    const url = new URL(callbackUrl, "http://localhost");
+    if (url.pathname === "/onboarding/hire-us") {
+      const pkg = url.searchParams.get("package");
+      if (pkg === "starter" || pkg === "complete") return pkg;
+    }
+  } catch {
+    // Invalid URL, ignore
+  }
+  return null;
+}
+
 export default function SignupPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get("callbackUrl") ?? "/onboarding/plan";
+  const hireUsPackage = extractHireUsPackageFromCallback(callbackUrl);
   const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<SignupInput>({
@@ -56,10 +73,11 @@ export default function SignupPage() {
         email: data.email,
         password: data.password,
         redirect: false,
+        callbackUrl: callbackUrl.startsWith("/") ? callbackUrl : "/onboarding/plan",
       });
 
       toast.success("Account created! Let's get you set up.");
-      router.push("/onboarding/plan");
+      router.push(callbackUrl.startsWith("/") ? callbackUrl : "/onboarding/plan");
     } catch {
       toast.error("Signup failed. Please try again.");
     } finally {
@@ -93,9 +111,27 @@ export default function SignupPage() {
             border: "1px solid rgba(226, 232, 240, 0.8)",
           }}
         >
+          {/* Hire Us Banner */}
+          {hireUsPackage && (
+            <div style={{
+              background: "linear-gradient(135deg, #6366f1 0%, #818cf8 100%)",
+              borderRadius: "1rem",
+              padding: "1rem",
+              marginBottom: "1.5rem",
+              color: "#ffffff",
+              fontSize: "0.875rem",
+            }}>
+              <p style={{ fontWeight: 600, marginBottom: "0.25rem" }}>
+                Signing up for Hire Us {hireUsPackage === "starter" ? "Starter" : "Complete"}
+              </p>
+              <p style={{ fontSize: "0.8rem", opacity: 0.95, lineHeight: 1.4 }}>
+                You&apos;ll get 1 free curation to test our work. Then purchase your package to launch your full service.
+              </p>
+            </div>
+          )}
           <button
             type="button"
-            onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
+            onClick={() => signIn("google", { callbackUrl: callbackUrl.startsWith("/") ? callbackUrl : "/dashboard" })}
             style={{
               display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
               width: "100%", marginBottom: "1rem", borderRadius: "999px",

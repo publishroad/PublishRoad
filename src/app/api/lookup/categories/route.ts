@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const categories = await db.category.findMany({
     where: { isActive: true },
@@ -9,10 +11,7 @@ export async function GET() {
   });
 
   const response = NextResponse.json(categories);
-  // Static lookup data: long-lived browser/proxy cache.
-  response.headers.set(
-    "Cache-Control",
-    "public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800"
-  );
+  // Always fetch latest lookup values from DB.
+  response.headers.set("Cache-Control", "no-store, max-age=0");
   return response;
 }
