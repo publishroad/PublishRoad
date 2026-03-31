@@ -187,6 +187,9 @@ export async function createCheckoutForActiveProvider(args: {
   cancelUrl: string;
   provider?: ActivePaymentProvider; // if omitted and multiple active, caller should pick
   metadata?: Record<string, string>;
+  amountCentsOverride?: number;
+  currencyOverride?: string;
+  displayNameOverride?: string;
 }): Promise<CheckoutResult> {
   let provider: ActivePaymentProvider;
 
@@ -214,7 +217,13 @@ export async function createCheckoutForActiveProvider(args: {
   // ── Stripe ────────────────────────────────────────────────────────────────
   if (provider === "stripe") {
     const stripeSecretKey = await getStripeSecretKeyForRuntime();
-    const url = await createCheckoutSession({ ...args, stripeSecretKey });
+    const url = await createCheckoutSession({
+      ...args,
+      stripeSecretKey,
+      oneTimeAmountCents: args.amountCentsOverride,
+      oneTimeCurrency: args.currencyOverride,
+      oneTimeProductName: args.displayNameOverride,
+    });
     return { type: "redirect", url };
   }
 
@@ -228,7 +237,12 @@ export async function createCheckoutForActiveProvider(args: {
     });
     if (!plan) throw new PaymentConfigurationError("Plan not found.");
 
-    const amountUsd = (plan.priceCents / 100).toFixed(2);
+    const amountCents = args.amountCentsOverride ?? plan.priceCents;
+    const currency = (args.currencyOverride ?? "USD").toUpperCase();
+    if (currency !== "USD") {
+      throw new PaymentConfigurationError("PayPal checkout currently supports USD only.");
+    }
+    const amountUsd = (amountCents / 100).toFixed(2);
     const accessToken = await getPayPalAccessToken(clientId, secret, mode);
 
     const captureBase = `${process.env.NEXT_PUBLIC_APP_URL}/api/payments/paypal-capture`;
@@ -237,7 +251,7 @@ export async function createCheckoutForActiveProvider(args: {
       accessToken,
       mode,
       amountUsd,
-      planName: plan.name,
+      planName: args.displayNameOverride ?? plan.name,
       returnUrl: captureBase,
       cancelUrl: args.cancelUrl,
     });
@@ -267,11 +281,14 @@ export async function createCheckoutForActiveProvider(args: {
     });
     if (!plan) throw new PaymentConfigurationError("Plan not found.");
 
+    const checkoutCurrency = (args.currencyOverride ?? currency).toUpperCase();
+    const checkoutAmountCents = args.amountCentsOverride ?? plan.priceCents;
+
     const { orderId, amount } = await createRazorpayOrder({
       keyId,
       keySecret,
-      amountSmallestUnit: plan.priceCents, // cents = paise for INR; same unit
-      currency,
+      amountSmallestUnit: checkoutAmountCents,
+      currency: checkoutCurrency,
       receipt: `plan_${args.planId.slice(-8)}_${Date.now()}`,
     });
 
@@ -283,12 +300,23 @@ export async function createCheckoutForActiveProvider(args: {
         userId: args.userId,
         successUrl: args.successUrl,
         cancelUrl: args.cancelUrl,
+        amountCents: checkoutAmountCents,
+        currency: checkoutCurrency,
         metadata: args.metadata ?? null,
       }),
-      { ex: 1800 }
+      { ex: 60 * 60 * 24 }
     );
 
-    return { type: "razorpay", orderId, amount, currency, keyId, planName: plan.name, successUrl: args.successUrl, cancelUrl: args.cancelUrl };
+    return {
+      type: "razorpay",
+      orderId,
+      amount,
+      currency: checkoutCurrency,
+      keyId,
+      planName: args.displayNameOverride ?? plan.name,
+      successUrl: args.successUrl,
+      cancelUrl: args.cancelUrl,
+    };
   }
 
   throw new UnsupportedPaymentProviderError(provider);

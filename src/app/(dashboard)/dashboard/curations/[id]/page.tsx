@@ -315,17 +315,19 @@ export default function CurationDetailPage() {
                   <UpsellBanner maskedCount={curation.maskedCount} planSlug={planSlug} />
                 )}
 
-                {sectionsToShow.map((section) => (
-                  <CurationSection
-                    key={section}
-                    section={section}
-                    results={sectionResults[section]}
-                    locked={(curation.lockedSections ?? []).includes(section)}
-                    planSlug={curation.planSlug ?? "free"}
-                    updatingResultId={updatingResultId}
-                    onToggleComplete={handleTaskStatusChange}
-                  />
-                ))}
+                <div id="curation-list" className="scroll-mt-24 space-y-4">
+                  {sectionsToShow.map((section) => (
+                    <CurationSection
+                      key={section}
+                      section={section}
+                      results={sectionResults[section]}
+                      locked={(curation.lockedSections ?? []).includes(section)}
+                      planSlug={curation.planSlug ?? "free"}
+                      updatingResultId={updatingResultId}
+                      onToggleComplete={handleTaskStatusChange}
+                    />
+                  ))}
+                </div>
               </div>
             )}
 

@@ -10,6 +10,7 @@ export type HireUsChecklistItem = {
   stepLabel: string | null;
   completed: boolean;
   completedAt: string | null;
+  completionNote: string | null;
 };
 
 export type HireUsTimelineEventType = "state_change" | "checklist_update" | "admin_update" | "system";
@@ -32,6 +33,7 @@ export type HireUsPackageDefinition = {
   slug: HireUsPackageSlug;
   title: string;
   priceCents: number;
+  currency: "USD";
   mappedPlanSlug: "starter" | "pro";
 };
 
@@ -40,12 +42,14 @@ export const HIRE_US_PACKAGES: Record<HireUsPackageSlug, HireUsPackageDefinition
     slug: "starter",
     title: "Hire Us Starter",
     priceCents: 39900,
+    currency: "USD",
     mappedPlanSlug: "starter",
   },
   complete: {
     slug: "complete",
     title: "Hire Us Complete",
     priceCents: 99900,
+    currency: "USD",
     mappedPlanSlug: "pro",
   },
 };
@@ -95,6 +99,7 @@ export function buildDefaultHireUsChecklist(packageSlug: HireUsPackageSlug): Hir
       stepLabel: null,
       completed: false,
       completedAt: null,
+      completionNote: null,
     },
     {
       id: "execution_started",
@@ -103,6 +108,7 @@ export function buildDefaultHireUsChecklist(packageSlug: HireUsPackageSlug): Hir
       stepLabel: null,
       completed: false,
       completedAt: null,
+      completionNote: null,
     },
     {
       id: "delivery_report",
@@ -111,6 +117,7 @@ export function buildDefaultHireUsChecklist(packageSlug: HireUsPackageSlug): Hir
       stepLabel: null,
       completed: false,
       completedAt: null,
+      completionNote: null,
     },
   ];
 
@@ -122,6 +129,7 @@ export function buildDefaultHireUsChecklist(packageSlug: HireUsPackageSlug): Hir
       stepLabel: null,
       completed: false,
       completedAt: null,
+      completionNote: null,
     });
   }
 
@@ -129,6 +137,29 @@ export function buildDefaultHireUsChecklist(packageSlug: HireUsPackageSlug): Hir
 }
 
 type CurationSectionKey = "a" | "b" | "c" | "d" | "e" | "f";
+
+export function buildCurationChecklistId(args: {
+  resultId: string;
+  section: CurationSectionKey;
+  websiteId?: string | null;
+  influencerId?: string | null;
+  redditChannelId?: string | null;
+  fundId?: string | null;
+}): string {
+  if ((args.section === "a" || args.section === "b" || args.section === "c") && args.websiteId) {
+    return `curation:${args.section}:website:${args.websiteId}`;
+  }
+  if (args.section === "d" && args.influencerId) {
+    return `curation:${args.section}:influencer:${args.influencerId}`;
+  }
+  if (args.section === "e" && args.redditChannelId) {
+    return `curation:${args.section}:reddit:${args.redditChannelId}`;
+  }
+  if (args.section === "f" && args.fundId) {
+    return `curation:${args.section}:fund:${args.fundId}`;
+  }
+  return `curation:${args.section}:result:${args.resultId}`;
+}
 
 const curationSectionOrder: CurationSectionKey[] = ["a", "b", "c", "d", "e", "f"];
 
@@ -224,30 +255,33 @@ function collectCandidateCurationIds(args: {
 }
 
 function buildCurationChecklistTask(result: CurationResultForChecklist): HireUsChecklistItem {
-  let resourceKey = `result:${result.id}`;
   let label = `${curationSectionStepLabels[result.section]} item ${result.id.slice(-6)}`;
 
   if ((result.section === "a" || result.section === "b" || result.section === "c") && result.website) {
-    resourceKey = `website:${result.website.id}`;
     label = result.website.name;
   } else if (result.section === "d" && result.influencer) {
-    resourceKey = `influencer:${result.influencer.id}`;
     label = result.influencer.name;
   } else if (result.section === "e" && result.redditChannel) {
-    resourceKey = `reddit:${result.redditChannel.id}`;
     label = result.redditChannel.name;
   } else if (result.section === "f" && result.fund) {
-    resourceKey = `fund:${result.fund.id}`;
     label = result.fund.name;
   }
 
   return {
-    id: `curation:${result.section}:${resourceKey}`,
+    id: buildCurationChecklistId({
+      resultId: result.id,
+      section: result.section,
+      websiteId: result.website?.id ?? null,
+      influencerId: result.influencer?.id ?? null,
+      redditChannelId: result.redditChannel?.id ?? null,
+      fundId: result.fund?.id ?? null,
+    }),
     label,
     stepKey: result.section,
     stepLabel: curationSectionStepLabels[result.section],
     completed: false,
     completedAt: null,
+    completionNote: null,
   };
 }
 
@@ -284,6 +318,7 @@ function buildChecklistFromCuration(
         stepLabel: existing?.stepLabel ?? task.stepLabel,
         completed: existing?.completed ?? false,
         completedAt: existing?.completedAt ?? null,
+        completionNote: existing?.completionNote ?? null,
       };
     });
 
@@ -512,6 +547,115 @@ export async function resolveHireUsChecklistsFromCurationBatch(args: {
   });
 }
 
+/** Resolves the display name (productUrl) for each lead from its linked curation. */
+export async function resolveLeadDisplayNames(
+  leads: Array<{ linkedCurationId: string | null; websiteUrl: string | null }>
+): Promise<Map<string, string>> {
+  const result = new Map<string, string>();
+  const ids = leads.map((l) => l.linkedCurationId).filter((id): id is string => Boolean(id));
+
+  if (ids.length > 0) {
+    const curations = await db.curation.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, productUrl: true },
+    });
+    for (const c of curations) {
+      result.set(c.id, c.productUrl);
+    }
+  }
+
+  // Fall back to websiteUrl if no curation entry found
+  for (const lead of leads) {
+    if (lead.linkedCurationId && !result.has(lead.linkedCurationId) && lead.websiteUrl) {
+      result.set(lead.linkedCurationId, lead.websiteUrl);
+    }
+  }
+
+  return result;
+}
+
+export async function syncChecklistCompletionToCurationResults(args: {
+  linkedCurationId: string | null;
+  previousChecklist: HireUsChecklistItem[];
+  nextChecklist: HireUsChecklistItem[];
+}): Promise<void> {
+  if (!args.linkedCurationId) return;
+
+  const previousChecklistById = new Map(args.previousChecklist.map((item) => [item.id, item]));
+  const changedCurationChecklistItems = args.nextChecklist.filter((item) => {
+    if (!item.id.startsWith("curation:")) return false;
+    const previous = previousChecklistById.get(item.id);
+    return previous ? previous.completed !== item.completed : true;
+  });
+
+  if (changedCurationChecklistItems.length === 0) return;
+
+  const curationResults = await db.curationResult.findMany({
+    where: {
+      curationId: args.linkedCurationId,
+      section: { in: ["a", "b", "c", "d", "e", "f"] },
+    },
+    select: {
+      id: true,
+      section: true,
+      websiteId: true,
+      influencerId: true,
+      redditChannelId: true,
+      fundId: true,
+    },
+  });
+
+  const resultIdByChecklistId = new Map<string, string>();
+  for (const result of curationResults) {
+    resultIdByChecklistId.set(
+      buildCurationChecklistId({
+        resultId: result.id,
+        section: result.section,
+        websiteId: result.websiteId,
+        influencerId: result.influencerId,
+        redditChannelId: result.redditChannelId,
+        fundId: result.fundId,
+      }),
+      result.id
+    );
+  }
+
+  const idsToSave = new Set<string>();
+  const idsToClear = new Set<string>();
+
+  for (const item of changedCurationChecklistItems) {
+    const resultId = resultIdByChecklistId.get(item.id);
+    if (!resultId) continue;
+    if (item.completed) {
+      idsToSave.add(resultId);
+      idsToClear.delete(resultId);
+    } else {
+      idsToClear.add(resultId);
+      idsToSave.delete(resultId);
+    }
+  }
+
+  if (idsToSave.size > 0) {
+    await db.curationResult.updateMany({
+      where: {
+        curationId: args.linkedCurationId,
+        id: { in: Array.from(idsToSave) },
+      },
+      data: { userStatus: "saved" },
+    });
+  }
+
+  if (idsToClear.size > 0) {
+    await db.curationResult.updateMany({
+      where: {
+        curationId: args.linkedCurationId,
+        id: { in: Array.from(idsToClear) },
+      },
+      data: { userStatus: null },
+    });
+  }
+}
+
 export function createHireUsTimelineEvent(
   type: HireUsTimelineEventType,
   text: string,
@@ -540,6 +684,10 @@ function sanitizeChecklistItem(
     stepLabel: typeof candidate.stepLabel === "string" ? candidate.stepLabel : null,
     completed: Boolean(candidate.completed),
     completedAt: typeof candidate.completedAt === "string" ? candidate.completedAt : null,
+    completionNote:
+      typeof candidate.completionNote === "string" && candidate.completionNote.trim().length > 0
+        ? candidate.completionNote.trim()
+        : null,
   };
 }
 
@@ -572,6 +720,10 @@ function buildNormalizedChecklist(
         stepLabel: item.stepLabel ?? null,
         completed: Boolean(item.completed),
         completedAt: item.completedAt ?? null,
+        completionNote:
+          typeof item.completionNote === "string" && item.completionNote.trim().length > 0
+            ? item.completionNote.trim()
+            : null,
       })
     );
 

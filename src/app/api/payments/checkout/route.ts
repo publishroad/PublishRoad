@@ -70,6 +70,7 @@ export async function POST(req: NextRequest) {
       successUrl,
       cancelUrl,
       provider: provider as ActivePaymentProvider | undefined,
+      currencyOverride: "USD",
     });
 
     if (result.type === "razorpay") {

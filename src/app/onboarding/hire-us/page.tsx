@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import type { ActivePaymentProvider } from "@/lib/payments/service";
@@ -36,10 +36,26 @@ export default function HireUsOnboardingPage() {
   const searchParams = useSearchParams();
   const selectedParam = searchParams.get("package");
   const preselectedPackage = selectedParam === "complete" ? "complete" : "starter";
+  const checkoutError = searchParams.get("error");
 
   const [loading, setLoading] = useState<PackageSlug | null>(null);
   const [providerPicker, setProviderPicker] = useState<ActivePaymentProvider[] | null>(null);
   const [pendingPackage, setPendingPackage] = useState<PackageSlug | null>(null);
+  const [inlineError, setInlineError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!checkoutError) return;
+
+    const message =
+      checkoutError === "capture_failed"
+        ? "Payment was not captured. Please try again."
+        : checkoutError === "network_error"
+        ? "Network error while confirming payment. Please try again."
+        : "Payment could not be completed. Please try again.";
+
+    setInlineError(message);
+    toast.error(message);
+  }, [checkoutError]);
 
   const orderedCards = useMemo(() => {
     return [...packageCards].sort((a, b) => {
@@ -51,6 +67,7 @@ export default function HireUsOnboardingPage() {
 
   async function startHireUsCheckout(packageSlug: PackageSlug, provider?: ActivePaymentProvider) {
     if (loading && !provider) return;
+    setInlineError(null);
     setLoading(packageSlug);
 
     try {
@@ -62,7 +79,13 @@ export default function HireUsOnboardingPage() {
 
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data.error ?? "Failed to start Hire Us checkout");
+        const message = data.error ?? "Failed to start Hire Us checkout";
+        setInlineError(message);
+        toast.error(message);
+        if (res.status === 401) {
+          const callbackPath = `/onboarding/hire-us?package=${packageSlug}`;
+          window.location.href = `/login?callbackUrl=${encodeURIComponent(callbackPath)}`;
+        }
         setLoading(null);
         return;
       }
@@ -81,14 +104,29 @@ export default function HireUsOnboardingPage() {
 
       if (data.razorpay) {
         const { openRazorpayCheckout } = await import("@/lib/razorpay-checkout");
-        await openRazorpayCheckout(data.razorpay).catch(() => setLoading(null));
+        try {
+          await openRazorpayCheckout(data.razorpay);
+        } catch (error) {
+          setLoading(null);
+          if (error instanceof Error && error.message === "dismissed") {
+            return;
+          }
+          const message =
+            error instanceof Error && error.message
+              ? `Razorpay checkout failed: ${error.message}`
+              : "Razorpay checkout failed. Please try again.";
+          setInlineError(message);
+          toast.error(message);
+        }
         return;
       }
 
       toast.error("Unexpected checkout response. Please try again.");
+      setInlineError("Unexpected checkout response. Please try again.");
       setLoading(null);
     } catch {
       toast.error("Something went wrong. Please try again.");
+      setInlineError("Something went wrong. Please try again.");
       setLoading(null);
     }
   }
@@ -169,6 +207,12 @@ export default function HireUsOnboardingPage() {
             );
           })}
         </div>
+
+        {inlineError && (
+          <p className="mt-5 text-center text-sm text-rose-600" role="alert">
+            {inlineError}
+          </p>
+        )}
 
         <div className="text-center mt-8">
           <button

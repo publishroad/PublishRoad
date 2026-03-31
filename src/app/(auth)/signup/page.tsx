@@ -19,11 +19,14 @@ import {
 } from "@/components/ui/form";
 import { signupSchema, type SignupInput } from "@/lib/validations/auth";
 
+const ONBOARDING_PLAN_PATH = "/onboarding/plan";
+const HIRE_US_ONBOARDING_PATH = "/onboarding/hire-us";
+
 function extractHireUsPackageFromCallback(callbackUrl: string | null): "starter" | "complete" | null {
   if (!callbackUrl) return null;
   try {
     const url = new URL(callbackUrl, "http://localhost");
-    if (url.pathname === "/onboarding/hire-us") {
+    if (url.pathname === HIRE_US_ONBOARDING_PATH) {
       const pkg = url.searchParams.get("package");
       if (pkg === "starter" || pkg === "complete") return pkg;
     }
@@ -33,10 +36,25 @@ function extractHireUsPackageFromCallback(callbackUrl: string | null): "starter"
   return null;
 }
 
+function resolveSignupRedirectTarget(callbackUrl: string | null): string {
+  if (callbackUrl) {
+    try {
+      const url = new URL(callbackUrl, "http://localhost");
+      if (url.pathname === HIRE_US_ONBOARDING_PATH) {
+        return `${url.pathname}${url.search}`;
+      }
+    } catch {
+      // Ignore invalid callback URL and use default onboarding flow.
+    }
+  }
+  return ONBOARDING_PLAN_PATH;
+}
+
 export default function SignupPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") ?? "/onboarding/plan";
+  const callbackUrl = searchParams.get("callbackUrl");
+  const redirectTarget = resolveSignupRedirectTarget(callbackUrl);
   const hireUsPackage = extractHireUsPackageFromCallback(callbackUrl);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -69,15 +87,21 @@ export default function SignupPage() {
         return;
       }
 
-      await signIn("credentials", {
+      const signInResult = await signIn("credentials", {
         email: data.email,
         password: data.password,
         redirect: false,
-        callbackUrl: callbackUrl.startsWith("/") ? callbackUrl : "/onboarding/plan",
+        callbackUrl: redirectTarget,
       });
 
+      if (!signInResult || signInResult.error) {
+        toast.error("Account created, but auto sign-in failed. Please log in.");
+        router.push(`/login?${new URLSearchParams({ callbackUrl: redirectTarget }).toString()}`);
+        return;
+      }
+
       toast.success("Account created! Let's get you set up.");
-      router.push(callbackUrl.startsWith("/") ? callbackUrl : "/onboarding/plan");
+      router.push(redirectTarget);
     } catch {
       toast.error("Signup failed. Please try again.");
     } finally {
@@ -131,7 +155,7 @@ export default function SignupPage() {
           )}
           <button
             type="button"
-            onClick={() => signIn("google", { callbackUrl: callbackUrl.startsWith("/") ? callbackUrl : "/dashboard" })}
+            onClick={() => signIn("google", { callbackUrl: redirectTarget })}
             style={{
               display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
               width: "100%", marginBottom: "1rem", borderRadius: "999px",

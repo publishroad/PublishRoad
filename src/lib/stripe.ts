@@ -17,6 +17,9 @@ export async function createCheckoutSession({
   cancelUrl,
   stripeSecretKey,
   metadata,
+  oneTimeAmountCents,
+  oneTimeCurrency,
+  oneTimeProductName,
 }: {
   userId: string;
   planId: string;
@@ -25,6 +28,9 @@ export async function createCheckoutSession({
   cancelUrl: string;
   stripeSecretKey?: string;
   metadata?: Record<string, string>;
+  oneTimeAmountCents?: number;
+  oneTimeCurrency?: string;
+  oneTimeProductName?: string;
 }): Promise<string> {
   const plan = await db.planConfig.findUnique({
     where: { id: planId, isActive: true },
@@ -38,10 +44,30 @@ export async function createCheckoutSession({
 
   const stripe = getStripeClient(stripeSecretKey);
 
+  const normalizedOverrideCurrency = oneTimeCurrency?.toLowerCase();
+  const canUseInlinePriceData =
+    mode === "payment" &&
+    typeof oneTimeAmountCents === "number" &&
+    Number.isFinite(oneTimeAmountCents) &&
+    oneTimeAmountCents > 0;
+
   const session = await stripe.checkout.sessions.create({
     mode,
     customer: stripeCustomerId ?? undefined,
-    line_items: [{ price: plan.stripePriceId, quantity: 1 }],
+    line_items: canUseInlinePriceData
+      ? [
+          {
+            price_data: {
+              currency: normalizedOverrideCurrency ?? "usd",
+              unit_amount: Math.round(oneTimeAmountCents),
+              product_data: {
+                name: oneTimeProductName?.trim() || plan.name,
+              },
+            },
+            quantity: 1,
+          },
+        ]
+      : [{ price: plan.stripePriceId, quantity: 1 }],
     success_url: successUrl,
     cancel_url: cancelUrl,
     metadata: { userId, planId, ...(metadata ?? {}) },

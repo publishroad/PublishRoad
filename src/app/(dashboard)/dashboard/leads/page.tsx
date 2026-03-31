@@ -7,6 +7,7 @@ import {
   packageSlugFromServiceType,
   parseHireUsLeadNotes,
   resolveHireUsChecklistsFromCurationBatch,
+  resolveLeadDisplayNames,
   type HireUsLeadState,
 } from "@/lib/hire-us";
 
@@ -40,13 +41,24 @@ function formatTimelineTime(value: string): string {
 }
 
 function groupChecklistByStep(
-  checklist: Array<{ id: string; label: string; stepLabel: string | null; completed: boolean }>
-): Array<{ key: string; label: string; completed: number; items: Array<{ id: string; label: string; completed: boolean }> }> {
+  checklist: Array<{
+    id: string;
+    label: string;
+    stepLabel: string | null;
+    completed: boolean;
+    completionNote: string | null;
+  }>
+): Array<{
+  key: string;
+  label: string;
+  completed: number;
+  items: Array<{ id: string; label: string; completed: boolean; completionNote: string | null }>;
+}> {
   const groups = new Map<
     string,
     {
       label: string;
-      items: Array<{ id: string; label: string; completed: boolean }>;
+      items: Array<{ id: string; label: string; completed: boolean; completionNote: string | null }>;
     }
   >();
 
@@ -56,11 +68,23 @@ function groupChecklistByStep(
     const group = groups.get(key);
 
     if (group) {
-      group.items.push({ id: item.id, label: item.label, completed: item.completed });
+      group.items.push({
+        id: item.id,
+        label: item.label,
+        completed: item.completed,
+        completionNote: item.completionNote,
+      });
     } else {
       groups.set(key, {
         label,
-        items: [{ id: item.id, label: item.label, completed: item.completed }],
+        items: [
+          {
+            id: item.id,
+            label: item.label,
+            completed: item.completed,
+            completionNote: item.completionNote,
+          },
+        ],
       });
     }
   }
@@ -128,6 +152,13 @@ export default async function DashboardLeadsPage() {
     };
   });
 
+  const curationProductUrls = await resolveLeadDisplayNames(
+    leadsWithResolvedChecklist.map((l) => ({
+      linkedCurationId: l.linkedCurationId,
+      websiteUrl: l.lead.websiteUrl,
+    }))
+  );
+
   const statusStyle: Record<string, string> = {
     new: "bg-[#EEF2FF] text-[#465FFF]",
     contacted: "bg-orange-50 text-orange-700",
@@ -150,10 +181,12 @@ export default async function DashboardLeadsPage() {
           </div>
         ) : (
           leadsWithResolvedChecklist.map(({ lead, parsedNotes, linkedCurationId }) => {
+            const websiteName = (linkedCurationId ? curationProductUrls.get(linkedCurationId) : undefined) ?? lead.websiteUrl ?? null;
             const completedChecklistCount = parsedNotes
               ? parsedNotes.checklist.filter((item) => item.completed).length
               : 0;
             const checklistTotal = parsedNotes?.checklist.length ?? 0;
+            const progressPercent = checklistTotal > 0 ? Math.round((completedChecklistCount / checklistTotal) * 100) : 0;
             const checklistGroups = parsedNotes ? groupChecklistByStep(parsedNotes.checklist) : [];
             const timeline = parsedNotes
               ? [...parsedNotes.timeline].sort((a, b) => +new Date(b.at) - +new Date(a.at))
@@ -161,10 +194,12 @@ export default async function DashboardLeadsPage() {
 
             return (
               <article key={lead.id} className="bg-white border border-gray-200 rounded-2xl p-5 sm:p-6">
+                {websiteName && (
+                  <h2 className="text-xl font-bold text-gray-900 mb-3 break-all">{websiteName}</h2>
+                )}
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                   <div>
                     <p className="text-xs uppercase tracking-[0.16em] text-[#465FFF] font-semibold">{packageLabel(lead.serviceType)} Package</p>
-                    <h2 className="text-lg font-semibold text-gray-900 mt-1">PublishRoad Team Execution</h2>
                     <p className="text-xs text-gray-400 mt-1">Started {formatDate(lead.createdAt)}</p>
                   </div>
                   <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium capitalize ${statusStyle[lead.status] ?? "bg-gray-100 text-gray-600"}`}>
@@ -180,36 +215,68 @@ export default async function DashboardLeadsPage() {
                 </div>
 
                 {parsedNotes && (
-                  <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
+                  <div className="mt-4 rounded-[1.25rem] border border-[#d8e7df] bg-[linear-gradient(180deg,#f8fcfa_0%,#ffffff_100%)] p-4 shadow-[0_10px_30px_rgba(26,71,52,0.05)]">
                     <div className="flex flex-wrap items-center gap-3 justify-between">
-                      <p className="text-xs uppercase tracking-[0.14em] text-gray-500 font-semibold">Execution Progress</p>
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-[#EEF2FF] text-[#465FFF]">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.16em] text-[#547064] font-semibold">Execution Progress</p>
+                        <p className="text-sm text-[#496357] mt-1">We are actively moving through your outreach list and updating items as they are completed.</p>
+                      </div>
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-[#edf7f1] text-[#2f6f4f] border border-[#d7eadf]">
                         {toReadableState(parsedNotes.state)}
                       </span>
                     </div>
 
                     {checklistTotal > 0 && (
-                      <div className="mt-3">
-                        <p className="text-xs text-gray-500 mb-2">Checklist: {completedChecklistCount}/{checklistTotal} completed</p>
+                      <div className="mt-4">
+                        <div className="flex flex-wrap items-end justify-between gap-3">
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.12em] text-[#6c8578] font-semibold">Overall Progress</p>
+                            <p className="text-sm text-[#496357] mt-1">{completedChecklistCount} of {checklistTotal} tasks completed</p>
+                          </div>
+                          <p className="text-2xl font-semibold text-[#214d38]">{progressPercent}%</p>
+                        </div>
+                        <div className="mt-3 h-2.5 rounded-full bg-[#e4efe8] overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-[linear-gradient(90deg,#73c69a_0%,#3f8f67_100%)] transition-all"
+                            style={{ width: `${progressPercent}%` }}
+                          />
+                        </div>
                         <div className="space-y-3">
                           {checklistGroups.map((group) => (
-                            <div key={group.key} className="rounded-lg border border-gray-100 p-3">
+                            <div key={group.key} className="mt-4 rounded-xl border border-[#e0ebe4] bg-white/85 p-4">
                               <div className="flex items-center justify-between">
-                                <p className="text-xs uppercase tracking-[0.12em] text-gray-500 font-semibold">{group.label}</p>
-                                <span className="text-xs text-gray-500">
+                                <p className="text-xs uppercase tracking-[0.14em] text-[#61786d] font-semibold">{group.label}</p>
+                                <span className="inline-flex items-center rounded-full bg-[#f3f8f5] px-2.5 py-1 text-xs text-[#587164] border border-[#e1ece5]">
                                   {group.completed}/{group.items.length}
                                 </span>
                               </div>
-                              <div className="mt-2 space-y-2">
+                              <div className="mt-3 space-y-2.5">
                                 {group.items.map((item) => (
                                   <div
                                     key={item.id}
-                                    className={`flex items-center gap-2 text-sm ${item.completed ? "text-gray-800" : "text-gray-500"}`}
+                                    className={`flex items-start gap-3 rounded-xl border px-3 py-3 text-sm transition-colors ${
+                                      item.completed
+                                        ? "border-[#d6eadf] bg-[#f6fbf8] text-[#244734]"
+                                        : "border-[#edf2ee] bg-[#fcfdfc] text-[#718579]"
+                                    }`}
                                   >
                                     <span
-                                      className={`w-2 h-2 rounded-full ${item.completed ? "bg-emerald-500" : "bg-gray-300"}`}
-                                    />
-                                    <span>{item.label}</span>
+                                      className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${
+                                        item.completed
+                                          ? "bg-[#dff2e7] text-[#2f7a55]"
+                                          : "bg-[#eef2ef] text-[#8a9a91]"
+                                      }`}
+                                    >
+                                      {item.completed ? "✓" : ""}
+                                    </span>
+                                    <div className="min-w-0">
+                                      <p className="leading-5">{item.label}</p>
+                                      {item.completed && item.completionNote && (
+                                        <p className="mt-1.5 text-xs text-[#5f7267] whitespace-pre-line">
+                                          {item.completionNote}
+                                        </p>
+                                      )}
+                                    </div>
                                   </div>
                                 ))}
                               </div>
@@ -240,7 +307,7 @@ export default async function DashboardLeadsPage() {
                 <div className="mt-4 flex flex-wrap gap-3">
                   {linkedCurationId ? (
                     <Link
-                      href={`/dashboard/curations/${linkedCurationId}`}
+                      href={`/dashboard/curations/${linkedCurationId}#curation-list`}
                       className="h-9 px-4 rounded-xl bg-[#465FFF] text-white text-sm font-medium hover:bg-[#3d55e8] inline-flex items-center transition-colors"
                     >
                       View Linked Curation

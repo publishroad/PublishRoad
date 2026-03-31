@@ -10,7 +10,11 @@ import {
   UnsupportedPaymentProviderError,
   type ActivePaymentProvider,
 } from "@/lib/payments/service";
-import { parseHireUsPackageSlug, resolveHireUsCheckoutPlanId } from "@/lib/hire-us";
+import {
+  HIRE_US_PACKAGES,
+  parseHireUsPackageSlug,
+  resolveHireUsCheckoutPlanId,
+} from "@/lib/hire-us";
 
 const schema = z.object({
   packageSlug: z.enum(["starter", "complete"]),
@@ -33,6 +37,7 @@ export async function POST(req: NextRequest) {
   if (!packageSlug) {
     return NextResponse.json({ error: "Invalid package" }, { status: 422 });
   }
+  const packageConfig = HIRE_US_PACKAGES[packageSlug];
 
   const planId = await resolveHireUsCheckoutPlanId(packageSlug);
   if (!planId) {
@@ -72,6 +77,9 @@ export async function POST(req: NextRequest) {
       successUrl,
       cancelUrl,
       provider: parsed.data.provider as ActivePaymentProvider | undefined,
+      amountCentsOverride: packageConfig.priceCents,
+      currencyOverride: packageConfig.currency,
+      displayNameOverride: packageConfig.title,
       metadata: {
         flow: "hire_us",
         hireUsPackage: packageSlug,

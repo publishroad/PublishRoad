@@ -53,7 +53,7 @@ const PROVIDER_META = {
     publicKeyPlaceholder: "rzp_live_...",
     secretKeyPlaceholder: "Razorpay key secret",
     webhookPlaceholder: "Webhook secret",
-    hint: "Public Key = Razorpay Key ID. Secret Key = Razorpay Key Secret.",
+    hint: "Public Key = Razorpay Key ID. Secret Key = Razorpay Key Secret. Configure webhook URL to /api/payments/razorpay-webhook and paste the webhook secret here.",
   },
 };
 

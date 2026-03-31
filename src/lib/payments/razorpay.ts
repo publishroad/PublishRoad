@@ -58,3 +58,20 @@ export function verifyRazorpaySignature(opts: {
     .digest("hex");
   return expected === opts.signature;
 }
+
+export function verifyRazorpayWebhookSignature(opts: {
+  payload: string;
+  signature: string;
+  webhookSecret: string;
+}): boolean {
+  const expected = crypto
+    .createHmac("sha256", opts.webhookSecret)
+    .update(opts.payload)
+    .digest("hex");
+
+  try {
+    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(opts.signature));
+  } catch {
+    return false;
+  }
+}

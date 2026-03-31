@@ -13,6 +13,7 @@ type ChecklistItem = {
   stepKey: string | null;
   stepLabel: string | null;
   completed: boolean;
+  completionNote: string | null;
 };
 
 type TimelineItem = {
@@ -21,12 +22,6 @@ type TimelineItem = {
   text: string;
   at: string;
   by: string;
-};
-
-type CurationListItem = {
-  id: string;
-  label: string;
-  sectionLabel: string;
 };
 
 function toFriendlyStateLabel(state: LeadState): string {
@@ -62,7 +57,6 @@ export function HireUsLeadEditor({
   initialMessage,
   initialState,
   initialChecklist,
-  initialCurationList,
   initialTimeline,
 }: {
   leadId: string;
@@ -70,7 +64,6 @@ export function HireUsLeadEditor({
   initialMessage: string;
   initialState: LeadState;
   initialChecklist: ChecklistItem[];
-  initialCurationList: CurationListItem[];
   initialTimeline: TimelineItem[];
 }) {
   const router = useRouter();
@@ -174,32 +167,6 @@ export function HireUsLeadEditor({
 
         <div>
           <div className="flex items-center justify-between">
-            <label className="text-xs uppercase tracking-wide text-medium-gray">Curation List</label>
-            <span className="text-xs text-medium-gray">{initialCurationList.length} items</span>
-          </div>
-          {initialCurationList.length === 0 ? (
-            <p className="mt-2 text-sm text-medium-gray">
-              No curation entries found for this lead yet.
-            </p>
-          ) : (
-            <div className="mt-3 space-y-2">
-              {initialCurationList.map((item) => (
-                <div
-                  key={item.id}
-                  className="rounded-lg border border-border-gray px-3 py-2"
-                >
-                  <p className="text-sm text-dark-gray">{item.label}</p>
-                  <p className="text-xs uppercase tracking-wide text-medium-gray mt-1">
-                    {item.sectionLabel}
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between">
             <label className="text-xs uppercase tracking-wide text-medium-gray">Checklist Progress</label>
             <span className="text-xs text-medium-gray">
               {completedCount}/{checklist.length} completed
@@ -216,25 +183,53 @@ export function HireUsLeadEditor({
                 </div>
                 <div className="mt-2 space-y-2">
                   {group.items.map((item) => (
-                    <label
+                    <div
                       key={item.id}
-                      className="flex items-center gap-3 rounded-lg border border-border-gray px-3 py-2 text-sm"
+                      className="rounded-lg border border-border-gray px-3 py-2"
                     >
-                      <input
-                        type="checkbox"
-                        checked={item.completed}
-                        onChange={(event) => {
-                          setChecklist((current) =>
-                            current.map((entry) =>
-                              entry.id === item.id
-                                ? { ...entry, completed: event.target.checked }
-                                : entry
-                            )
-                          );
-                        }}
-                      />
-                      <span className={item.completed ? "text-navy" : "text-medium-gray"}>{item.label}</span>
-                    </label>
+                      <label className="flex items-center gap-3 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={item.completed}
+                          onChange={(event) => {
+                            setChecklist((current) =>
+                              current.map((entry) =>
+                                entry.id === item.id
+                                  ? { ...entry, completed: event.target.checked }
+                                  : entry
+                              )
+                            );
+                          }}
+                        />
+                        <span className={item.completed ? "text-navy" : "text-medium-gray"}>{item.label}</span>
+                      </label>
+                      {item.completed && (
+                        <div className="mt-3 pl-6">
+                          <label className="block text-[11px] uppercase tracking-wide text-medium-gray">
+                            Completion Note
+                          </label>
+                          <textarea
+                            value={item.completionNote ?? ""}
+                            onChange={(event) => {
+                              const nextValue = event.target.value;
+                              setChecklist((current) =>
+                                current.map((entry) =>
+                                  entry.id === item.id
+                                    ? {
+                                        ...entry,
+                                        completionNote: nextValue.trim().length > 0 ? nextValue : null,
+                                      }
+                                    : entry
+                                )
+                              );
+                            }}
+                            maxLength={300}
+                            className="mt-2 w-full rounded-lg border border-border-gray px-3 py-2 text-sm"
+                            placeholder="Optional text shown to the user next to this completed step."
+                          />
+                        </div>
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>

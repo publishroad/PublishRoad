@@ -6,7 +6,7 @@ import { decryptField } from "@/lib/server-utils";
 import {
   packageSlugFromServiceType,
   parseHireUsLeadNotes,
-  resolveHireUsCurationList,
+  resolveLeadDisplayNames,
   resolveHireUsChecklistFromCuration,
   type HireUsLeadState,
 } from "@/lib/hire-us";
@@ -61,11 +61,13 @@ export default async function AdminLeadDetailPage({
     existingChecklist: notes.checklist,
   });
 
-  const curationList = await resolveHireUsCurationList({
-    userId: lead.userId,
-    email: lead.email,
-    linkedCurationId,
-  });
+  const displayNameMap = await resolveLeadDisplayNames([
+    {
+      linkedCurationId,
+      websiteUrl: lead.websiteUrl,
+    },
+  ]);
+  const websiteName = (linkedCurationId ? displayNameMap.get(linkedCurationId) : undefined) ?? lead.websiteUrl ?? null;
 
   const maskedEmail = maskEmail(lead.email);
   const maskedPhone = lead.phone ? maskPhone(decryptField(lead.phone)) : null;
@@ -76,6 +78,11 @@ export default async function AdminLeadDetailPage({
         <h1 className="text-lg font-semibold text-navy">Hire Us Lead: {lead.name}</h1>
         <p className="text-sm text-medium-gray mt-1">{maskedEmail}</p>
         {maskedPhone && <p className="text-sm text-medium-gray">{maskedPhone}</p>}
+        {websiteName && (
+          <p className="text-sm text-dark-gray mt-3">
+            <span className="text-medium-gray">Website:</span> {websiteName}
+          </p>
+        )}
 
         <dl className="grid grid-cols-2 gap-4 mt-5 text-sm">
           <div>
@@ -97,26 +104,6 @@ export default async function AdminLeadDetailPage({
         </dl>
       </div>
 
-      <div className="bg-white rounded-xl border border-border-gray p-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-navy uppercase tracking-wide">Curation List</h2>
-          <span className="text-xs text-medium-gray">{curationList.length} items</span>
-        </div>
-
-        {curationList.length === 0 ? (
-          <p className="text-sm text-medium-gray mt-3">No curation entries found yet for this lead.</p>
-        ) : (
-          <div className="mt-3 space-y-2">
-            {curationList.map((item) => (
-              <div key={item.id} className="rounded-lg border border-border-gray px-3 py-2">
-                <p className="text-sm text-dark-gray">{item.label}</p>
-                <p className="text-xs text-medium-gray uppercase tracking-wide mt-1">{item.sectionLabel}</p>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
       <HireUsLeadEditor
         leadId={lead.id}
         initialStatus={lead.status as "new" | "contacted" | "closed"}
@@ -128,8 +115,8 @@ export default async function AdminLeadDetailPage({
           stepKey: item.stepKey,
           stepLabel: item.stepLabel,
           completed: item.completed,
+          completionNote: item.completionNote,
         }))}
-        initialCurationList={curationList}
         initialTimeline={notes.timeline}
       />
     </div>

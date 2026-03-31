@@ -8,6 +8,7 @@ import {
   packageSlugFromServiceType,
   parseHireUsLeadNotes,
   serializeHireUsLeadNotes,
+  syncChecklistCompletionToCurationResults,
 } from "@/lib/hire-us";
 
 const checklistItemSchema = z.object({
@@ -16,6 +17,7 @@ const checklistItemSchema = z.object({
   stepKey: z.string().trim().min(1).max(100).nullable().optional(),
   stepLabel: z.string().trim().min(1).max(200).nullable().optional(),
   completed: z.boolean(),
+  completionNote: z.string().trim().max(300).nullable().optional(),
 });
 
 const updateSchema = z.object({
@@ -85,7 +87,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
 
     if (payload.checklist) {
-      const before = JSON.stringify(notes.checklist.map((item) => ({ id: item.id, completed: item.completed })));
+      const previousChecklist = notes.checklist;
+      const before = JSON.stringify(
+        notes.checklist.map((item) => ({
+          id: item.id,
+          completed: item.completed,
+          completionNote: item.completionNote ?? null,
+        }))
+      );
       notes.checklist = payload.checklist.map((item) => {
         const existing = notes.checklist.find((current) => current.id === item.id);
         return {
@@ -95,9 +104,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           stepLabel: item.stepLabel ?? existing?.stepLabel ?? null,
           completed: item.completed,
           completedAt: item.completed ? existing?.completedAt ?? now : null,
+          completionNote:
+            typeof item.completionNote === "string" && item.completionNote.trim().length > 0
+              ? item.completionNote.trim()
+              : null,
         };
       });
-      const after = JSON.stringify(notes.checklist.map((item) => ({ id: item.id, completed: item.completed })));
+      const after = JSON.stringify(
+        notes.checklist.map((item) => ({
+          id: item.id,
+          completed: item.completed,
+          completionNote: item.completionNote ?? null,
+        }))
+      );
       if (before !== after) {
         notes.timeline = [
           ...notes.timeline,
@@ -106,6 +125,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         notes.lastAdminUpdateAt = now;
         notes.lastAdminUpdateBy = adminLabel;
       }
+
+      await syncChecklistCompletionToCurationResults({
+        linkedCurationId: notes.curationId,
+        previousChecklist,
+        nextChecklist: notes.checklist,
+      });
     }
 
     if (payload.customUpdate) {
