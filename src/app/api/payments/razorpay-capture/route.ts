@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { redis } from "@/lib/redis";
 import { verifyRazorpaySignature } from "@/lib/payments/razorpay";
-import { getPaymentConfigRow } from "@/lib/payments/service";
-import { decryptField } from "@/lib/server-utils";
+import { getRazorpayRuntimeCredentials } from "@/lib/payments/service";
 import { fulfillRazorpayOrder } from "@/lib/payments/razorpay-fulfillment";
 import { z } from "zod";
 
@@ -45,12 +44,7 @@ export async function POST(req: NextRequest) {
 
   // Verify HMAC signature
   try {
-    const config = await getPaymentConfigRow();
-    if (!config || config.provider !== "razorpay") {
-      return NextResponse.json({ error: "provider_mismatch", redirectUrl: `${cancelUrl}?error=provider_mismatch` }, { status: 400 });
-    }
-
-    const keySecret = decryptField(config.secret_key!);
+    const { keySecret } = await getRazorpayRuntimeCredentials();
     const isValid = verifyRazorpaySignature({
       orderId: razorpay_order_id,
       paymentId: razorpay_payment_id,

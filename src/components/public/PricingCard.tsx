@@ -4,6 +4,8 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import type { ActivePaymentProvider } from "@/lib/payments/service";
+import { PaymentMethodPicker } from "@/components/public/PaymentMethodPicker";
 import { cn, formatCurrency } from "@/lib/utils";
 
 interface PricingCardProps {
@@ -33,6 +35,8 @@ export function PricingCard({
 }: PricingCardProps) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [providerPicker, setProviderPicker] = useState<ActivePaymentProvider[] | null>(null);
+  const [pendingPlanId, setPendingPlanId] = useState<string | null>(null);
   const isCurrent = currentPlanSlug === slug;
   const isFree = slug === "free" || priceCents === 0;
 
@@ -71,6 +75,51 @@ export function PricingCard({
 
   const isLifetime = slug === "lifetime";
 
+  async function startCheckout(selectedPlanId: string, provider?: ActivePaymentProvider) {
+    setIsSubmitting(true);
+
+    try {
+      const res = await fetch("/api/payments/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          planId: selectedPlanId,
+          provider,
+          successPath: "/dashboard/billing",
+          cancelPath: "/dashboard/billing",
+        }),
+      });
+
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(payload?.error ?? "Failed to start checkout");
+      }
+
+      if (payload?.selectProvider) {
+        setPendingPlanId(selectedPlanId);
+        setProviderPicker(payload.selectProvider as ActivePaymentProvider[]);
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (payload?.url) {
+        window.location.href = payload.url;
+        return;
+      }
+
+      if (payload?.razorpay) {
+        const { openRazorpayCheckout } = await import("@/lib/razorpay-checkout");
+        await openRazorpayCheckout(payload.razorpay).catch(() => setIsSubmitting(false));
+        return;
+      }
+
+      throw new Error("Invalid checkout response");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to start checkout");
+      setIsSubmitting(false);
+    }
+  }
+
   async function handleCheckout() {
     if (isCurrent || isSubmitting) return;
 
@@ -84,44 +133,41 @@ export function PricingCard({
       return;
     }
 
-    setIsSubmitting(true);
-    try {
-      const res = await fetch("/api/payments/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId }),
-      });
-
-      const payload = await res.json().catch(() => null);
-      if (!res.ok || !payload?.url) {
-        throw new Error(payload?.error ?? "Failed to start checkout");
-      }
-
-      window.location.href = payload.url;
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to start checkout");
-      setIsSubmitting(false);
-    }
+    await startCheckout(planId);
   }
 
   return (
-    <div
-      className={cn(
-        "relative bg-white rounded-[2rem] p-6 flex flex-col transition-all duration-300 hover:shadow-xl",
-        isPopular
-          ? "ring-2"
-          : ""
+    <>
+      {providerPicker && pendingPlanId && (
+        <PaymentMethodPicker
+          providers={providerPicker}
+          onSelect={(provider) => {
+            setProviderPicker(null);
+            startCheckout(pendingPlanId, provider);
+          }}
+          onCancel={() => {
+            setProviderPicker(null);
+            setPendingPlanId(null);
+          }}
+        />
       )}
-      style={{
-        boxShadow: isPopular
-          ? "0 8px 40px rgba(91, 88, 246, 0.15)"
-          : "0 4px 24px rgba(91, 88, 246, 0.06)",
-        border: isPopular
-          ? "none"
-          : "1px solid rgba(226, 232, 240, 0.8)",
-        ...(isPopular ? { outline: "2px solid var(--indigo)", outlineOffset: "-2px" } : {}),
-      }}
-    >
+      <div
+        className={cn(
+          "relative bg-white rounded-[2rem] p-6 flex flex-col transition-all duration-300 hover:shadow-xl",
+          isPopular
+            ? "ring-2"
+            : ""
+        )}
+        style={{
+          boxShadow: isPopular
+            ? "0 8px 40px rgba(91, 88, 246, 0.15)"
+            : "0 4px 24px rgba(91, 88, 246, 0.06)",
+          border: isPopular
+            ? "none"
+            : "1px solid rgba(226, 232, 240, 0.8)",
+          ...(isPopular ? { outline: "2px solid var(--indigo)", outlineOffset: "-2px" } : {}),
+        }}
+      >
       {isPopular && (
         <div className="absolute -top-4 left-1/2 -translate-x-1/2">
           <span
@@ -226,6 +272,7 @@ export function PricingCard({
           {ctaLabel}
         </button>
       )}
-    </div>
+      </div>
+    </>
   );
 }

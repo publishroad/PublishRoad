@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { decryptField } from "@/lib/server-utils";
 import { verifyRazorpayWebhookSignature } from "@/lib/payments/razorpay";
 import { fulfillRazorpayOrder } from "@/lib/payments/razorpay-fulfillment";
-import { getActivePaymentProvider } from "@/lib/payments/service";
+import { isPaymentProviderActive, getRazorpayWebhookSecret } from "@/lib/payments/service";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -28,8 +26,8 @@ function extractPaymentEntity(payload: RazorpayWebhookPayload): RazorpayPaymentE
 }
 
 export async function POST(req: NextRequest) {
-  const activeProvider = await getActivePaymentProvider();
-  if (!activeProvider || activeProvider !== "razorpay") {
+  const isRazorpayActive = await isPaymentProviderActive("razorpay");
+  if (!isRazorpayActive) {
     return NextResponse.json({ received: true, skipped: true }, { status: 200 });
   }
 
@@ -46,21 +44,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
 
-  const rows = await db.$queryRaw<Array<{ webhook_secret: string | null; is_active: boolean }>>`
-    SELECT webhook_secret, is_active
-    FROM payment_gateway_config
-    WHERE id = 'razorpay'
-    LIMIT 1
-  `;
-
-  const row = rows[0] ?? null;
-  if (!row || !row.is_active || !row.webhook_secret) {
-    return NextResponse.json({ error: "Razorpay webhook is not configured." }, { status: 400 });
-  }
-
   let webhookSecret = "";
   try {
-    webhookSecret = decryptField(row.webhook_secret);
+    webhookSecret = await getRazorpayWebhookSecret();
   } catch {
     return NextResponse.json({ error: "Invalid webhook secret" }, { status: 400 });
   }

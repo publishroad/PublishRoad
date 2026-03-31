@@ -6,6 +6,11 @@ function getStripeClient(secretKey?: string): Stripe {
   return new Stripe(key, { apiVersion: "2026-02-25.clover", typescript: true });
 }
 
+export async function retrieveCheckoutSession(sessionId: string, stripeSecretKey?: string): Promise<Stripe.Checkout.Session> {
+  const stripe = getStripeClient(stripeSecretKey);
+  return stripe.checkout.sessions.retrieve(sessionId);
+}
+
 // ─────────────────────────────────────────────
 // Create Stripe Checkout Session
 // ─────────────────────────────────────────────

@@ -1,5 +1,7 @@
 import { db } from "@/lib/db";
 import { redis } from "@/lib/redis";
+import { invalidateUserProfile } from "@/lib/cache";
+import { finalizeHireUsPurchase } from "@/lib/hire-us";
 import { createCheckoutSession, createPortalSession } from "@/lib/stripe";
 import { decryptField } from "@/lib/server-utils";
 import { getPayPalAccessToken, createPayPalOrder } from "@/lib/payments/paypal";
@@ -25,6 +27,18 @@ type PaymentConfigRow = {
   provider: ActivePaymentProvider;
   secret_key: string | null;
   webhook_secret: string | null;
+};
+
+type GatewayConfigRow = {
+  is_active: boolean;
+  public_key: string | null;
+  secret_key: string | null;
+  webhook_secret: string | null;
+  additional_config: unknown;
+};
+
+type StripeConfigRow = PaymentConfigRow & {
+  is_active: boolean;
 };
 
 export async function getPaymentConfigRow(): Promise<PaymentConfigRow | null> {
@@ -60,15 +74,23 @@ function getDecryptedValueOrThrow(value: string | null, missingMessage: string, 
   }
 }
 
-async function getStripeSecretKeyForRuntime(): Promise<string> {
-  const rows = await db.$queryRaw<PaymentConfigRow[]>`
-    SELECT provider, secret_key, webhook_secret
+async function getGatewayConfigById(provider: ActivePaymentProvider): Promise<GatewayConfigRow | null> {
+  const rows = await db.$queryRaw<GatewayConfigRow[]>`
+    SELECT is_active, public_key, secret_key, webhook_secret, additional_config
     FROM payment_gateway_config
-    WHERE is_active = true AND id = 'stripe'
+    WHERE id = ${provider}
     LIMIT 1
   `;
-  const config = rows[0] ?? null;
+  return rows[0] ?? null;
+}
+
+export async function getStripeSecretKey(options?: { requireActive?: boolean }): Promise<string> {
+  const requireActive = options?.requireActive ?? true;
+  const config = await getGatewayConfigById("stripe");
   if (!config) {
+    throw new PaymentConfigurationError("Stripe credentials are not configured in Payment Settings.");
+  }
+  if (requireActive && !config.is_active) {
     throw new PaymentConfigurationError("Stripe is not active. Go to Admin → Settings → Payment and activate it.");
   }
   return getDecryptedValueOrThrow(
@@ -79,19 +101,7 @@ async function getStripeSecretKeyForRuntime(): Promise<string> {
 }
 
 async function getPayPalCredentials(): Promise<{ clientId: string; secret: string; mode: string }> {
-  // Query the paypal row directly using its provider name as the ID
-  const rows = await db.$queryRaw<Array<{
-    secret_key: string | null;
-    public_key: string | null;
-    is_active: boolean;
-    additional_config: unknown;
-  }>>`
-    SELECT secret_key, public_key, is_active, additional_config
-    FROM payment_gateway_config
-    WHERE id = 'paypal'
-    LIMIT 1
-  `;
-  const row = rows[0];
+  const row = await getGatewayConfigById("paypal");
 
   if (!row) {
     throw new PaymentConfigurationError("PayPal credentials are not configured in Payment Settings.");
@@ -119,19 +129,27 @@ async function getPayPalCredentials(): Promise<{ clientId: string; secret: strin
   return { clientId, secret, mode };
 }
 
+export async function getPayPalRuntimeCredentials(): Promise<{ clientId: string; secret: string; mode: string }> {
+  return getPayPalCredentials();
+}
+
 export async function getActivePaymentProvider(): Promise<ActivePaymentProvider | null> {
   const config = await getPaymentConfigRow();
   return config?.provider ?? null;
 }
 
-export async function getStripeWebhookSecret(): Promise<string | null> {
-  const rows = await db.$queryRaw<PaymentConfigRow[]>`
-    SELECT provider, secret_key, webhook_secret
+export async function isPaymentProviderActive(provider: ActivePaymentProvider): Promise<boolean> {
+  const rows = await db.$queryRaw<Array<{ is_active: boolean }>>`
+    SELECT is_active
     FROM payment_gateway_config
-    WHERE is_active = true AND provider = 'stripe'
+    WHERE id = ${provider}
     LIMIT 1
   `;
-  const config = rows[0] ?? null;
+  return !!rows[0]?.is_active;
+}
+
+export async function getStripeWebhookSecret(): Promise<string | null> {
+  const config = await getGatewayConfigById("stripe");
   if (!config) return null;
 
   return getDecryptedValueOrThrow(
@@ -145,19 +163,101 @@ export type CheckoutResult =
   | { type: "redirect"; url: string }
   | { type: "razorpay"; orderId: string; amount: number; currency: string; keyId: string; planName: string; successUrl: string; cancelUrl: string };
 
+export async function applyPlanPaymentAndCredits(args: {
+  userId: string;
+  planId: string;
+  providerPaymentId?: string;
+  amountCents: number;
+  currency: string;
+  creditsAmount: number;
+  creditStrategy?: "add" | "replace";
+  paymentType?: "plan" | "hire_us";
+}): Promise<{ processedAlready: boolean }> {
+  let processedAlready = false;
+  const creditStrategy = args.creditStrategy ?? "add";
+  const paymentType = args.paymentType ?? "plan";
+
+  await db.$transaction(async (tx) => {
+    if (args.providerPaymentId) {
+      const existing = await tx.payment.findFirst({
+        where: { providerPaymentId: args.providerPaymentId },
+        select: { id: true },
+      });
+      if (existing) {
+        processedAlready = true;
+        return;
+      }
+    }
+
+    await tx.payment.create({
+      data: {
+        userId: args.userId,
+        planId: args.planId,
+        providerPaymentId: args.providerPaymentId,
+        paymentType,
+        amountCents: args.amountCents,
+        currency: args.currency,
+        status: "completed",
+      },
+    });
+
+    const user = await tx.user.findUnique({
+      where: { id: args.userId },
+      select: { creditsRemaining: true },
+    });
+
+    await tx.user.update({
+      where: { id: args.userId },
+      data: {
+        planId: args.planId,
+        creditsRemaining:
+          creditStrategy === "add"
+            ? (user?.creditsRemaining ?? 0) + args.creditsAmount
+            : args.creditsAmount,
+      },
+    });
+  });
+
+  return { processedAlready };
+}
+
+export async function runPostPaymentSideEffects(args: {
+  userId: string;
+  notificationMessage?: string;
+  hireUsPackageSlug?: string;
+  skipNotification?: boolean;
+  skipCacheInvalidation?: boolean;
+}) {
+  if (args.hireUsPackageSlug) {
+    await finalizeHireUsPurchase({ userId: args.userId, packageSlug: args.hireUsPackageSlug });
+  }
+
+  if (!args.skipNotification && args.notificationMessage) {
+    try {
+      await db.notification.create({
+        data: {
+          userId: args.userId,
+          type: "payment_success",
+          title: "Payment successful",
+          message: args.notificationMessage,
+        },
+      });
+    } catch (error) {
+      console.error("Post-payment notification create failed (non-fatal):", error);
+    }
+  }
+
+  if (!args.skipCacheInvalidation) {
+    try {
+      await invalidateUserProfile(args.userId);
+    } catch (error) {
+      console.error("Post-payment cache invalidation failed (non-fatal):", error);
+    }
+  }
+}
+
 async function getRazorpayCredentials(): Promise<{ keyId: string; keySecret: string; currency: string }> {
-  const rows = await db.$queryRaw<Array<{
-    secret_key: string | null;
-    public_key: string | null;
-    is_active: boolean;
-    additional_config: unknown;
-  }>>`
-    SELECT secret_key, public_key, is_active, additional_config
-    FROM payment_gateway_config
-    WHERE id = 'razorpay'
-    LIMIT 1
-  `;
-  const row = rows[0];
+  const row = await getGatewayConfigById("razorpay");
 
   if (!row) throw new PaymentConfigurationError("Razorpay credentials are not configured in Payment Settings.");
   if (!row.is_active) throw new PaymentConfigurationError("Razorpay is not the active payment gateway. Activate it in Admin → Settings → Payment.");
@@ -179,6 +279,174 @@ async function getRazorpayCredentials(): Promise<{ keyId: string; keySecret: str
   return { keyId, keySecret, currency };
 }
 
+export async function getRazorpayRuntimeCredentials(): Promise<{ keyId: string; keySecret: string; currency: string }> {
+  return getRazorpayCredentials();
+}
+
+export async function getRazorpayWebhookSecret(): Promise<string> {
+  const row = await getGatewayConfigById("razorpay");
+  if (!row?.is_active) {
+    throw new PaymentConfigurationError("Razorpay is not active. Activate it in Admin → Settings → Payment.");
+  }
+
+  return getDecryptedValueOrThrow(
+    row.webhook_secret,
+    "Razorpay webhook secret is not configured in Payment Settings.",
+    "Razorpay webhook secret in Payment Settings is invalid."
+  );
+}
+
+async function resolveCheckoutProvider(provider?: ActivePaymentProvider): Promise<ActivePaymentProvider> {
+  if (provider) {
+    const rows = await db.$queryRaw<Array<{ provider: ActivePaymentProvider }>>`
+      SELECT provider FROM payment_gateway_config
+      WHERE is_active = true AND id = ${provider}
+      LIMIT 1
+    `;
+    if (!rows[0]) {
+      throw new PaymentConfigurationError(`Payment provider "${provider}" is not active.`);
+    }
+    return rows[0].provider;
+  }
+
+  const config = await getPaymentConfigRow();
+  if (!config) {
+    throw new PaymentConfigurationError(
+      "No payment gateway is active. Go to Admin → Settings → Payment and activate one."
+    );
+  }
+
+  return config.provider;
+}
+
+async function createStripeCheckoutResult(args: {
+  userId: string;
+  planId: string;
+  stripeCustomerId?: string | null;
+  successUrl: string;
+  cancelUrl: string;
+  metadata?: Record<string, string>;
+  amountCentsOverride?: number;
+  currencyOverride?: string;
+  displayNameOverride?: string;
+}): Promise<CheckoutResult> {
+  const stripeSecretKey = await getStripeSecretKey();
+  const url = await createCheckoutSession({
+    ...args,
+    stripeSecretKey,
+    oneTimeAmountCents: args.amountCentsOverride,
+    oneTimeCurrency: args.currencyOverride,
+    oneTimeProductName: args.displayNameOverride,
+  });
+  return { type: "redirect", url };
+}
+
+async function createPayPalCheckoutResult(args: {
+  userId: string;
+  planId: string;
+  successUrl: string;
+  cancelUrl: string;
+  metadata?: Record<string, string>;
+  amountCentsOverride?: number;
+  currencyOverride?: string;
+  displayNameOverride?: string;
+}): Promise<CheckoutResult> {
+  const { clientId, secret, mode } = await getPayPalCredentials();
+
+  const plan = await db.planConfig.findUnique({
+    where: { id: args.planId },
+    select: { priceCents: true, name: true },
+  });
+  if (!plan) throw new PaymentConfigurationError("Plan not found.");
+
+  const amountCents = args.amountCentsOverride ?? plan.priceCents;
+  const currency = (args.currencyOverride ?? "USD").toUpperCase();
+  if (currency !== "USD") {
+    throw new PaymentConfigurationError("PayPal checkout currently supports USD only.");
+  }
+
+  const amountUsd = (amountCents / 100).toFixed(2);
+  const accessToken = await getPayPalAccessToken(clientId, secret, mode);
+  const captureBase = `${process.env.NEXT_PUBLIC_APP_URL}/api/payments/paypal-capture`;
+  const { orderId, approveUrl } = await createPayPalOrder({
+    accessToken,
+    mode,
+    amountUsd,
+    planName: args.displayNameOverride ?? plan.name,
+    returnUrl: captureBase,
+    cancelUrl: args.cancelUrl,
+  });
+
+  await redis.set(
+    `paypal:order:${orderId}`,
+    JSON.stringify({
+      planId: args.planId,
+      userId: args.userId,
+      successUrl: args.successUrl,
+      cancelUrl: args.cancelUrl,
+      metadata: args.metadata ?? null,
+    }),
+    { ex: 1800 }
+  );
+
+  return { type: "redirect", url: approveUrl };
+}
+
+async function createRazorpayCheckoutResult(args: {
+  userId: string;
+  planId: string;
+  successUrl: string;
+  cancelUrl: string;
+  metadata?: Record<string, string>;
+  amountCentsOverride?: number;
+  currencyOverride?: string;
+  displayNameOverride?: string;
+}): Promise<CheckoutResult> {
+  const { keyId, keySecret, currency } = await getRazorpayCredentials();
+
+  const plan = await db.planConfig.findUnique({
+    where: { id: args.planId },
+    select: { priceCents: true, name: true },
+  });
+  if (!plan) throw new PaymentConfigurationError("Plan not found.");
+
+  const checkoutCurrency = (args.currencyOverride ?? currency).toUpperCase();
+  const checkoutAmountCents = args.amountCentsOverride ?? plan.priceCents;
+
+  const { orderId, amount } = await createRazorpayOrder({
+    keyId,
+    keySecret,
+    amountSmallestUnit: checkoutAmountCents,
+    currency: checkoutCurrency,
+    receipt: `plan_${args.planId.slice(-8)}_${Date.now()}`,
+  });
+
+  await redis.set(
+    `razorpay:order:${orderId}`,
+    JSON.stringify({
+      planId: args.planId,
+      userId: args.userId,
+      successUrl: args.successUrl,
+      cancelUrl: args.cancelUrl,
+      amountCents: checkoutAmountCents,
+      currency: checkoutCurrency,
+      metadata: args.metadata ?? null,
+    }),
+    { ex: 60 * 60 * 24 }
+  );
+
+  return {
+    type: "razorpay",
+    orderId,
+    amount,
+    currency: checkoutCurrency,
+    keyId,
+    planName: args.displayNameOverride ?? plan.name,
+    successUrl: args.successUrl,
+    cancelUrl: args.cancelUrl,
+  };
+}
+
 export async function createCheckoutForActiveProvider(args: {
   userId: string;
   planId: string;
@@ -191,133 +459,11 @@ export async function createCheckoutForActiveProvider(args: {
   currencyOverride?: string;
   displayNameOverride?: string;
 }): Promise<CheckoutResult> {
-  let provider: ActivePaymentProvider;
+  const provider = await resolveCheckoutProvider(args.provider);
 
-  if (args.provider) {
-    // Verify the requested provider is actually active
-    const rows = await db.$queryRaw<Array<{ provider: ActivePaymentProvider }>>`
-      SELECT provider FROM payment_gateway_config
-      WHERE is_active = true AND id = ${args.provider}
-      LIMIT 1
-    `;
-    if (!rows[0]) {
-      throw new PaymentConfigurationError(`Payment provider "${args.provider}" is not active.`);
-    }
-    provider = rows[0].provider;
-  } else {
-    const config = await getPaymentConfigRow();
-    if (!config) {
-      throw new PaymentConfigurationError(
-        "No payment gateway is active. Go to Admin → Settings → Payment and activate one."
-      );
-    }
-    provider = config.provider;
-  }
-
-  // ── Stripe ────────────────────────────────────────────────────────────────
-  if (provider === "stripe") {
-    const stripeSecretKey = await getStripeSecretKeyForRuntime();
-    const url = await createCheckoutSession({
-      ...args,
-      stripeSecretKey,
-      oneTimeAmountCents: args.amountCentsOverride,
-      oneTimeCurrency: args.currencyOverride,
-      oneTimeProductName: args.displayNameOverride,
-    });
-    return { type: "redirect", url };
-  }
-
-  // ── PayPal ────────────────────────────────────────────────────────────────
-  if (provider === "paypal") {
-    const { clientId, secret, mode } = await getPayPalCredentials();
-
-    const plan = await db.planConfig.findUnique({
-      where: { id: args.planId },
-      select: { priceCents: true, name: true },
-    });
-    if (!plan) throw new PaymentConfigurationError("Plan not found.");
-
-    const amountCents = args.amountCentsOverride ?? plan.priceCents;
-    const currency = (args.currencyOverride ?? "USD").toUpperCase();
-    if (currency !== "USD") {
-      throw new PaymentConfigurationError("PayPal checkout currently supports USD only.");
-    }
-    const amountUsd = (amountCents / 100).toFixed(2);
-    const accessToken = await getPayPalAccessToken(clientId, secret, mode);
-
-    const captureBase = `${process.env.NEXT_PUBLIC_APP_URL}/api/payments/paypal-capture`;
-
-    const { orderId, approveUrl } = await createPayPalOrder({
-      accessToken,
-      mode,
-      amountUsd,
-      planName: args.displayNameOverride ?? plan.name,
-      returnUrl: captureBase,
-      cancelUrl: args.cancelUrl,
-    });
-
-    await redis.set(
-      `paypal:order:${orderId}`,
-      JSON.stringify({
-        planId: args.planId,
-        userId: args.userId,
-        successUrl: args.successUrl,
-        cancelUrl: args.cancelUrl,
-        metadata: args.metadata ?? null,
-      }),
-      { ex: 1800 }
-    );
-
-    return { type: "redirect", url: approveUrl };
-  }
-
-  // ── Razorpay ──────────────────────────────────────────────────────────────
-  if (provider === "razorpay") {
-    const { keyId, keySecret, currency } = await getRazorpayCredentials();
-
-    const plan = await db.planConfig.findUnique({
-      where: { id: args.planId },
-      select: { priceCents: true, name: true },
-    });
-    if (!plan) throw new PaymentConfigurationError("Plan not found.");
-
-    const checkoutCurrency = (args.currencyOverride ?? currency).toUpperCase();
-    const checkoutAmountCents = args.amountCentsOverride ?? plan.priceCents;
-
-    const { orderId, amount } = await createRazorpayOrder({
-      keyId,
-      keySecret,
-      amountSmallestUnit: checkoutAmountCents,
-      currency: checkoutCurrency,
-      receipt: `plan_${args.planId.slice(-8)}_${Date.now()}`,
-    });
-
-    // Store planId + userId for capture verification
-    await redis.set(
-      `razorpay:order:${orderId}`,
-      JSON.stringify({
-        planId: args.planId,
-        userId: args.userId,
-        successUrl: args.successUrl,
-        cancelUrl: args.cancelUrl,
-        amountCents: checkoutAmountCents,
-        currency: checkoutCurrency,
-        metadata: args.metadata ?? null,
-      }),
-      { ex: 60 * 60 * 24 }
-    );
-
-    return {
-      type: "razorpay",
-      orderId,
-      amount,
-      currency: checkoutCurrency,
-      keyId,
-      planName: args.displayNameOverride ?? plan.name,
-      successUrl: args.successUrl,
-      cancelUrl: args.cancelUrl,
-    };
-  }
+  if (provider === "stripe") return createStripeCheckoutResult(args);
+  if (provider === "paypal") return createPayPalCheckoutResult(args);
+  if (provider === "razorpay") return createRazorpayCheckoutResult(args);
 
   throw new UnsupportedPaymentProviderError(provider);
 }
@@ -326,7 +472,7 @@ export async function createPortalForActiveProvider(args: {
   stripeCustomerId: string;
   returnUrl: string;
 }): Promise<string> {
-  const stripeSecretKey = await getStripeSecretKeyForRuntime();
+  const stripeSecretKey = await getStripeSecretKey();
 
   return createPortalSession(args.stripeCustomerId, args.returnUrl, stripeSecretKey);
 }

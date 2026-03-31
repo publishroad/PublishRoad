@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
 import { AppHeader } from "@/components/dashboard/AppHeader";
+import { HireUsPackageSelector } from "@/components/public/HireUsPackageSelector";
 import {
   packageSlugFromServiceType,
   parseHireUsLeadNotes,
@@ -170,14 +171,12 @@ export default async function DashboardLeadsPage() {
       <AppHeader title="Hire Us" />
       <div className="flex-1 p-4 sm:p-6 max-w-4xl w-full mx-auto space-y-4">
         {leads.length === 0 ? (
-          <div className="bg-white border border-gray-200 rounded-2xl p-10 text-center">
-            <p className="text-sm text-gray-500 mb-4">No Hire Us requests yet.</p>
-            <Link
-              href="/hire-us"
-              className="h-10 px-6 rounded-xl bg-[#465FFF] text-white text-sm font-semibold inline-flex items-center hover:bg-[#3d55e8] transition-colors"
-            >
-              Browse Hire Us Packages
-            </Link>
+          <div className="bg-white border border-gray-200 rounded-2xl p-6 sm:p-8">
+            <HireUsPackageSelector
+              variant="dashboard"
+              loginCallbackBasePath="/dashboard/hire-us"
+              preselectedPackage="starter"
+            />
           </div>
         ) : (
           leadsWithResolvedChecklist.map(({ lead, parsedNotes, linkedCurationId }) => {

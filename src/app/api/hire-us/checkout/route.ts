@@ -62,21 +62,26 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
   const successPath = `/onboarding/curation?hireUs=1&hireUsPackage=${packageSlug}`;
-  const successUrl = `${appUrl}${successPath}${successPath.includes("?") ? "&" : "?"}paid=1`;
+  const successPathWithPaid = `${successPath}${successPath.includes("?") ? "&" : "?"}paid=1`;
   const cancelUrl = `${appUrl}/onboarding/hire-us?package=${packageSlug}`;
 
   const stripeCustomerId = user.stripeCustomerId ? decryptField(user.stripeCustomerId) : null;
 
   try {
+    const checkoutProvider = parsed.data.provider as ActivePaymentProvider | undefined;
+    const successUrl = checkoutProvider === "stripe"
+      ? `${appUrl}/api/payments/stripe/success?session_id={CHECKOUT_SESSION_ID}&next=${encodeURIComponent(successPathWithPaid)}`
+      : `${appUrl}${successPathWithPaid}`;
+
     const result = await createCheckoutForActiveProvider({
       userId: session.user.id,
       planId,
       stripeCustomerId,
       successUrl,
       cancelUrl,
-      provider: parsed.data.provider as ActivePaymentProvider | undefined,
+      provider: checkoutProvider,
       amountCentsOverride: packageConfig.priceCents,
       currencyOverride: packageConfig.currency,
       displayNameOverride: packageConfig.title,

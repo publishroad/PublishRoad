@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { redis } from "@/lib/redis";
-import { invalidateUserProfile } from "@/lib/cache";
-import { finalizeHireUsPurchase, parseHireUsPackageSlug } from "@/lib/hire-us";
+import { parseHireUsPackageSlug } from "@/lib/hire-us";
+import { applyPlanPaymentAndCredits, runPostPaymentSideEffects } from "@/lib/payments/service";
 
 export type RazorpayFulfillmentResult =
   | {
@@ -23,7 +23,7 @@ type StoredRazorpayOrderMeta = {
   cancelUrl?: string;
   amountCents?: number;
   currency?: string;
-  metadata?: { hireUsPackage?: string };
+  metadata?: { flow?: string; hireUsPackage?: string };
 };
 
 function parseStoredMeta(raw: unknown): StoredRazorpayOrderMeta | null {
@@ -36,6 +36,76 @@ function parseStoredMeta(raw: unknown): StoredRazorpayOrderMeta | null {
   }
 }
 
+function resolveResultUrls(meta: StoredRazorpayOrderMeta, defaults: { successUrl: string; cancelUrl: string }) {
+  return {
+    successUrl: meta.successUrl ?? defaults.successUrl,
+    cancelUrl: meta.cancelUrl ?? defaults.cancelUrl,
+  };
+}
+
+async function findExistingPaymentUserId(paymentId: string): Promise<string | null> {
+  const existing = await db.payment.findFirst({
+    where: { providerPaymentId: paymentId },
+    select: { userId: true },
+  });
+  return existing?.userId ?? null;
+}
+
+async function upsertPaymentAndApplyCredits(args: {
+  paymentId: string;
+  meta: StoredRazorpayOrderMeta;
+  fallbackCurrency?: string;
+}): Promise<{ status: "processed_new" | "already_processed" | "plan_not_found" }> {
+  const plan = await db.planConfig.findUnique({
+    where: { id: args.meta.planId },
+    select: { credits: true, priceCents: true },
+  });
+
+  if (!plan) {
+    return { status: "plan_not_found" };
+  }
+
+  const hireUsPackage = parseHireUsPackageSlug(args.meta.metadata?.hireUsPackage);
+  const paymentType = args.meta.metadata?.flow === "hire_us" || !!hireUsPackage ? "hire_us" : "plan";
+
+  const { processedAlready } = await applyPlanPaymentAndCredits({
+    userId: args.meta.userId,
+    planId: args.meta.planId,
+    providerPaymentId: args.paymentId,
+    amountCents:
+      typeof args.meta.amountCents === "number" && Number.isFinite(args.meta.amountCents) && args.meta.amountCents > 0
+        ? Math.round(args.meta.amountCents)
+        : plan.priceCents,
+    currency: (args.meta.currency ?? args.fallbackCurrency ?? "usd").toLowerCase(),
+    creditsAmount: plan.credits,
+    paymentType,
+  });
+
+  return { status: processedAlready ? "already_processed" : "processed_new" };
+}
+
+async function runPostFulfillmentSideEffects(args: {
+  userId: string;
+  paymentId: string;
+  orderId: string;
+  paymentSource: "checkout_capture" | "webhook";
+  hireUsPackage?: string;
+}) {
+  const packageSlug = parseHireUsPackageSlug(args.hireUsPackage);
+
+  await redis.set(`razorpay:processed:payment:${args.paymentId}`, "1", { ex: 60 * 60 * 24 * 30 });
+  await redis.del(`razorpay:order:${args.orderId}`);
+
+  await runPostPaymentSideEffects({
+    userId: args.userId,
+    hireUsPackageSlug: packageSlug,
+    notificationMessage:
+      args.paymentSource === "webhook"
+        ? "Your plan has been upgraded via Razorpay. Payment was confirmed by webhook."
+        : "Your plan has been upgraded via Razorpay. Credits have been added to your account.",
+  });
+}
+
 export async function fulfillRazorpayOrder(args: {
   orderId: string;
   paymentId: string;
@@ -45,17 +115,13 @@ export async function fulfillRazorpayOrder(args: {
   paymentSource: "checkout_capture" | "webhook";
 }): Promise<RazorpayFulfillmentResult> {
   const raw = await redis.get<string>(`razorpay:order:${args.orderId}`);
-
-  const existingByPaymentId = await db.payment.findFirst({
-    where: { providerPaymentId: args.paymentId },
-    select: { userId: true },
-  });
+  const existingByPaymentUserId = await findExistingPaymentUserId(args.paymentId);
 
   if (!raw) {
-    if (existingByPaymentId) {
+    if (existingByPaymentUserId) {
       return {
         status: "already_processed",
-        userId: existingByPaymentId.userId,
+        userId: existingByPaymentUserId,
         successUrl: args.defaultSuccessUrl,
         cancelUrl: args.defaultCancelUrl,
       };
@@ -76,26 +142,29 @@ export async function fulfillRazorpayOrder(args: {
     };
   }
 
-  const successUrl = meta.successUrl ?? args.defaultSuccessUrl;
-  const cancelUrl = meta.cancelUrl ?? args.defaultCancelUrl;
+  const { successUrl, cancelUrl } = resolveResultUrls(meta, {
+    successUrl: args.defaultSuccessUrl,
+    cancelUrl: args.defaultCancelUrl,
+  });
 
-  if (existingByPaymentId) {
+  if (existingByPaymentUserId) {
     await redis.del(`razorpay:order:${args.orderId}`);
     return {
       status: "already_processed",
-      userId: existingByPaymentId.userId,
+      userId: existingByPaymentUserId,
       successUrl,
       cancelUrl,
     };
   }
 
   try {
-    const plan = await db.planConfig.findUnique({
-      where: { id: meta.planId },
-      select: { credits: true, priceCents: true },
+    const writeStatus = await upsertPaymentAndApplyCredits({
+      paymentId: args.paymentId,
+      meta,
+      fallbackCurrency: args.currency,
     });
 
-    if (!plan) {
+    if (writeStatus.status === "plan_not_found") {
       return {
         status: "plan_not_found",
         cancelUrl,
@@ -103,50 +172,8 @@ export async function fulfillRazorpayOrder(args: {
       };
     }
 
-    let processedAlready = false;
-
-    await db.$transaction(async (tx) => {
-      const existing = await tx.payment.findFirst({
-        where: { providerPaymentId: args.paymentId },
-        select: { id: true },
-      });
-      if (existing) {
-        processedAlready = true;
-        return;
-      }
-
-      await tx.payment.create({
-        data: {
-          userId: meta.userId,
-          planId: meta.planId,
-          providerPaymentId: args.paymentId,
-          amountCents:
-            typeof meta.amountCents === "number" && Number.isFinite(meta.amountCents) && meta.amountCents > 0
-              ? Math.round(meta.amountCents)
-              : plan.priceCents,
-          currency: (meta.currency ?? args.currency ?? "usd").toLowerCase(),
-          status: "completed",
-        },
-      });
-
-      await tx.user.update({
-        where: { id: meta.userId },
-        data: {
-          planId: meta.planId,
-          creditsRemaining: plan.credits,
-        },
-      });
-    });
-
-    const packageSlug = parseHireUsPackageSlug(meta.metadata?.hireUsPackage);
-    if (packageSlug) {
-      await finalizeHireUsPurchase({ userId: meta.userId, packageSlug });
-    }
-
-    await redis.set(`razorpay:processed:payment:${args.paymentId}`, "1", { ex: 60 * 60 * 24 * 30 });
-    await redis.del(`razorpay:order:${args.orderId}`);
-
-    if (processedAlready) {
+    if (writeStatus.status === "already_processed") {
+      await redis.del(`razorpay:order:${args.orderId}`);
       return {
         status: "already_processed",
         userId: meta.userId,
@@ -155,27 +182,13 @@ export async function fulfillRazorpayOrder(args: {
       };
     }
 
-    try {
-      await db.notification.create({
-        data: {
-          userId: meta.userId,
-          type: "payment_success",
-          title: "Payment successful",
-          message:
-            args.paymentSource === "webhook"
-              ? "Your plan has been upgraded via Razorpay. Payment was confirmed by webhook."
-              : "Your plan has been upgraded via Razorpay. Credits have been added to your account.",
-        },
-      });
-    } catch (error) {
-      console.error("Razorpay fulfillment: notification create failed (non-fatal):", error);
-    }
-
-    try {
-      await invalidateUserProfile(meta.userId);
-    } catch (error) {
-      console.error("Razorpay fulfillment: cache invalidation failed (non-fatal):", error);
-    }
+    await runPostFulfillmentSideEffects({
+      userId: meta.userId,
+      paymentId: args.paymentId,
+      orderId: args.orderId,
+      paymentSource: args.paymentSource,
+      hireUsPackage: meta.metadata?.hireUsPackage,
+    });
 
     return {
       status: "completed",
