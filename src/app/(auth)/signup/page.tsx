@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useRef, useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -50,13 +50,14 @@ function resolveSignupRedirectTarget(callbackUrl: string | null): string {
   return ONBOARDING_PLAN_PATH;
 }
 
-export default function SignupPage() {
+function SignupPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl");
   const redirectTarget = resolveSignupRedirectTarget(callbackUrl);
   const hireUsPackage = extractHireUsPackageFromCallback(callbackUrl);
   const [isLoading, setIsLoading] = useState(false);
+  const inFlightRef = useRef(false);
 
   const form = useForm<SignupInput>({
     resolver: zodResolver(signupSchema),
@@ -64,6 +65,8 @@ export default function SignupPage() {
   });
 
   async function onSubmit(data: SignupInput) {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setIsLoading(true);
     try {
       const response = await fetch("/api/auth/signup", {
@@ -72,7 +75,7 @@ export default function SignupPage() {
         body: JSON.stringify(data),
       });
 
-      let result: { error?: string } = {};
+      let result: { error?: string | { code?: string; message?: string } } = {};
       const raw = await response.text();
       if (raw) {
         try {
@@ -83,7 +86,11 @@ export default function SignupPage() {
       }
 
       if (!response.ok) {
-        toast.error(result.error ?? "Failed to create account");
+        const message =
+          typeof result.error === "string"
+            ? result.error
+            : result.error?.message ?? "Failed to create account";
+        toast.error(message);
         return;
       }
 
@@ -106,7 +113,15 @@ export default function SignupPage() {
       toast.error("Signup failed. Please try again.");
     } finally {
       setIsLoading(false);
+      inFlightRef.current = false;
     }
+  }
+
+  async function handleGoogleSignup() {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    setIsLoading(true);
+    await signIn("google", { callbackUrl: redirectTarget });
   }
 
   return (
@@ -155,13 +170,15 @@ export default function SignupPage() {
           )}
           <button
             type="button"
-            onClick={() => signIn("google", { callbackUrl: redirectTarget })}
+            onClick={handleGoogleSignup}
+            disabled={isLoading}
             style={{
               display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
               width: "100%", marginBottom: "1rem", borderRadius: "999px",
               padding: "11px 24px", background: "#ffffff", color: "#475569",
               fontWeight: 500, fontSize: "0.875rem", border: "1px solid #e2e8f0",
-              cursor: "pointer", transition: "all 0.2s",
+              cursor: isLoading ? "not-allowed" : "pointer", transition: "all 0.2s",
+              opacity: isLoading ? 0.7 : 1,
             }}
           >
             <svg width="18" height="18" viewBox="0 0 24 24">
@@ -292,5 +309,13 @@ export default function SignupPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignupPageContent />
+    </Suspense>
   );
 }

@@ -1,5 +1,21 @@
 import type { NextConfig } from "next";
 
+if (!process.env.NEXTAUTH_SECRET) {
+  throw new Error("NEXTAUTH_SECRET must be defined");
+}
+
+if (process.env.NODE_ENV === "production" && process.env.NEXTAUTH_SECRET.length < 32) {
+  throw new Error("NEXTAUTH_SECRET must be at least 32 characters in production");
+}
+
+if (process.env.NODE_ENV === "production" && !process.env.EMAIL_QUEUE_SECRET) {
+  throw new Error("EMAIL_QUEUE_SECRET must be defined in production");
+}
+
+if (process.env.NODE_ENV === "production" && !process.env.EMAIL_QUEUE_ALLOWED_IPS) {
+  throw new Error("EMAIL_QUEUE_ALLOWED_IPS must be defined in production");
+}
+
 const isDev = process.env.NODE_ENV !== "production";
 const scriptSrc = isDev
   ? "'self' https://js.stripe.com https://checkout.razorpay.com https://*.razorpay.com https://*.razorpay.in https://*.rzp.io https://us-assets.i.posthog.com https://eu-assets.i.posthog.com https://va.vercel-scripts.com 'unsafe-inline' 'unsafe-eval'"

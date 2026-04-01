@@ -1,88 +1,23 @@
-"use client";
-
-import { useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
-import { toast } from "sonner";
 import type { PlanDisplay } from "@/lib/pricing-plans";
-import type { ActivePaymentProvider } from "@/lib/payments/service";
-import { PaymentMethodPicker } from "@/components/public/PaymentMethodPicker";
 
-interface PublicPricingCardProps {
+const InteractivePricingCard = dynamic(
+  () => import("@/components/public/InteractivePricingCard").then((mod) => mod.InteractivePricingCard)
+);
+
+export interface PublicPricingCardProps {
   plan: PlanDisplay;
-  // Optional — only passed on the /pricing page for authenticated checkout
   planId?: string;
   currentPlanSlug?: string;
   isAuthenticated?: boolean;
 }
 
-export function PublicPricingCard({
-  plan,
-  planId,
-  currentPlanSlug,
-  isAuthenticated = false,
-}: PublicPricingCardProps) {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [providerPicker, setProviderPicker] = useState<ActivePaymentProvider[] | null>(null);
-  const [pendingPlanId, setPendingPlanId] = useState<string | null>(null);
-  const isCurrent = currentPlanSlug === plan.slug;
+export function PublicPricingCard(props: PublicPricingCardProps) {
+  const { plan, planId } = props;
+
   const isFree = plan.slug === "free";
   const isLifetime = plan.slug === "lifetime";
-
-  const ctaLabel = isCurrent
-    ? "Current Plan"
-    : isSubmitting
-    ? "Loading..."
-    : plan.cta;
-
-  async function handleCheckout() {
-    if (isCurrent || isSubmitting || !planId) return;
-
-    if (!isAuthenticated) {
-      window.location.href = isFree ? "/signup" : `/signup?plan=${plan.slug}`;
-      return;
-    }
-
-    if (isFree) {
-      window.location.href = "/dashboard";
-      return;
-    }
-
-    await startCheckout(planId);
-  }
-
-  async function startCheckout(pid: string, provider?: ActivePaymentProvider) {
-    setIsSubmitting(true);
-    try {
-      const res = await fetch("/api/payments/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId: pid, provider, successPath: "/dashboard", cancelPath: "/pricing" }),
-      });
-      const payload = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(payload?.error ?? "Failed to start checkout");
-      }
-      if (payload?.selectProvider) {
-        setPendingPlanId(pid);
-        setProviderPicker(payload.selectProvider as ActivePaymentProvider[]);
-        setIsSubmitting(false);
-        return;
-      }
-      if (payload?.url) {
-        window.location.href = payload.url;
-        return;
-      }
-      if (payload?.razorpay) {
-        const { openRazorpayCheckout } = await import("@/lib/razorpay-checkout");
-        await openRazorpayCheckout(payload.razorpay).catch(() => setIsSubmitting(false));
-        return;
-      }
-      throw new Error("Invalid checkout response");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to start checkout");
-      setIsSubmitting(false);
-    }
-  }
 
   const cardStyle: React.CSSProperties = {
     position: "relative",
@@ -105,11 +40,8 @@ export function PublicPricingCard({
     textDecoration: "none",
     transition: "all 0.2s",
     border: "none",
-    cursor: isCurrent ? "default" : isSubmitting ? "not-allowed" : "pointer",
-    opacity: isSubmitting ? 0.8 : 1,
-    ...(isCurrent
-      ? { background: "#f1f5f9", color: "#94a3b8" }
-      : plan.popular
+    cursor: "pointer",
+    ...(plan.popular
       ? { background: "#5B58F6", color: "#ffffff", boxShadow: "0 0 20px rgba(91,88,246,0.5)" }
       : isLifetime
       ? { background: "#7c3aed", color: "#ffffff" }
@@ -117,16 +49,7 @@ export function PublicPricingCard({
   };
 
   return (
-    <>
-    {providerPicker && pendingPlanId && (
-      <PaymentMethodPicker
-        providers={providerPicker}
-        onSelect={(p) => { setProviderPicker(null); startCheckout(pendingPlanId, p); }}
-        onCancel={() => { setProviderPicker(null); setPendingPlanId(null); }}
-      />
-    )}
     <div style={cardStyle}>
-      {/* Badge */}
       {plan.popular && (
         <div style={{ position: "absolute", top: "-14px", left: "50%", transform: "translateX(-50%)" }}>
           <span style={{ background: "#5B58F6", color: "#fff", fontSize: "0.72rem", fontWeight: 700, padding: "5px 14px", borderRadius: "999px", display: "inline-block" }}>
@@ -142,12 +65,10 @@ export function PublicPricingCard({
         </div>
       )}
 
-      {/* Plan name */}
       <p style={{ fontFamily: "var(--font-heading)", fontWeight: 600, fontSize: "1rem", color: plan.popular ? "#ffffff" : "#020617", marginBottom: "0.5rem" }}>
         {plan.name}
       </p>
 
-      {/* Price */}
       <div style={{ display: "flex", alignItems: "baseline", gap: "4px", marginBottom: "4px" }}>
         <span style={{ fontFamily: "var(--font-heading)", fontSize: "2.25rem", fontWeight: 700, color: plan.popular ? "#ffffff" : "#020617", lineHeight: 1 }}>
           {plan.price}
@@ -159,19 +80,16 @@ export function PublicPricingCard({
         )}
       </div>
 
-      {/* Billing note */}
       <p style={{ fontSize: "0.75rem", color: plan.popular ? "#64748b" : "#94a3b8", fontWeight: 300, marginBottom: "0.75rem" }}>
         {plan.billingNote}
       </p>
 
-      {/* Credits pill */}
       <div style={{ background: plan.popular ? "rgba(91,88,246,0.25)" : "rgba(91,88,246,0.08)", borderRadius: "0.75rem", padding: "6px 12px", marginBottom: "1.25rem", display: "inline-block" }}>
         <span style={{ color: plan.popular ? "#a5b4fc" : "#5B58F6", fontSize: "0.78rem", fontWeight: 600 }}>
           {plan.credits}
         </span>
       </div>
 
-      {/* Features */}
       <ul style={{ listStyle: "none", padding: 0, margin: "0 0 1.5rem 0", flex: 1, display: "flex", flexDirection: "column", gap: "0.6rem" }}>
         {plan.features.map((f, j) => (
           <li key={j} style={{ display: "flex", alignItems: "flex-start", gap: "8px", fontSize: "0.82rem", color: plan.popular ? "#cbd5e1" : "#64748b", fontWeight: 300 }}>
@@ -183,20 +101,13 @@ export function PublicPricingCard({
         ))}
       </ul>
 
-      {/* CTA — link when no planId (home page), button when planId provided (pricing page) */}
-      {!planId ? (
-        <Link
-          href={isFree ? "/signup" : `/signup?plan=${plan.slug}`}
-          style={ctaStyle}
-        >
-          {ctaLabel}
-        </Link>
+      {planId ? (
+        <InteractivePricingCard {...props} />
       ) : (
-        <button type="button" onClick={handleCheckout} disabled={isCurrent || isSubmitting} style={ctaStyle}>
-          {ctaLabel}
-        </button>
+        <Link href={isFree ? "/signup" : `/signup?plan=${plan.slug}`} style={ctaStyle}>
+          {plan.cta}
+        </Link>
       )}
     </div>
-    </>
   );
 }

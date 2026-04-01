@@ -1,20 +1,28 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { buildTwitterMetadata, getSiteUrl, getSocialImages } from "@/lib/seo";
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://publishroad.com";
+const APP_URL = getSiteUrl();
 
 export const metadata: Metadata = {
-  title: "Hire Us — Done-For-You Product Launch Distribution | PublishRoad",
+  title: "Hire Us — Done-For-You Product Launch Distribution",
   description:
     "Let our team handle your product distribution. Two packages: $399 for full directory submissions, or $999 for directory submissions + guest posts + press release connections. Done for you in 25 days.",
   alternates: { canonical: `${APP_URL}/hire-us` },
   openGraph: {
-    title: "Hire Us — Done-For-You Product Launch Distribution | PublishRoad",
+    title: "Hire Us — Done-For-You Product Launch Distribution",
     description:
       "Skip the DIY grind. Choose from two packages: $399 for directory submissions, or $999 for the full service including guest posts and press release connections. 25-day delivery.",
     url: `${APP_URL}/hire-us`,
-    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Hire PublishRoad" }],
+    type: "website",
+    siteName: "PublishRoad",
+    images: getSocialImages("Hire PublishRoad"),
   },
+  twitter: buildTwitterMetadata({
+    title: "Hire Us — Done-For-You Product Launch Distribution",
+    description:
+      "Skip the DIY grind. Choose from two packages: $399 for directory submissions, or $999 for the full service including guest posts and press release connections. 25-day delivery.",
+  }),
 };
 
 const serviceSchema = {

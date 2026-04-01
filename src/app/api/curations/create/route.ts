@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { checkRateLimit, curationLimiter } from "@/lib/rate-limit";
+import { buildRateLimitIdentifiers, checkRateLimitForIdentifiers, curationLimiter } from "@/lib/rate-limit";
 import { createCurationSchema } from "@/lib/validations/curation";
 import { runCuration } from "@/lib/curation-engine";
 import { attachHireUsCuration } from "@/lib/hire-us";
@@ -16,7 +16,11 @@ export async function POST(req: NextRequest) {
   const userId = session.user.id;
 
   // Rate limit
-  const rl = await checkRateLimit(curationLimiter, userId);
+  const identifiers = buildRateLimitIdentifiers(req, {
+    scope: "curation-create",
+    userId,
+  });
+  const rl = await checkRateLimitForIdentifiers(curationLimiter, identifiers);
   if (!rl.success) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }

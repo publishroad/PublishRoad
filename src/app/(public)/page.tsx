@@ -1,24 +1,34 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { PRICING_PLANS, dbPlanToDisplay } from "@/lib/pricing-plans";
+import { buildTwitterMetadata, getSiteUrl, getSocialImages } from "@/lib/seo";
 import { PublicPricingCard } from "@/components/public/PublicPricingCard";
 import { db } from "@/lib/db";
-import { getCachedWithLock, CacheKeys, CacheTTL } from "@/lib/cache";
+import { unstable_cache } from "next/cache";
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://publishroad.com";
+const APP_URL = getSiteUrl();
+
+export const revalidate = 300;
 
 export const metadata: Metadata = {
-  title: "PublishRoad — AI-Powered Product Launch Distribution",
+  title: "AI-Powered Product Launch Distribution",
   description:
     "Generate a complete AI-powered distribution plan for your product launch. Get curated lists of the best directories, guest post sites, press release platforms, influencers, subreddits, and investors — matched to your product in minutes.",
   alternates: { canonical: `${APP_URL}/` },
   openGraph: {
-    title: "PublishRoad — AI-Powered Product Launch Distribution",
+    title: "AI-Powered Product Launch Distribution",
     description:
       "Generate a complete AI-powered distribution plan for your product launch. Directories, guest posts, press, influencers, Reddit & investors — all matched to your product.",
     url: `${APP_URL}/`,
-    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "PublishRoad" }],
+    type: "website",
+    siteName: "PublishRoad",
+    images: getSocialImages("PublishRoad — AI-Powered Product Launch Distribution"),
   },
+  twitter: buildTwitterMetadata({
+    title: "AI-Powered Product Launch Distribution",
+    description:
+      "Generate a complete AI-powered distribution plan for your product launch. Directories, guest posts, press, influencers, Reddit & investors — all matched to your product.",
+  }),
 };
 
 const softwareSchema = {
@@ -62,15 +72,17 @@ const softwareSchema = {
   ],
 };
 
-async function getPlans() {
-  try {
-    return await getCachedWithLock(CacheKeys.plans, CacheTTL.PLAN, async () =>
-      db.planConfig.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } })
-    );
-  } catch {
-    return [];
-  }
-}
+const getPlans = unstable_cache(
+  async () => {
+    try {
+      return await db.planConfig.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } });
+    } catch {
+      return [];
+    }
+  },
+  ["public-home-plans"],
+  { revalidate }
+);
 
 export default async function LandingPage() {
   const dbPlans = await getPlans();
@@ -192,6 +204,9 @@ export default async function LandingPage() {
 
           <p style={{ color: "#94a3b8", fontSize: "0.875rem", marginTop: "1rem", fontWeight: 300 }}>
             Free plan available — no credit card required
+          </p>
+          <p style={{ color: "#64748b", fontSize: "0.95rem", marginTop: "1rem", fontWeight: 300 }}>
+            Compare our <Link href="/pricing" style={{ color: "#5B58F6", fontWeight: 500, textDecoration: "none" }}>pricing plans</Link>, explore the <Link href="/hire-us" style={{ color: "#5B58F6", fontWeight: 500, textDecoration: "none" }}>done-for-you launch service</Link>, or browse the <Link href="/blog" style={{ color: "#5B58F6", fontWeight: 500, textDecoration: "none" }}>blog</Link> for launch and SEO strategies.
           </p>
 
           {/* Trust badges */}

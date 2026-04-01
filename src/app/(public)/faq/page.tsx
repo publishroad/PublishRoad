@@ -1,18 +1,27 @@
 import type { Metadata } from "next";
+import { buildTwitterMetadata, getSiteUrl, getSocialImages } from "@/lib/seo";
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://publishroad.com";
+const APP_URL = getSiteUrl();
 
 export const metadata: Metadata = {
-  title: "FAQ — Frequently Asked Questions | PublishRoad",
+  title: "FAQ — Frequently Asked Questions",
   description:
     "Get answers to the most common questions about PublishRoad — how curations work, pricing plans, credits, refund policy, AI matching, and more.",
   alternates: { canonical: `${APP_URL}/faq` },
   openGraph: {
-    title: "FAQ — Frequently Asked Questions | PublishRoad",
+    title: "FAQ — Frequently Asked Questions",
     description:
       "Everything you need to know about PublishRoad — curations, pricing, credits, AI matching, and how to get the most from your distribution plan.",
     url: `${APP_URL}/faq`,
+    type: "website",
+    siteName: "PublishRoad",
+    images: getSocialImages("PublishRoad FAQ"),
   },
+  twitter: buildTwitterMetadata({
+    title: "FAQ — Frequently Asked Questions",
+    description:
+      "Everything you need to know about PublishRoad — curations, pricing, credits, AI matching, and how to get the most from your distribution plan.",
+  }),
 };
 
 const faqs = [

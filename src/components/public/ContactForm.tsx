@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { z } from "zod";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { contactSchema, type ContactInput } from "@/lib/validations/contact";
 import {
   Form,
   FormControl,
@@ -16,18 +16,10 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 
-const contactSchema = z.object({
-  name: z.string().min(2, "Name required").max(100).transform((n) => n.trim()),
-  email: z.string().email("Invalid email").transform((e) => e.toLowerCase().trim()),
-  subject: z.string().min(1, "Subject required").max(255).transform((s) => s.trim()),
-  message: z.string().min(10, "Message too short").max(5000).transform((m) => m.trim()),
-});
-
-type ContactInput = z.infer<typeof contactSchema>;
-
 export function ContactForm() {
   const [submitted, setSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const inFlightRef = useRef(false);
 
   const form = useForm<ContactInput>({
     resolver: zodResolver(contactSchema),
@@ -35,6 +27,8 @@ export function ContactForm() {
   });
 
   async function onSubmit(data: ContactInput) {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setIsLoading(true);
     try {
       const response = await fetch("/api/contact", {
@@ -44,13 +38,26 @@ export function ContactForm() {
       });
 
       if (!response.ok) {
-        toast.error("Failed to send message. Please try again.");
+        const payload = (await response.json().catch(() => null)) as
+          | { error?: string; success?: boolean; errorObj?: { message?: string } }
+          | { error?: { message?: string } }
+          | null;
+        const message =
+          typeof payload?.error === "string"
+            ? payload.error
+            : payload && "error" in payload && typeof payload.error === "object"
+              ? payload.error?.message ?? "Failed to send message. Please try again."
+              : "Failed to send message. Please try again.";
+        toast.error(message);
         return;
       }
 
       setSubmitted(true);
+    } catch {
+      toast.error("Failed to send message. Please try again.");
     } finally {
       setIsLoading(false);
+      inFlightRef.current = false;
     }
   }
 

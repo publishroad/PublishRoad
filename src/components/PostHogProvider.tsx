@@ -1,9 +1,9 @@
 "use client";
 
-import posthog from "posthog-js";
+import type { PostHog } from "posthog-js";
 import { PostHogProvider as PHProvider, usePostHog } from "posthog-js/react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect, Suspense } from "react";
+import { Suspense, useEffect, useState } from "react";
 
 function PostHogPageView() {
   const pathname = usePathname();
@@ -22,28 +22,49 @@ function PostHogPageView() {
   return null;
 }
 
-if (typeof window !== "undefined") {
-  const posthogKey = process.env.NEXT_PUBLIC_POSTHOG_KEY?.trim();
-  const posthogHost = process.env.NEXT_PUBLIC_POSTHOG_HOST?.trim() || "https://us.i.posthog.com";
+export function PostHogProvider() {
+  const [client, setClient] = useState<PostHog | null>(null);
 
-  if (posthogKey) {
-    posthog.init(posthogKey, {
-      api_host: posthogHost,
-      capture_pageview: false, // handled manually via PostHogPageView
-      capture_pageleave: true,
-    });
-  } else {
-    console.warn("PostHog disabled: NEXT_PUBLIC_POSTHOG_KEY is missing.");
+  useEffect(() => {
+    const posthogKey = process.env.NEXT_PUBLIC_POSTHOG_KEY?.trim();
+    const posthogHost = process.env.NEXT_PUBLIC_POSTHOG_HOST?.trim() || "https://us.i.posthog.com";
+
+    if (!posthogKey) {
+      return;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void import("posthog-js")
+        .then(({ default: posthog }) => {
+          if (cancelled) return;
+
+          posthog.init(posthogKey, {
+            api_host: posthogHost,
+            capture_pageview: false,
+            capture_pageleave: true,
+          });
+
+          setClient(posthog);
+        })
+        .catch(() => undefined);
+    }, 1200);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, []);
+
+  if (!client) {
+    return null;
   }
-}
 
-export function PostHogProvider({ children }: { children: React.ReactNode }) {
   return (
-    <PHProvider client={posthog}>
+    <PHProvider client={client}>
       <Suspense fallback={null}>
         <PostHogPageView />
       </Suspense>
-      {children}
     </PHProvider>
   );
 }

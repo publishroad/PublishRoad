@@ -98,7 +98,7 @@ async function runPostFulfillmentSideEffects(args: {
 
   await runPostPaymentSideEffects({
     userId: args.userId,
-    hireUsPackageSlug: packageSlug,
+    hireUsPackageSlug: packageSlug ?? undefined,
     notificationMessage:
       args.paymentSource === "webhook"
         ? "Your plan has been upgraded via Razorpay. Payment was confirmed by webhook."

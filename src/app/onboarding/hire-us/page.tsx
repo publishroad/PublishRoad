@@ -1,9 +1,10 @@
 "use client";
 
+import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { HireUsPackageSelector } from "@/components/public/HireUsPackageSelector";
 
-export default function HireUsOnboardingPage() {
+function HireUsOnboardingPageContent() {
   const searchParams = useSearchParams();
   const selectedParam = searchParams.get("package");
   const preselectedPackage = selectedParam === "complete" ? "complete" : "starter";
@@ -16,5 +17,13 @@ export default function HireUsOnboardingPage() {
       variant="onboarding"
       showBackToDetails
     />
+  );
+}
+
+export default function HireUsOnboardingPage() {
+  return (
+    <Suspense fallback={null}>
+      <HireUsOnboardingPageContent />
+    </Suspense>
   );
 }

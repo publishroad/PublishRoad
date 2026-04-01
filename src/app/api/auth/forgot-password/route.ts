@@ -2,44 +2,84 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { db } from "@/lib/db";
 import { forgotPasswordSchema } from "@/lib/validations/auth";
-import { sendPasswordResetEmail } from "@/lib/email";
-import { passwordResetLimiter, checkRateLimit } from "@/lib/rate-limit";
+import { enqueueEmailJob } from "@/lib/email/queue";
+import {
+  buildRateLimitIdentifiers,
+  checkRateLimitForIdentifiers,
+  passwordResetLimiter,
+  getClientIp,
+} from "@/lib/rate-limit";
+import { runIdempotentJson } from "@/lib/idempotency";
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
   const parsed = forgotPasswordSchema.safeParse(body);
+  const ip = getClientIp(request);
 
-  if (!parsed.success) {
-    // Always return 200 to prevent email enumeration
-    return NextResponse.json({ success: true });
-  }
+  return runIdempotentJson({
+    request,
+    scope: "forgot-password",
+    payload: parsed.success ? parsed.data : body,
+    clientIp: ip,
+    execute: async () => {
+      if (!parsed.success) {
+        return {
+          status: 200,
+          body: {
+            success: true,
+            requestAccepted: true,
+            emailDelivery: "queued",
+          },
+        };
+      }
 
-  const { email } = parsed.data;
+      const { email } = parsed.data;
 
-  // Rate limit: 3 requests per hour per email
-  const { success } = await checkRateLimit(passwordResetLimiter, email);
-  if (!success) {
-    return NextResponse.json({ success: true }); // Silent rate limit (no leaking info)
-  }
+      const identifiers = buildRateLimitIdentifiers(request, {
+        scope: "password-reset",
+      });
+      identifiers.push(`password-reset:email:${email}`);
 
-  const user = await db.user.findFirst({
-    where: { email, deletedAt: null, authProvider: "email" },
+      const { success } = await checkRateLimitForIdentifiers(passwordResetLimiter, identifiers);
+      if (!success) {
+        return {
+          status: 200,
+          body: {
+            success: true,
+            requestAccepted: true,
+            emailDelivery: "queued",
+          },
+        };
+      }
+
+      const user = await db.user.findFirst({
+        where: { email, deletedAt: null, authProvider: "email" },
+      });
+
+      if (user) {
+        const token = randomBytes(32).toString("hex");
+        const expiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+        await db.user.update({
+          where: { id: user.id },
+          data: { resetToken: token, resetTokenExpiry: expiry },
+        });
+
+        await enqueueEmailJob("password_reset", {
+          to: email,
+          name: user.name ?? "there",
+          token,
+        });
+      }
+
+      return {
+        status: 200,
+        body: {
+          success: true,
+          requestAccepted: true,
+          emailDelivery: "queued",
+        },
+      };
+    },
   });
-
-  if (user) {
-    const token = randomBytes(32).toString("hex");
-    const expiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-
-    await db.user.update({
-      where: { id: user.id },
-      data: { resetToken: token, resetTokenExpiry: expiry },
-    });
-
-    sendPasswordResetEmail(email, user.name ?? "there", token).catch(
-      console.error
-    );
-  }
-
-  // Always return 200 — never reveal if email exists
-  return NextResponse.json({ success: true });
 }

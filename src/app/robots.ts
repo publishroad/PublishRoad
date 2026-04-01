@@ -1,23 +1,23 @@
 import { MetadataRoute } from "next";
+import { getCanonicalUrl, getSiteUrl } from "@/lib/seo";
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://publishroad.com";
+const BASE_URL = getSiteUrl();
 
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
       {
         userAgent: "*",
-        allow: ["/", "/pricing", "/blog", "/faq", "/contact", "/terms", "/privacy"],
+        allow: ["/", "/pricing", "/blog", "/faq", "/contact", "/terms", "/privacy", "/refund-policy", "/cancellation-policy"],
         disallow: [
           "/admin/",
           "/dashboard/",
           "/onboarding/",
           "/api/",
-          "/_next/",
         ],
       },
     ],
-    sitemap: `${BASE_URL}/sitemap.xml`,
+    sitemap: getCanonicalUrl("/sitemap.xml"),
     host: BASE_URL,
   };
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 export async function GET() {
   const categories = await db.category.findMany({
@@ -11,7 +11,6 @@ export async function GET() {
   });
 
   const response = NextResponse.json(categories);
-  // Always fetch latest lookup values from DB.
-  response.headers.set("Cache-Control", "no-store, max-age=0");
+  response.headers.set("Cache-Control", "public, s-maxage=300, stale-while-revalidate=600");
   return response;
 }

@@ -1,15 +1,9 @@
 import { z } from "zod";
+import { normalizedEmailSchema, requiredTrimmedString } from "@/lib/validations/common";
 
 export const signupSchema = z.object({
-  name: z
-    .string()
-    .min(2, "Name must be at least 2 characters")
-    .max(100, "Name too long"),
-  email: z
-    .string()
-    .email("Invalid email address")
-    .max(255, "Email too long")
-    .transform((e) => e.toLowerCase().trim()),
+  name: requiredTrimmedString("Name", { min: 2, max: 100 }),
+  email: normalizedEmailSchema,
   password: z
     .string()
     .min(8, "Password must be at least 8 characters")
@@ -23,18 +17,12 @@ export const signupSchema = z.object({
 });
 
 export const loginSchema = z.object({
-  email: z
-    .string()
-    .email("Invalid email address")
-    .transform((e) => e.toLowerCase().trim()),
-  password: z.string().min(1, "Password is required").max(128),
+  email: normalizedEmailSchema,
+  password: requiredTrimmedString("Password", { min: 1, max: 128 }),
 });
 
 export const forgotPasswordSchema = z.object({
-  email: z
-    .string()
-    .email("Invalid email address")
-    .transform((e) => e.toLowerCase().trim()),
+  email: normalizedEmailSchema,
 });
 
 export const resetPasswordSchema = z

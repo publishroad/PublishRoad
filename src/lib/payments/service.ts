@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { redis } from "@/lib/redis";
 import { invalidateUserProfile } from "@/lib/cache";
-import { finalizeHireUsPurchase } from "@/lib/hire-us";
+import { finalizeHireUsPurchase, parseHireUsPackageSlug } from "@/lib/hire-us";
 import { createCheckoutSession, createPortalSession } from "@/lib/stripe";
 import { decryptField } from "@/lib/server-utils";
 import { getPayPalAccessToken, createPayPalOrder } from "@/lib/payments/paypal";
@@ -229,7 +229,10 @@ export async function runPostPaymentSideEffects(args: {
   skipCacheInvalidation?: boolean;
 }) {
   if (args.hireUsPackageSlug) {
-    await finalizeHireUsPurchase({ userId: args.userId, packageSlug: args.hireUsPackageSlug });
+    const packageSlug = parseHireUsPackageSlug(args.hireUsPackageSlug);
+    if (packageSlug) {
+      await finalizeHireUsPurchase({ userId: args.userId, packageSlug });
+    }
   }
 
   if (!args.skipNotification && args.notificationMessage) {

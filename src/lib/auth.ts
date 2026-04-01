@@ -54,25 +54,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!parsed.success) return null;
         const { email, password } = parsed.data;
 
-        const result = await evaluateLoginCredentials(email, password, { recordFailures: true });
+        const result = await evaluateLoginCredentials(email, password, {
+          recordFailures: true,
+          loadProfile: true,
+          useCache: false,
+        });
 
         if (result.code === "OK") {
           return result.user;
         }
 
-        if (result.code === "EMAIL_NOT_FOUND") {
-          throw new LoginCredentialsError("email_not_found");
-        }
-
-        if (result.code === "SOCIAL_LOGIN_ONLY") {
-          throw new LoginCredentialsError("social_login_only");
-        }
-
-        if (result.code === "ACCOUNT_LOCKED") {
-          throw new LoginCredentialsError("account_locked");
-        }
-
-        throw new LoginCredentialsError("wrong_password");
+        throw new LoginCredentialsError("invalid_credentials");
       },
     }),
   ],

@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
+import { getSiteUrl } from "@/lib/seo";
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://publishroad.com";
+const APP_URL = getSiteUrl();
 
 export const metadata: Metadata = {
-  title: "Terms of Service | PublishRoad",
+  title: "Terms of Service",
   description:
     "Read PublishRoad's Terms of Service — covering account registration, plans, billing, no-refund policy, acceptable use, intellectual property, and liability.",
   alternates: { canonical: `${APP_URL}/terms` },
-  robots: { index: true, follow: false },
+  robots: { index: true, follow: true },
 };
 
 export default function TermsPage() {

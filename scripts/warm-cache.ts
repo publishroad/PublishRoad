@@ -1,7 +1,8 @@
 #!/usr/bin/env tsx
 /**
  * Post-deploy cache warming script.
- * Run after deployment to pre-populate Redis with lookup data.
+ * Run after deployment to pre-populate Redis with lookup data and pre-warm
+ * public ISR pages so first visitors avoid regeneration cost.
  *
  * Usage: npx tsx scripts/warm-cache.ts
  */
@@ -16,11 +17,61 @@ const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN!,
 });
 
+const WARM_PATHS = ["/", "/pricing"];
+const baseUrl = (process.env.WARM_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
+
 async function warm(key: string, ttl: number, fetchFn: () => Promise<unknown>) {
   const data = await fetchFn();
   await redis.set(key, data, { ex: ttl });
   console.log(`✅ Warmed: ${key}`);
   return data;
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function warmPublicPath(path: string, rounds = 2) {
+  if (!baseUrl) {
+    console.warn(`⚠️ Skipping public path warm (${path}): set WARM_BASE_URL or NEXT_PUBLIC_APP_URL`);
+    return;
+  }
+
+  const url = `${baseUrl}${path}`;
+
+  for (let round = 1; round <= rounds; round += 1) {
+    let ok = false;
+
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        const response = await fetch(url, {
+          headers: {
+            "user-agent": "publishroad-cache-warmer/1.0",
+            "cache-control": "no-cache",
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`status ${response.status}`);
+        }
+
+        ok = true;
+        console.log(`✅ Warmed public page: ${url} (round ${round}, attempt ${attempt})`);
+        break;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (attempt === 3) {
+          console.warn(`⚠️ Failed warming ${url} on round ${round}: ${message}`);
+        } else {
+          await wait(300 * attempt);
+        }
+      }
+    }
+
+    if (!ok) {
+      break;
+    }
+  }
 }
 
 async function main() {
@@ -55,6 +106,8 @@ async function main() {
       })
     ),
   ]);
+
+  await Promise.all(WARM_PATHS.map((path) => warmPublicPath(path)));
 
   console.log("\n✨ Cache warming complete!");
 }

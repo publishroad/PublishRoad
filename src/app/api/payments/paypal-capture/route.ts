@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
       await runPostPaymentSideEffects({
         userId,
         notificationMessage: "Your plan has been upgraded via PayPal. Credits have been added to your account.",
-        hireUsPackageSlug: packageSlug,
+        hireUsPackageSlug: packageSlug ?? undefined,
       });
     } else {
       await runPostPaymentSideEffects({

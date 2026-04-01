@@ -1,52 +1,71 @@
 import { MetadataRoute } from "next";
 import { db } from "@/lib/db";
+import { getCanonicalUrl, getStaticLastModified } from "@/lib/seo";
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://publishroad.com";
+const STATIC_LAST_MODIFIED = getStaticLastModified();
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Static public pages
   const staticPages: MetadataRoute.Sitemap = [
     {
-      url: `${BASE_URL}/`,
-      lastModified: new Date(),
+      url: getCanonicalUrl("/"),
+      lastModified: STATIC_LAST_MODIFIED,
       changeFrequency: "weekly",
       priority: 1.0,
     },
     {
-      url: `${BASE_URL}/pricing`,
-      lastModified: new Date(),
+      url: getCanonicalUrl("/pricing"),
+      lastModified: STATIC_LAST_MODIFIED,
       changeFrequency: "weekly",
       priority: 0.9,
     },
     {
-      url: `${BASE_URL}/blog`,
-      lastModified: new Date(),
+      url: getCanonicalUrl("/blog"),
+      lastModified: STATIC_LAST_MODIFIED,
       changeFrequency: "daily",
       priority: 0.8,
     },
     {
-      url: `${BASE_URL}/faq`,
-      lastModified: new Date(),
+      url: getCanonicalUrl("/faq"),
+      lastModified: STATIC_LAST_MODIFIED,
       changeFrequency: "monthly",
       priority: 0.7,
     },
     {
-      url: `${BASE_URL}/contact`,
-      lastModified: new Date(),
+      url: getCanonicalUrl("/contact"),
+      lastModified: STATIC_LAST_MODIFIED,
       changeFrequency: "yearly",
       priority: 0.5,
     },
     {
-      url: `${BASE_URL}/terms`,
-      lastModified: new Date(),
+      url: getCanonicalUrl("/terms"),
+      lastModified: STATIC_LAST_MODIFIED,
       changeFrequency: "yearly",
       priority: 0.3,
     },
     {
-      url: `${BASE_URL}/privacy`,
-      lastModified: new Date(),
+      url: getCanonicalUrl("/privacy"),
+      lastModified: STATIC_LAST_MODIFIED,
       changeFrequency: "yearly",
       priority: 0.3,
+    },
+    {
+      url: getCanonicalUrl("/refund-policy"),
+      lastModified: STATIC_LAST_MODIFIED,
+      changeFrequency: "yearly",
+      priority: 0.3,
+    },
+    {
+      url: getCanonicalUrl("/cancellation-policy"),
+      lastModified: STATIC_LAST_MODIFIED,
+      changeFrequency: "yearly",
+      priority: 0.3,
+    },
+    {
+      url: getCanonicalUrl("/hire-us"),
+      lastModified: STATIC_LAST_MODIFIED,
+      changeFrequency: "monthly",
+      priority: 0.8,
     },
   ];
 
@@ -60,7 +79,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     });
 
     blogPages = posts.map((post) => ({
-      url: `${BASE_URL}/blog/${post.slug}`,
+      url: getCanonicalUrl(`/blog/${post.slug}`),
       lastModified: post.updatedAt,
       changeFrequency: "monthly" as const,
       priority: 0.7,

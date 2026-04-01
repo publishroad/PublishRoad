@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, KeyboardEvent } from "react";
+import { Suspense, useState, useEffect, KeyboardEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -22,7 +22,7 @@ interface Category {
   slug: string;
 }
 
-export default function OnboardingCurationPage() {
+function OnboardingCurationPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [countries, setCountries] = useState<Country[]>([]);
@@ -50,12 +50,12 @@ export default function OnboardingCurationPage() {
   });
 
   useEffect(() => {
-    fetch("/api/lookup/countries", { cache: "no-store" })
+    fetch("/api/lookup/countries", { cache: "force-cache" })
       .then((r) => r.json())
       .then((data) => setCountries(Array.isArray(data) ? data : []))
       .catch(() => {});
 
-    fetch("/api/lookup/categories", { cache: "no-store" })
+    fetch("/api/lookup/categories", { cache: "force-cache" })
       .then((r) => r.json())
       .then((data) => setCategories(Array.isArray(data) ? data : []))
       .catch(() => {});
@@ -320,5 +320,13 @@ export default function OnboardingCurationPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function OnboardingCurationPage() {
+  return (
+    <Suspense fallback={null}>
+      <OnboardingCurationPageContent />
+    </Suspense>
   );
 }

@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { Analytics } from "@vercel/analytics/next";
 import { Inter, Playfair_Display } from "next/font/google";
-import { auth } from "@/lib/auth";
 import "./globals.css";
-import { Providers } from "@/components/providers";
+import { GlobalUiEnhancements } from "@/components/GlobalUiEnhancements";
+import { SITE_NAME, buildTwitterMetadata, getSiteUrl, getSocialImages } from "@/lib/seo";
 
 const inter = Inter({
   variable: "--font-sans",
@@ -20,7 +20,7 @@ const playfair = Playfair_Display({
   display: "swap",
 });
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://publishroad.com";
+const APP_URL = getSiteUrl();
 
 export const metadata: Metadata = {
   metadataBase: new URL(APP_URL),
@@ -30,8 +30,8 @@ export const metadata: Metadata = {
     apple: "/favicon.png",
   },
   title: {
-    default: "PublishRoad — AI-Powered Product Launch Distribution",
-    template: "%s | PublishRoad",
+    default: SITE_NAME,
+    template: `%s | ${SITE_NAME}`,
   },
   description:
     "PublishRoad generates AI-powered distribution plans for product launches. Get curated lists of the best directories, guest post sites, press release platforms, social influencers, Reddit communities, and investors for your product.",
@@ -40,35 +40,28 @@ export const metadata: Metadata = {
     "AI product launch", "distribution plan", "press release sites", "guest post sites",
     "startup launch checklist", "product hunt alternatives", "product distribution",
   ],
-  authors: [{ name: "PublishRoad", url: APP_URL }],
-  creator: "PublishRoad",
-  publisher: "PublishRoad",
-  applicationName: "PublishRoad",
+  authors: [{ name: SITE_NAME, url: APP_URL }],
+  creator: SITE_NAME,
+  publisher: SITE_NAME,
+  applicationName: SITE_NAME,
   openGraph: {
     type: "website",
-    siteName: "PublishRoad",
+    siteName: SITE_NAME,
     locale: "en_US",
     url: APP_URL,
     title: "PublishRoad — AI-Powered Product Launch Distribution",
     description:
       "Generate a complete AI-powered distribution plan for your product launch. Curated directories, guest posts, press release sites, influencers, and investors — all matched to your product.",
-    images: [
-      {
-        url: "/og-image.png",
-        width: 1200,
-        height: 630,
-        alt: "PublishRoad — AI-Powered Product Launch Distribution",
-      },
-    ],
+    images: getSocialImages("PublishRoad — AI-Powered Product Launch Distribution"),
   },
   twitter: {
-    card: "summary_large_image",
+    ...buildTwitterMetadata({
+      title: "PublishRoad — AI-Powered Product Launch Distribution",
+      description:
+        "Generate a complete AI-powered distribution plan for your product launch in minutes.",
+    }),
     site: "@publishroad",
     creator: "@publishroad",
-    title: "PublishRoad — AI-Powered Product Launch Distribution",
-    description:
-      "Generate a complete AI-powered distribution plan for your product launch in minutes.",
-    images: ["/og-image.png"],
   },
   robots: {
     index: true,
@@ -89,7 +82,7 @@ export const metadata: Metadata = {
 const organizationSchema = {
   "@context": "https://schema.org",
   "@type": "Organization",
-  name: "PublishRoad",
+  name: SITE_NAME,
   url: APP_URL,
   logo: `${APP_URL}/favicon.png`,
   description:
@@ -107,7 +100,7 @@ const organizationSchema = {
 const websiteSchema = {
   "@context": "https://schema.org",
   "@type": "WebSite",
-  name: "PublishRoad",
+  name: SITE_NAME,
   url: APP_URL,
   description: "AI-powered distribution plans for product launches.",
   potentialAction: {
@@ -120,13 +113,11 @@ const websiteSchema = {
   },
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const session = await auth();
-
   return (
     <html lang="en" className={`${inter.variable} ${playfair.variable} h-full antialiased`}>
       <head>
@@ -140,7 +131,8 @@ export default async function RootLayout({
         />
       </head>
       <body className="min-h-full flex flex-col bg-background text-foreground" suppressHydrationWarning>
-        <Providers session={session}>{children}</Providers>
+        {children}
+        <GlobalUiEnhancements />
         <Analytics />
       </body>
     </html>

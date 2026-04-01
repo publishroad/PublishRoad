@@ -1,9 +1,8 @@
 import { SignJWT, jwtVerify } from "jose";
 import { db } from "@/lib/db";
+import { NEXTAUTH_SECRET_ENCODED } from "@/lib/auth-secret";
 
-const secret = new TextEncoder().encode(
-  process.env.NEXTAUTH_SECRET ?? "fallback-secret-change-in-production"
-);
+const secret = NEXTAUTH_SECRET_ENCODED;
 
 export interface AdminSession {
   adminId: string;

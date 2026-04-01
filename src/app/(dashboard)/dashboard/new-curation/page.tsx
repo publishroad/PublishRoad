@@ -42,7 +42,7 @@ const SELECT_CATEGORY_VALUE = "__select_category__";
 
 async function fetchCountries() {
   const res = await fetch("/api/lookup/countries", {
-    cache: "no-store",
+    cache: "force-cache",
   });
   if (!res.ok) return [];
   return (await res.json()) as CountryOption[];
@@ -50,7 +50,7 @@ async function fetchCountries() {
 
 async function fetchCategories() {
   const res = await fetch("/api/lookup/categories", {
-    cache: "no-store",
+    cache: "force-cache",
   });
   if (!res.ok) return [];
   return (await res.json()) as CategoryOption[];
@@ -65,16 +65,16 @@ export default function NewCurationPage() {
   const { data: countries = [] } = useQuery({
     queryKey: ["countries"],
     queryFn: fetchCountries,
-    staleTime: 0,
-    gcTime: 0,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
   const { data: categories = [] } = useQuery({
     queryKey: ["categories"],
     queryFn: fetchCategories,
-    staleTime: 0,
-    gcTime: 0,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
