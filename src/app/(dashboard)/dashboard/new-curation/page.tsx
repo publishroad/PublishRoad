@@ -37,6 +37,14 @@ type CategoryOption = {
   name: string;
 };
 
+type UserProfile = {
+  creditsRemaining?: number;
+  plan?: {
+    name?: string | null;
+    slug?: string | null;
+  } | null;
+};
+
 const SELECT_COUNTRY_VALUE = "__select_country__";
 const SELECT_CATEGORY_VALUE = "__select_category__";
 
@@ -54,6 +62,14 @@ async function fetchCategories() {
   });
   if (!res.ok) return [];
   return (await res.json()) as CategoryOption[];
+}
+
+async function fetchUserProfile() {
+  const res = await fetch("/api/user/profile", {
+    cache: "no-store",
+  });
+  if (!res.ok) return null;
+  return (await res.json()) as UserProfile;
 }
 
 export default function NewCurationPage() {
@@ -81,6 +97,20 @@ export default function NewCurationPage() {
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
   });
+
+  const { data: userProfile, isLoading: isProfileLoading } = useQuery({
+    queryKey: ["user-profile", "new-curation"],
+    queryFn: fetchUserProfile,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+  });
+
+  const creditsRemaining = userProfile?.creditsRemaining;
+  const canCreateCuration =
+    creditsRemaining === undefined ? true : creditsRemaining === -1 || creditsRemaining > 0;
 
   const form = useForm<CreateCurationInput>({
     resolver: zodResolver(createCurationSchema),
@@ -111,6 +141,12 @@ export default function NewCurationPage() {
   }
 
   async function onSubmit(data: CreateCurationInput) {
+    if (!canCreateCuration) {
+      toast.error("No credits remaining. Please upgrade your plan.");
+      router.push("/dashboard/billing");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const response = await fetch("/api/curations/create", {
@@ -131,11 +167,52 @@ export default function NewCurationPage() {
         return;
       }
 
-      toast.success("Curation started! We'll notify you when it's ready.");
+      if (result.siteValidation?.warning) {
+        toast(result.siteValidation.warning);
+      } else {
+        toast.success("Curation started! We'll notify you when it's ready.");
+      }
+
       router.push(`/dashboard/curations/${result.curationId}`);
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  if (isProfileLoading) {
+    return (
+      <>
+        <AppHeader title="New Curation" />
+        <div className="flex-1 px-4 py-6 md:px-6">
+          <div className="mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-sm">
+            Loading your account details...
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  if (!canCreateCuration) {
+    return (
+      <>
+        <AppHeader title="New Curation" />
+        <div className="flex-1 px-4 py-6 md:px-6">
+          <div className="mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+            <p className="text-lg font-semibold text-slate-900">No credits remaining</p>
+            <p className="mt-2 text-sm text-slate-600">
+              Your account is currently on the {userProfile?.plan?.name ?? "Free"} plan with 0 available credits.
+            </p>
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard/billing")}
+              className="mt-5 h-10 rounded-xl bg-[#465FFF] px-5 text-sm font-semibold text-white transition-colors hover:bg-[#3d55e8]"
+            >
+              Go to Billing
+            </button>
+          </div>
+        </div>
+      </>
+    );
   }
 
   return (

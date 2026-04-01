@@ -108,6 +108,10 @@ function OnboardingCurationPageContent() {
         return;
       }
 
+      if (result.siteValidation?.warning) {
+        toast(result.siteValidation.warning);
+      }
+
       router.push(`/onboarding/processing/${result.curationId}`);
     } catch {
       toast.error("Something went wrong. Please try again.");

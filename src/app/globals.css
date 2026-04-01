@@ -199,6 +199,219 @@
   }
 }
 
+/* TipTap editor spacing */
+.ProseMirror {
+  outline: none;
+}
+
+/* Blog article layout */
+.blog-appstore-dots {
+  background-image: radial-gradient(circle, rgba(22, 39, 111, 0.38) 4px, transparent 4px);
+  background-size: 18px 18px;
+  border-bottom-left-radius: 1.5rem;
+}
+
+.blog-article-content,
+.blog-appstore-content {
+  color: var(--dark-gray);
+}
+
+.blog-article-content > :first-child,
+.blog-appstore-content > :first-child {
+  margin-top: 0;
+}
+
+.blog-article-content p,
+.blog-appstore-content p {
+  margin: 0 0 1.2rem;
+  color: var(--dark-gray);
+  font-size: clamp(1rem, 1.05vw, 1.08rem);
+  line-height: 1.8;
+  font-weight: 300;
+}
+
+.blog-article-content h1,
+.blog-article-content h2,
+.blog-appstore-content h1,
+.blog-appstore-content h2 {
+  margin: 2.75rem 0 1rem;
+  color: var(--dark);
+  font-family: var(--font-heading), var(--font-sans), serif;
+  line-height: 1.2;
+}
+
+.blog-article-content h2,
+.blog-appstore-content h2 {
+  position: relative;
+  padding-left: 1rem;
+  font-size: clamp(1.75rem, 2.2vw, 2.25rem);
+  font-weight: 700;
+}
+
+.blog-article-content h2::before,
+.blog-appstore-content h2::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.2em;
+  bottom: 0.2em;
+  width: 4px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--indigo) 0%, #7C3AED 100%);
+}
+
+.blog-article-content h3,
+.blog-appstore-content h3 {
+  margin: 1.75rem 0 0.8rem;
+  color: var(--dark);
+  font-size: clamp(1.15rem, 1.4vw, 1.35rem);
+  font-weight: 600;
+}
+
+.blog-article-content ul,
+.blog-article-content ol,
+.blog-appstore-content ul,
+.blog-appstore-content ol {
+  margin: 0 0 1.4rem 1.4rem;
+  color: var(--dark-gray);
+}
+
+.blog-article-content li + li,
+.blog-appstore-content li + li {
+  margin-top: 0.35rem;
+}
+
+.blog-article-content a,
+.blog-appstore-content a {
+  color: var(--indigo);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.blog-article-content a:hover,
+.blog-appstore-content a:hover {
+  text-decoration: underline;
+}
+
+.blog-article-content img,
+.blog-appstore-content img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1.6rem 0;
+  border-radius: 1rem;
+  border: 1px solid rgba(226,232,240,0.8);
+}
+
+.blog-article-content blockquote,
+.blog-appstore-content blockquote {
+  margin: 1.5rem 0;
+  padding: 1rem 1.25rem;
+  border-left: 4px solid var(--indigo);
+  border-radius: 0.9rem;
+  background: rgba(91,88,246,0.06);
+  color: var(--dark-gray);
+}
+
+.blog-article-content hr,
+.blog-appstore-content hr {
+  margin: 2rem 0;
+  border: 0;
+  border-top: 1px solid #d9e1f1;
+}
+
+.blog-article-content code,
+.blog-appstore-content code {
+  border-radius: 0.4rem;
+  background: rgba(15, 23, 42, 0.06);
+  padding: 0.12rem 0.35rem;
+  font-size: 0.92em;
+}
+
+@media (max-width: 640px) {
+  .blog-article-content p,
+  .blog-appstore-content p {
+    line-height: 1.75;
+  }
+
+  .blog-article-content h2,
+  .blog-appstore-content h2 {
+    margin-top: 2rem;
+    padding-left: 0.85rem;
+  }
+}
+
+.ProseMirror p,
+.ProseMirror h1,
+.ProseMirror h2,
+.ProseMirror h3,
+.ProseMirror h4,
+.ProseMirror h5,
+.ProseMirror h6,
+.ProseMirror li,
+.ProseMirror blockquote,
+.ProseMirror pre,
+.ProseMirror img,
+.ProseMirror hr {
+  border-radius: 0.75rem;
+  transition: background-color 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.ProseMirror:focus-within .is-active-block {
+  background: rgba(91, 88, 246, 0.08);
+  box-shadow: 0 0 0 1px rgba(91, 88, 246, 0.14);
+}
+
+.ProseMirror > * + * {
+  margin-top: 1rem;
+}
+
+.ProseMirror p {
+  margin: 0 0 1rem;
+  line-height: 1.75;
+}
+
+.ProseMirror h1,
+.ProseMirror h2,
+.ProseMirror h3,
+.ProseMirror h4,
+.ProseMirror h5,
+.ProseMirror h6 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.ProseMirror ul,
+.ProseMirror ol {
+  margin: 0 0 1rem 1.25rem;
+  padding-left: 1rem;
+}
+
+.ProseMirror li + li {
+  margin-top: 0.35rem;
+}
+
+.ProseMirror blockquote {
+  margin: 1.25rem 0;
+  padding-left: 1rem;
+  border-left: 3px solid var(--border-gray);
+  color: var(--medium-gray);
+}
+
+.ProseMirror hr {
+  margin: 1.75rem 0;
+  border: 0;
+  border-top: 1px solid var(--border-gray);
+}
+
+.ProseMirror img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1.25rem 0;
+  border-radius: 0.75rem;
+}
+
 /* Utility classes — Novaire design tokens */
 @layer utilities {
   /* Color utilities */

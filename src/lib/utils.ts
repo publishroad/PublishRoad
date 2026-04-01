@@ -72,6 +72,37 @@ export function normalizeUrl(url: string): string {
   }
 }
 
+export function normalizeImageSrc(src?: string | null): string | null {
+  if (!src) return null;
+
+  const value = src.trim();
+  if (!value) return null;
+
+  if (value.startsWith("/")) {
+    return value;
+  }
+
+  if (value.startsWith("uploads/")) {
+    return `/${value}`;
+  }
+
+  if (/^(localhost|127\.0\.0\.1)(:\d+)?\//i.test(value)) {
+    return `/${value.replace(/^(localhost|127\.0\.0\.1)(:\d+)?\/?/i, "")}`;
+  }
+
+  try {
+    const parsed = new URL(value);
+
+    if (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") {
+      return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    }
+
+    return parsed.toString();
+  } catch {
+    return `/${value.replace(/^\/+/, "")}`;
+  }
+}
+
 // ─────────────────────────────────────────────
 // Slug generation
 // ─────────────────────────────────────────────

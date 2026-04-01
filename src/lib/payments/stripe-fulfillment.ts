@@ -45,10 +45,12 @@ export async function fulfillStripeCheckoutSession(session: Stripe.Checkout.Sess
     const existingPayment = where
       ? await tx.payment.findFirst({ where, select: { id: true } })
       : null;
-    const user = await tx.user.findUnique({
-      where: { id: userId },
-      select: { creditsRemaining: true },
-    });
+    const user = paymentType === "plan"
+      ? await tx.user.findUnique({
+          where: { id: userId },
+          select: { creditsRemaining: true },
+        })
+      : null;
 
     if (!existingPayment) {
       await tx.payment.create({
@@ -66,7 +68,7 @@ export async function fulfillStripeCheckoutSession(session: Stripe.Checkout.Sess
       createdPayment = true;
     }
 
-    if (createdPayment) {
+    if (createdPayment && paymentType === "plan") {
       await tx.user.update({
         where: { id: userId },
         data: {
@@ -80,19 +82,33 @@ export async function fulfillStripeCheckoutSession(session: Stripe.Checkout.Sess
             : {}),
         },
       });
+    } else if (createdPayment && typeof session.customer === "string") {
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          stripeCustomerId: encryptField(session.customer),
+          stripeCustomerHash: hashLookupValue(session.customer),
+        },
+      });
     }
   });
+
+  const hireUsPackageSlug = isHireUsFlow ? hireUsPackage ?? undefined : undefined;
 
   if (createdPayment) {
     await runPostPaymentSideEffects({
       userId,
-      hireUsPackageSlug: isHireUsFlow ? hireUsPackage ?? undefined : undefined,
-      notificationMessage: "Your plan has been upgraded. Credits have been added to your account.",
+      hireUsPackageSlug,
+      notificationMessage:
+        paymentType === "plan"
+          ? "Your plan has been upgraded. Credits have been added to your account."
+          : undefined,
+      skipNotification: paymentType !== "plan",
     });
   } else {
     await runPostPaymentSideEffects({
       userId,
-      notificationMessage: "Your plan has been upgraded. Credits have been added to your account.",
+      hireUsPackageSlug,
       skipNotification: true,
     });
   }

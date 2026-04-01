@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { formatDate } from "@/lib/utils";
+import { formatDate, normalizeImageSrc } from "@/lib/utils";
 import type { Metadata } from "next";
 import { SITE_NAME, buildTwitterMetadata, getCanonicalUrl, getSocialImageUrl, getSocialImages } from "@/lib/seo";
 
@@ -224,9 +224,9 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
                   border: "1px solid rgba(226,232,240,0.8)",
                 }}
               >
-                {post.featuredImage && (
+                {normalizeImageSrc(post.featuredImage) && (
                   <Image
-                    src={post.featuredImage}
+                    src={normalizeImageSrc(post.featuredImage)!}
                     alt={`Featured image for ${post.title}`}
                     width={1200}
                     height={720}

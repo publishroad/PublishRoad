@@ -100,9 +100,12 @@ async function runPostFulfillmentSideEffects(args: {
     userId: args.userId,
     hireUsPackageSlug: packageSlug ?? undefined,
     notificationMessage:
-      args.paymentSource === "webhook"
-        ? "Your plan has been upgraded via Razorpay. Payment was confirmed by webhook."
-        : "Your plan has been upgraded via Razorpay. Credits have been added to your account.",
+      packageSlug
+        ? undefined
+        : args.paymentSource === "webhook"
+          ? "Your plan has been upgraded via Razorpay. Payment was confirmed by webhook."
+          : "Your plan has been upgraded via Razorpay. Credits have been added to your account.",
+    skipNotification: !!packageSlug,
   });
 }
 

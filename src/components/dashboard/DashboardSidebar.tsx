@@ -1,10 +1,11 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { signOut } from "next-auth/react";
 import type { Session } from "next-auth";
 import { AppSidebar } from "@/components/dashboard/AppSidebar";
 
-const groups = [
+const baseGroups = [
   {
     title: "Menu",
     items: [
@@ -91,10 +92,36 @@ type DashboardSession = Session & {
   };
 };
 
-function UserBottomSlot({ session }: { session: DashboardSession | null }) {
-  const credits = session?.user?.creditsRemaining ?? 0;
+type DashboardProfile = {
+  creditsRemaining?: number;
+  plan?: {
+    slug?: string | null;
+  } | null;
+};
+
+async function fetchDashboardProfile(): Promise<DashboardProfile | null> {
+  const res = await fetch("/api/user/profile", {
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    return null;
+  }
+
+  return (await res.json()) as DashboardProfile;
+}
+
+function UserBottomSlot({
+  session,
+  credits,
+  planSlug,
+}: {
+  session: DashboardSession | null;
+  credits: number;
+  planSlug: string;
+}) {
   const initials = session?.user?.name?.[0]?.toUpperCase() ?? "U";
-  const plan = session?.user?.planSlug?.toUpperCase() ?? "FREE";
+  const plan = planSlug.toUpperCase();
 
   return (
     <div className="space-y-3">
@@ -128,11 +155,43 @@ function UserBottomSlot({ session }: { session: DashboardSession | null }) {
 }
 
 export function DashboardSidebar({ session }: DashboardSidebarProps) {
+  const fallbackCredits = session?.user?.creditsRemaining ?? 0;
+  const fallbackPlanSlug = session?.user?.planSlug?.toLowerCase() ?? "free";
+
+  const { data: profile } = useQuery({
+    queryKey: ["dashboard-profile-sidebar"],
+    queryFn: fetchDashboardProfile,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+  });
+
+  const credits = profile?.creditsRemaining ?? fallbackCredits;
+  const planSlug = profile?.plan?.slug ?? fallbackPlanSlug;
+  const hasCredits = credits === -1 || credits > 0;
+
+  const groups = baseGroups.map((group) => ({
+    ...group,
+    items: group.items.map((item) => {
+      if (item.href !== "/dashboard/new-curation") {
+        return item;
+      }
+
+      return {
+        ...item,
+        href: hasCredits ? "/dashboard/new-curation" : "/dashboard/billing",
+        label: hasCredits ? "New Curation" : "Get Credits",
+      };
+    }),
+  }));
+
   return (
     <AppSidebar
       groups={groups}
       exactMatch={["/dashboard"]}
-      bottomSlot={<UserBottomSlot session={session} />}
+      bottomSlot={<UserBottomSlot session={session} credits={credits} planSlug={planSlug} />}
     />
   );
 }

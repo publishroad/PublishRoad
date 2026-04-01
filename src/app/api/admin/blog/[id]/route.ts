@@ -24,6 +24,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "Invalid input" }, { status: 422 });
   }
 
+  const existingPost = await db.blogPost.findUnique({
+    where: { id },
+    select: { slug: true },
+  });
+
   const post = await db.blogPost.update({
     where: { id },
     data: {
@@ -33,7 +38,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   });
 
   // Trigger ISR revalidation
-  const revalidateUrls = ["/blog", `/blog/${post.slug}`];
+  const revalidateUrls = new Set(["/blog", `/blog/${post.slug}`]);
+  if (existingPost?.slug && existingPost.slug !== post.slug) {
+    revalidateUrls.add(`/blog/${existingPost.slug}`);
+  }
+
   for (const path of revalidateUrls) {
     fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/revalidate`, {
       method: "POST",
@@ -52,11 +61,13 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const { id } = await params;
   const post = await db.blogPost.delete({ where: { id } });
 
-  fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/revalidate`, {
-    method: "POST",
-    headers: { "x-revalidation-secret": process.env.REVALIDATION_SECRET ?? "" },
-    body: JSON.stringify({ path: "/blog" }),
-  }).catch(() => {});
+  for (const path of ["/blog", `/blog/${post.slug}`]) {
+    fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/revalidate`, {
+      method: "POST",
+      headers: { "x-revalidation-secret": process.env.REVALIDATION_SECRET ?? "" },
+      body: JSON.stringify({ path }),
+    }).catch(() => {});
+  }
 
   return NextResponse.json({ success: true });
 }

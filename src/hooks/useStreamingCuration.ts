@@ -6,6 +6,15 @@ interface StreamingCurationData {
   status: "pending" | "processing" | "completed" | "failed";
   keywords: string[];
   description: string | null;
+  siteValidation?: {
+    reachable: boolean;
+    statusCode: number | null;
+    title: string | null;
+    description: string | null;
+    warning: string | null;
+    checkedUrl: string;
+    finalUrl: string | null;
+  } | null;
   countryName?: string | null;
   categoryName?: string | null;
   results: StreamingResult[];

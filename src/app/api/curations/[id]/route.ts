@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { getCachedWithLock } from "@/lib/cache";
+import { getCachedWithLock, invalidateUserProfile } from "@/lib/cache";
 import { redis } from "@/lib/redis";
 import { applyPlanResultMasking } from "@/lib/curation-mask-policy";
+import { inspectWebsiteMetadata } from "@/lib/website-metadata";
 
 type HireUsLeadCandidate = {
   id: string;
@@ -139,6 +140,7 @@ export async function GET(
   );
 
   const categoryName = derivePrimaryCategoryName(data.results);
+  const siteValidation = await inspectWebsiteMetadata(data.productUrl);
 
   return NextResponse.json({
     id: data.id,
@@ -148,6 +150,7 @@ export async function GET(
     categoryName,
     keywords: data.keywords,
     description: data.description,
+    siteValidation,
     results,
     maskedCount,
     lockedSections,
@@ -178,17 +181,48 @@ export async function DELETE(
 
   const curation = await db.curation.findFirst({
     where: { id, userId },
-    select: { id: true },
+    select: { id: true, status: true },
   });
 
   if (!curation) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  await db.curation.delete({ where: { id } });
+  let refundedCredit = false;
 
-  // Best-effort cache invalidation for curation detail cache.
+  await db.$transaction(async (tx) => {
+    const refundClaim = await tx.curation.updateMany({
+      where: {
+        id,
+        userId,
+        status: { in: ["pending", "processing"] },
+      },
+      data: {
+        status: "failed",
+        errorMessage: "Deleted by user before completion.",
+      },
+    });
+
+    refundedCredit = refundClaim.count > 0;
+
+    if (refundedCredit) {
+      await tx.user.update({
+        where: { id: userId },
+        data: { creditsRemaining: { increment: 1 } },
+      });
+    }
+
+    await tx.curation.delete({ where: { id } });
+  });
+
+  if (refundedCredit) {
+    await invalidateUserProfile(userId).catch(() => {});
+  }
+
+
+  // Best-effort cache invalidation for curation detail/progress cache.
   await redis.del(`curation:${id}:data`);
+  await redis.del(`curation:${id}:progress`);
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, refundedCredit });
 }
