@@ -1,5 +1,5 @@
 // Cache website details for 60 seconds — admin changes are infrequent
-export const revalidate = 60;
+export const revalidate = 0;
 
 import { db } from "@/lib/db";
 import { notFound } from "next/navigation";

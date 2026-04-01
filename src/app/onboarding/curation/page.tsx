@@ -50,12 +50,12 @@ function OnboardingCurationPageContent() {
   });
 
   useEffect(() => {
-    fetch("/api/lookup/countries", { cache: "force-cache" })
+    fetch("/api/lookup/countries", { cache: "no-store" })
       .then((r) => r.json())
       .then((data) => setCountries(Array.isArray(data) ? data : []))
       .catch(() => {});
 
-    fetch("/api/lookup/categories", { cache: "force-cache" })
+    fetch("/api/lookup/categories", { cache: "no-store" })
       .then((r) => r.json())
       .then((data) => setCategories(Array.isArray(data) ? data : []))
       .catch(() => {});
