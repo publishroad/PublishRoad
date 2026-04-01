@@ -1,14 +1,14 @@
 import { NextRequest } from "next/server";
 
-function getRequiredEmailQueueSecret(): string {
-  const secret = process.env.EMAIL_QUEUE_SECRET;
+let hasWarnedMissingQueueSecret = false;
+let hasWarnedMissingQueueIps = false;
 
-  if (process.env.NODE_ENV === "production" && !secret) {
-    throw new Error("EMAIL_QUEUE_SECRET must be defined in production");
-  }
+function getEmailQueueSecret(): string {
+  const secret = process.env.EMAIL_QUEUE_SECRET?.trim() ?? "";
 
-  if (!secret) {
-    return "";
+  if (!secret && process.env.NODE_ENV === "production" && !hasWarnedMissingQueueSecret) {
+    hasWarnedMissingQueueSecret = true;
+    console.warn("[EmailQueue] EMAIL_QUEUE_SECRET is missing. Internal queue requests will be rejected until it is configured.");
   }
 
   return secret;
@@ -21,19 +21,21 @@ function getAllowedInternalIps(): string[] {
     .map((entry) => entry.trim())
     .filter(Boolean);
 
-  if (process.env.NODE_ENV === "production" && list.length === 0) {
-    throw new Error("EMAIL_QUEUE_ALLOWED_IPS must be defined in production");
-  }
-
   if (list.length > 0) {
     return list;
   }
 
+  if (process.env.NODE_ENV === "production") {
+    if (!hasWarnedMissingQueueIps) {
+      hasWarnedMissingQueueIps = true;
+      console.warn("[EmailQueue] EMAIL_QUEUE_ALLOWED_IPS is missing. Internal queue requests will be rejected until it is configured.");
+    }
+
+    return [];
+  }
+
   return ["127.0.0.1", "::1"];
 }
-
-export const EMAIL_QUEUE_SECRET = getRequiredEmailQueueSecret();
-export const EMAIL_QUEUE_ALLOWED_IPS = getAllowedInternalIps();
 
 function getClientIp(request: NextRequest): string | null {
   const forwardedFor = request.headers.get("x-forwarded-for");
@@ -90,20 +92,26 @@ function ipMatchesRule(ip: string, rule: string): boolean {
 }
 
 export function isInternalQueueRequestAllowed(request: NextRequest): boolean {
+  const allowedIps = getAllowedInternalIps();
+  if (allowedIps.length === 0) {
+    return false;
+  }
+
   const ip = getClientIp(request);
   if (!ip) {
     return false;
   }
 
-  return EMAIL_QUEUE_ALLOWED_IPS.some((rule) => ipMatchesRule(ip, rule));
+  return allowedIps.some((rule) => ipMatchesRule(ip, rule));
 }
 
 export function isQueueAuthorizationValid(request: NextRequest): boolean {
-  if (!EMAIL_QUEUE_SECRET) {
+  const secret = getEmailQueueSecret();
+  if (!secret) {
     return false;
   }
 
   const authHeader = request.headers.get("authorization") ?? "";
   const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
-  return bearer.length > 0 && bearer === EMAIL_QUEUE_SECRET;
+  return bearer.length > 0 && bearer === secret;
 }

@@ -9,11 +9,15 @@ if (process.env.NODE_ENV === "production" && process.env.NEXTAUTH_SECRET.length 
 }
 
 if (process.env.NODE_ENV === "production" && !process.env.EMAIL_QUEUE_SECRET) {
-  throw new Error("EMAIL_QUEUE_SECRET must be defined in production");
+  console.warn(
+    "[EmailQueue] EMAIL_QUEUE_SECRET is not set at build time. Internal queue auth will remain disabled until the variable is configured."
+  );
 }
 
 if (process.env.NODE_ENV === "production" && !process.env.EMAIL_QUEUE_ALLOWED_IPS) {
-  throw new Error("EMAIL_QUEUE_ALLOWED_IPS must be defined in production");
+  console.warn(
+    "[EmailQueue] EMAIL_QUEUE_ALLOWED_IPS is not set at build time. Internal queue IP allowlisting will remain disabled until the variable is configured."
+  );
 }
 
 const isDev = process.env.NODE_ENV !== "production";
