@@ -73,6 +73,67 @@ async function getPlans() {
   });
 }
 
+type RecentPayment = {
+  id: string;
+  amountCents: number;
+  currency: string;
+  status: string;
+  createdAt: Date;
+  label?: string;
+  plan?: {
+    name: string;
+  } | null;
+};
+
+async function getRecentPayments(userId: string): Promise<RecentPayment[]> {
+  try {
+    const payments = await db.payment.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+      select: {
+        id: true,
+        amountCents: true,
+        currency: true,
+        status: true,
+        createdAt: true,
+        paymentType: true,
+        plan: { select: { name: true } },
+      },
+    });
+
+    return payments.map((payment) => ({
+      ...payment,
+      label: payment.paymentType === "hire_us" ? "Hire Us Service" : payment.plan?.name ?? "Subscription",
+    }));
+  } catch (error) {
+    if ((error as { code?: string })?.code === "P2022") {
+      console.warn("Billing payment history query fell back due to legacy payments schema.", error);
+
+      const payments = await db.payment.findMany({
+        where: { userId },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+        select: {
+          id: true,
+          amountCents: true,
+          currency: true,
+          status: true,
+          createdAt: true,
+          plan: { select: { name: true } },
+        },
+      });
+
+      return payments.map((payment) => ({
+        ...payment,
+        label: payment.plan?.name ?? "Subscription",
+      }));
+    }
+
+    throw error;
+  }
+}
+
 export default async function BillingPage() {
   const session = await auth();
   if (!session?.user?.id) {
@@ -86,12 +147,7 @@ export default async function BillingPage() {
       where: { id: userId },
       include: { plan: true },
     }),
-    db.payment.findMany({
-      where: { userId },
-      orderBy: { createdAt: "desc" },
-      take: 10,
-      include: { plan: { select: { name: true } } },
-    }),
+    getRecentPayments(userId),
     getPlans(),
   ]);
 

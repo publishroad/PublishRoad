@@ -93,7 +93,11 @@ export default async function DashboardPage() {
           {recentCurations.length === 0 ? (
             <div className="bg-white border border-gray-200 rounded-2xl p-10 text-center">
               <p className="text-gray-400 text-sm mb-4">No curations yet.</p>
-              <Link href="/dashboard/new-curation" className="h-9 px-5 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium inline-flex items-center hover:bg-gray-50 transition-colors">Create Your First Curation</Link>
+              {hasCredits ? (
+                <Link href="/dashboard/new-curation" className="h-9 px-5 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium inline-flex items-center hover:bg-gray-50 transition-colors">Create Your First Curation</Link>
+              ) : (
+                <Link href="/dashboard/billing" className="h-9 px-5 rounded-xl bg-[#465FFF] text-white text-sm font-semibold inline-flex items-center hover:bg-[#3d55e8] transition-colors">Upgrade Plan</Link>
+              )}
             </div>
           ) : (
             <div className="space-y-3">

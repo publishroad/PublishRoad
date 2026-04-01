@@ -28,6 +28,17 @@ async function setProgress(curationId: string, event: ProgressEvent) {
   await redis.set(key, event, { ex: 600 });
 }
 
+async function assertCurationStillExists(curationId: string) {
+  const curation = await db.curation.findUnique({
+    where: { id: curationId },
+    select: { id: true },
+  });
+
+  if (!curation) {
+    throw new Error("CURATION_CANCELLED");
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Extract meaningful words from free-form text for description overlap scoring.
 // Strips stop words and short tokens so "a CRM for small businesses" becomes
@@ -267,26 +278,44 @@ export async function runCuration(input: RunCurationInput) {
     return curation;
   });
 
+  // Refresh cached profile immediately so the deducted credit is visible while
+  // the curation is still processing.
+  await invalidateUserProfile(userId).catch(() => {});
+
   // ─── Step 2: Process asynchronously (fire and forget) ────────────────────
   // In production this would be a background job/queue (e.g., Upstash QStash).
   // For simplicity here we use a detached async function.
   processCuration(result.id, userId, productUrl, keywords, description, countryId, categoryId).catch(
     async (err) => {
+      if (err instanceof Error && err.message === "CURATION_CANCELLED") {
+        return;
+      }
+
       console.error(`Curation ${result.id} failed:`, err);
-      await db.curation.update({
-        where: { id: result.id },
+
+      const markedFailed = await db.curation.updateMany({
+        where: {
+          id: result.id,
+          status: { in: ["pending", "processing"] },
+        },
         data: {
           status: "failed",
           errorMessage: err instanceof Error ? err.message.slice(0, 1000) : "Unknown curation error",
         },
-      });
-      await setProgress(result.id, "error");
+      }).catch(() => ({ count: 0 }));
 
-      // Refund the credit
+      if (markedFailed.count === 0) {
+        return;
+      }
+
+      await setProgress(result.id, "error").catch(() => {});
+
+      // Refund the credit only for genuine processing failures.
       await db.user.update({
         where: { id: userId },
         data: { creditsRemaining: { increment: 1 } },
       }).catch(() => {});
+      await invalidateUserProfile(userId).catch(() => {});
     }
   );
 
@@ -302,6 +331,7 @@ async function processCuration(
   countryId?: string | null,
   categoryId?: string | null
 ) {
+  await assertCurationStillExists(curationId);
   await setProgress(curationId, "started");
 
   await db.curation.update({
@@ -310,6 +340,7 @@ async function processCuration(
   });
 
   // ─── Step 3: Fetch candidate pools ────────────────────────────────────────
+  await assertCurationStillExists(curationId);
   await setProgress(curationId, "fetching_sites");
 
   // Fetch country name + all active categories in parallel (categories needed for keyword expansion)
@@ -734,6 +765,7 @@ async function processCuration(
   const allResults = [...websiteResults, ...influencerResults, ...redditResults, ...fundResults];
 
   // ─── Step 5: Save results ──────────────────────────────────────────────────
+  await assertCurationStillExists(curationId);
   await setProgress(curationId, "saving_results");
 
   if (allResults.length > 0) {

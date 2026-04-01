@@ -85,13 +85,16 @@ export async function GET(req: NextRequest) {
     if (!processedAlready) {
       await runPostPaymentSideEffects({
         userId,
-        notificationMessage: "Your plan has been upgraded via PayPal. Credits have been added to your account.",
+        notificationMessage: packageSlug
+          ? undefined
+          : "Your plan has been upgraded via PayPal. Credits have been added to your account.",
         hireUsPackageSlug: packageSlug ?? undefined,
+        skipNotification: !!packageSlug,
       });
     } else {
       await runPostPaymentSideEffects({
         userId,
-        notificationMessage: "Your plan has been upgraded via PayPal. Credits have been added to your account.",
+        hireUsPackageSlug: packageSlug ?? undefined,
         skipNotification: true,
       });
     }

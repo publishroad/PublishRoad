@@ -155,8 +155,8 @@ export default function CurationDetailPage() {
   const totalCompleted = sectionOrder.reduce((sum, s) => sum + stepStats[s].completed, 0);
   const totalCompletionPercent = totalTasks === 0 ? 0 : Math.round((totalCompleted / totalTasks) * 100);
 
-  let curationWebsiteName = curation?.productUrl ?? "Website";
-  if (curation?.productUrl) {
+  let curationWebsiteName = curation?.siteValidation?.title?.trim() || curation?.productUrl || "Website";
+  if (!curation?.siteValidation?.title && curation?.productUrl) {
     try {
       const parsed = new URL(curation.productUrl);
       curationWebsiteName = parsed.hostname + parsed.pathname.replace(/\/$/, "");
@@ -268,7 +268,30 @@ export default function CurationDetailPage() {
                     <div className="max-w-2xl">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#465FFF]">Campaign Progress</p>
                       <h3 className="mt-2 break-words text-2xl font-semibold tracking-tight text-slate-950">{curationWebsiteName}</h3>
+                      {curation.siteValidation?.description && (
+                        <p className="mt-2 text-sm leading-6 text-slate-600">
+                          {curation.siteValidation.description}
+                        </p>
+                      )}
                       <p className="mt-2 text-sm leading-6 text-slate-600">{motivationText}</p>
+
+                      {(curation.siteValidation?.title || curation.siteValidation?.description || curation.siteValidation?.warning) && (
+                        <div className="mt-4 rounded-2xl border border-[#dbe4ff] bg-white/90 p-4">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#465FFF]">Website Check</p>
+                          <p className="mt-2 break-all text-xs text-slate-500">{curation.siteValidation?.finalUrl ?? curation.productUrl}</p>
+                          {curation.siteValidation?.title && (
+                            <p className="mt-2 text-sm font-semibold text-slate-900">{curation.siteValidation.title}</p>
+                          )}
+                          {curation.siteValidation?.description && (
+                            <p className="mt-1 text-sm leading-6 text-slate-600">{curation.siteValidation.description}</p>
+                          )}
+                          {curation.siteValidation?.warning && (
+                            <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                              {curation.siteValidation.warning}
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <div className="min-w-[230px] rounded-3xl border border-[#cfd9ff] bg-white/95 p-4 shadow-[0_10px_30px_rgba(70,95,255,0.12)]">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Total Completion</p>

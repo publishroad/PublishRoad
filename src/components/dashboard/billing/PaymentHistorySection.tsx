@@ -6,6 +6,7 @@ interface PaymentHistoryItem {
   currency: string;
   status: string;
   createdAt: Date;
+  label?: string;
   plan?: {
     name: string;
   } | null;
@@ -31,7 +32,7 @@ export function PaymentHistorySection({ payments }: PaymentHistorySectionProps) 
             <div key={payment.id} className="px-6 py-4 flex items-center justify-between">
               <div>
                 <p className="font-medium text-gray-900 text-sm">
-                  {payment.plan?.name ?? "Subscription"}
+                  {payment.label ?? payment.plan?.name ?? "Subscription"}
                 </p>
                 <p className="text-xs text-gray-500 mt-0.5">{formatDate(payment.createdAt)}</p>
               </div>

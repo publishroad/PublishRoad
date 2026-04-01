@@ -207,21 +207,23 @@ export async function applyPlanPaymentAndCredits(args: {
       },
     });
 
-    const user = await tx.user.findUnique({
-      where: { id: args.userId },
-      select: { creditsRemaining: true },
-    });
+    if (paymentType === "plan") {
+      const user = await tx.user.findUnique({
+        where: { id: args.userId },
+        select: { creditsRemaining: true },
+      });
 
-    await tx.user.update({
-      where: { id: args.userId },
-      data: {
-        planId: args.planId,
-        creditsRemaining:
-          creditStrategy === "add"
-            ? (user?.creditsRemaining ?? 0) + args.creditsAmount
-            : args.creditsAmount,
-      },
-    });
+      await tx.user.update({
+        where: { id: args.userId },
+        data: {
+          planId: args.planId,
+          creditsRemaining:
+            creditStrategy === "add"
+              ? (user?.creditsRemaining ?? 0) + args.creditsAmount
+              : args.creditsAmount,
+        },
+      });
+    }
   });
 
   return { processedAlready };

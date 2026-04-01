@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { getCachedWithLock, invalidateUserProfile } from "@/lib/cache";
+import { invalidateUserProfile } from "@/lib/cache";
 import { updateProfileSchema } from "@/lib/validations/user";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -11,24 +13,21 @@ export async function GET(req: NextRequest) {
   }
 
   const userId = session.user.id;
-  const cacheKey = `user:${userId}:profile`;
 
-  const profile = await getCachedWithLock(cacheKey, 300, async () => {
-    return db.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        authProvider: true,
-        creditsRemaining: true,
-        emailVerifiedAt: true,
-        createdAt: true,
-        plan: {
-          select: { name: true, slug: true, billingType: true },
-        },
+  const profile = await db.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      authProvider: true,
+      creditsRemaining: true,
+      emailVerifiedAt: true,
+      createdAt: true,
+      plan: {
+        select: { name: true, slug: true, billingType: true },
       },
-    });
+    },
   });
 
   if (!profile) {

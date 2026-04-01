@@ -1,7 +1,8 @@
 "use client";
 
-import { useEditor, EditorContent } from "@tiptap/react";
+import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import HorizontalRule from "@tiptap/extension-horizontal-rule";
 import { Image } from "@tiptap/extension-image";
 import { Link } from "@tiptap/extension-link";
 import { useEffect, useRef, useState } from "react";
@@ -17,9 +18,39 @@ export default function TipTapEditor({ content, onChange }: TipTapEditorProps) {
   const imageInputRef = useRef<HTMLInputElement>(null);
   const lastEditorHtmlRef = useRef(content);
 
+  const clearActiveBlockHighlight = (root?: HTMLElement | null) => {
+    root?.querySelectorAll(".is-active-block").forEach((element) => {
+      element.classList.remove("is-active-block");
+    });
+  };
+
+  const updateActiveBlockHighlight = (currentEditor: Editor | null) => {
+    if (!currentEditor) return;
+
+    const root = currentEditor.view.dom as HTMLElement;
+    clearActiveBlockHighlight(root);
+
+    if (!currentEditor.isFocused) return;
+
+    let domNode = currentEditor.view.domAtPos(currentEditor.state.selection.from).node;
+    if (domNode.nodeType === Node.TEXT_NODE) {
+      domNode = domNode.parentNode ?? domNode;
+    }
+
+    const activeBlock =
+      domNode instanceof Element
+        ? domNode.closest("p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, img, hr")
+        : null;
+
+    if (activeBlock && root.contains(activeBlock)) {
+      activeBlock.classList.add("is-active-block");
+    }
+  };
+
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({ horizontalRule: false }),
+      HorizontalRule,
       Image,
       Link.configure({ openOnClick: false }),
     ],
@@ -29,6 +60,15 @@ export default function TipTapEditor({ content, onChange }: TipTapEditorProps) {
       const html = editor.getHTML();
       lastEditorHtmlRef.current = html;
       onChange(html);
+    },
+    onSelectionUpdate: ({ editor }) => {
+      updateActiveBlockHighlight(editor);
+    },
+    onFocus: ({ editor }) => {
+      updateActiveBlockHighlight(editor);
+    },
+    onBlur: ({ editor }) => {
+      clearActiveBlockHighlight(editor.view.dom as HTMLElement);
     },
   });
 
@@ -139,7 +179,7 @@ export default function TipTapEditor({ content, onChange }: TipTapEditorProps) {
         <ToolbarButton
           onClick={() => {
             const url = prompt("Enter URL:");
-            if (url) editor.chain().focus().setLink({ href: url }).run();
+            if (url && /^https?:\/\//i.test(url)) editor.chain().focus().setLink({ href: url }).run();
           }}
           active={editor.isActive("link")}
         >
@@ -148,7 +188,7 @@ export default function TipTapEditor({ content, onChange }: TipTapEditorProps) {
         <ToolbarButton
           onClick={() => {
             const url = prompt("Image URL:");
-            if (url) editor.chain().focus().setImage({ src: url }).run();
+            if (url && /^https?:\/\//i.test(url)) editor.chain().focus().setImage({ src: url }).run();
           }}
         >
           Image
@@ -159,9 +199,9 @@ export default function TipTapEditor({ content, onChange }: TipTapEditorProps) {
           {isUploadingImage ? "Uploading..." : "Upload Image"}
         </ToolbarButton>
         <ToolbarButton
-          onClick={() => editor.chain().focus().setHardBreak().run()}
+          onClick={() => editor.chain().focus().setHorizontalRule().run()}
         >
-          New Line
+          Divider
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().undo().run()}
@@ -180,6 +220,16 @@ export default function TipTapEditor({ content, onChange }: TipTapEditorProps) {
         editor={editor}
         className="prose prose-sm max-w-none p-4 min-h-[300px] focus:outline-none"
       />
+
+      <div className="flex justify-center border-t border-border-gray bg-white px-4 py-3">
+        <button
+          type="button"
+          onClick={() => editor.chain().focus().insertContent("<hr><p></p>").run()}
+          className="rounded-full border border-border-gray bg-white px-4 py-2 text-sm text-medium-gray transition-colors hover:bg-ice-blue hover:text-dark-gray"
+        >
+          + Add Section
+        </button>
+      </div>
 
       <input
         ref={imageInputRef}

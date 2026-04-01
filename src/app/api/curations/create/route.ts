@@ -4,6 +4,7 @@ import { buildRateLimitIdentifiers, checkRateLimitForIdentifiers, curationLimite
 import { createCurationSchema } from "@/lib/validations/curation";
 import { runCuration } from "@/lib/curation-engine";
 import { attachHireUsCuration } from "@/lib/hire-us";
+import { inspectWebsiteMetadata } from "@/lib/website-metadata";
 
 export const maxDuration = 60;
 
@@ -46,6 +47,8 @@ export async function POST(req: NextRequest) {
   } = parsed.data;
   const countryId = rawCountryId === "worldwide" ? null : rawCountryId;
 
+  const siteValidation = await inspectWebsiteMetadata(productUrl);
+
   // Check credits with SELECT FOR UPDATE (handled in engine)
   try {
     const curation = await runCuration({
@@ -67,7 +70,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    return NextResponse.json({ curationId: curation.id }, { status: 201 });
+    return NextResponse.json({ curationId: curation.id, siteValidation }, { status: 201 });
   } catch (error: unknown) {
     if (error instanceof Error && error.message === "INSUFFICIENT_CREDITS") {
       return NextResponse.json({ error: "Insufficient credits" }, { status: 402 });

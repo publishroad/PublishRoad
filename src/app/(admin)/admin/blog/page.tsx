@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import Link from "next/link";
 import { formatDate } from "@/lib/utils";
 import { AppHeader } from "@/components/dashboard/AppHeader";
+import { BlogPostActions } from "@/components/admin/BlogPostActions";
 
 export default async function AdminBlogPage() {
   const posts = await db.blogPost.findMany({ orderBy: { createdAt: "desc" }, take: 50 });
@@ -29,7 +30,7 @@ export default async function AdminBlogPage() {
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Title</th>
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Published</th>
-                  <th className="px-5 py-3.5" />
+                  <th className="text-right px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -45,7 +46,9 @@ export default async function AdminBlogPage() {
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${post.status === "published" ? "bg-green-50 text-green-700" : "bg-orange-50 text-orange-700"}`}>{post.status}</span>
                     </td>
                     <td className="px-5 py-4 text-xs text-gray-400">{post.publishDate ? formatDate(post.publishDate) : "—"}</td>
-                    <td className="px-5 py-4 text-right"><Link href={`/admin/blog/${post.id}`} className="text-xs font-medium text-[#465FFF] hover:underline">Edit →</Link></td>
+                    <td className="px-5 py-4 text-right">
+                      <BlogPostActions id={post.id} slug={post.slug} status={post.status} />
+                    </td>
                   </tr>
                 ))}
               </tbody>

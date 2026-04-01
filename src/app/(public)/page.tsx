@@ -202,13 +202,6 @@ export default async function LandingPage() {
             </Link>
           </div>
 
-          <p style={{ color: "#94a3b8", fontSize: "0.875rem", marginTop: "1rem", fontWeight: 300 }}>
-            Free plan available — no credit card required
-          </p>
-          <p style={{ color: "#64748b", fontSize: "0.95rem", marginTop: "1rem", fontWeight: 300 }}>
-            Compare our <Link href="/pricing" style={{ color: "#5B58F6", fontWeight: 500, textDecoration: "none" }}>pricing plans</Link>, explore the <Link href="/hire-us" style={{ color: "#5B58F6", fontWeight: 500, textDecoration: "none" }}>done-for-you launch service</Link>, or browse the <Link href="/blog" style={{ color: "#5B58F6", fontWeight: 500, textDecoration: "none" }}>blog</Link> for launch and SEO strategies.
-          </p>
-
           {/* Trust badges */}
           <div className="flex flex-wrap justify-center gap-8 mt-12">
             {trustBadges.map((b, i) => (

@@ -77,12 +77,17 @@ export function CurationCard({
     setIsDeleting(true);
     try {
       const res = await fetch(`/api/curations/${id}`, { method: "DELETE" });
+      const payload = await res.json().catch(() => null);
+
       if (!res.ok) {
-        const payload = await res.json().catch(() => null);
         throw new Error(payload?.error ?? "Failed to delete curation");
       }
 
-      toast.success("Curation deleted successfully");
+      toast.success(
+        payload?.refundedCredit
+          ? "Curation deleted and credit restored"
+          : "Curation deleted successfully"
+      );
       setIsDeleteDialogOpen(false);
       router.refresh();
     } catch (err) {

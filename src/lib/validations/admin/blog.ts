@@ -14,7 +14,14 @@ export const blogPostSchema = z.object({
     .transform((s) => (s ? slugify(s) : undefined)),
   excerpt: z.string().max(500).optional().nullable().transform((e) => e?.trim() || null),
   content: z.string().min(1, "Content is required"),
-  featuredImage: z.string().url().optional().nullable(),
+  featuredImage: z
+    .string()
+    .optional()
+    .nullable()
+    .refine(
+      (value) => !value || value.startsWith("/") || /^https?:\/\//i.test(value) || /^(localhost|127\.0\.0\.1)(:\d+)?\//i.test(value),
+      "Featured image must be a valid URL or local /uploads path"
+    ),
   categoryId: z.string().optional().nullable(),
   status: z.enum(["draft", "published"]).default("draft"),
   publishDate: z

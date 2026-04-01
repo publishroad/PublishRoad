@@ -106,25 +106,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token = (await authConfig.callbacks.jwt(params)) as typeof token;
       }
 
-      // Refresh user data at most once per hour per token.
+      // Always sync plan + credits from the DB so dashboard UI never shows stale account state.
       if (token.id) {
-        const now = Math.floor(Date.now() / 1000);
-        const lastRefresh = Number(token.userRefreshedAt ?? token.iat ?? 0);
+        const freshUser = await db.user.findUnique({
+          where: { id: token.id as string },
+          select: {
+            creditsRemaining: true,
+            plan: {
+              select: {
+                slug: true,
+              },
+            },
+          },
+        });
 
-        if (now - lastRefresh > 3600) {
-          const freshUser = await db.user.findUnique({
-            where: { id: token.id as string },
-            include: { plan: true },
+        if (freshUser) {
+          applyRefreshToToken(token as Record<string, unknown>, {
+            planSlug: freshUser.plan?.slug ?? "free",
+            creditsRemaining: freshUser.creditsRemaining,
           });
-          if (freshUser) {
-            applyRefreshToToken(token as Record<string, unknown>, {
-              planSlug: freshUser.plan?.slug ?? "free",
-              creditsRemaining: freshUser.creditsRemaining,
-            });
-          }
-
-          token.userRefreshedAt = now;
         }
+
+        token.userRefreshedAt = Math.floor(Date.now() / 1000);
       }
 
       return token;

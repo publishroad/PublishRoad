@@ -26,8 +26,8 @@ export function Providers({ children, session }: ProvidersProps) {
   return (
     <SessionProvider
       session={session}
-      refetchInterval={0}
-      refetchOnWindowFocus={false}
+      refetchInterval={60}
+      refetchOnWindowFocus={true}
     >
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     </SessionProvider>
