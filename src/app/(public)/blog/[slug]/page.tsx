@@ -1,9 +1,11 @@
 import Image from "next/image";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import sanitizeHtml from "sanitize-html";
 import { db } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
 import type { Metadata } from "next";
+import { SITE_NAME, buildTwitterMetadata, getCanonicalUrl, getSiteUrl, getSocialImageUrl, getSocialImages, stripSiteName } from "@/lib/seo";
 
 export const revalidate = 3600; // ISR: 1 hour, with on-demand revalidation
 
@@ -11,7 +13,7 @@ interface Props {
   params: Promise<{ slug: string }>;
 }
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://publishroad.com";
+const APP_URL = getSiteUrl();
 
 async function getPostMeta(slug: string) {
   try {
@@ -45,10 +47,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   if (!post) return {};
 
-  const title = post.metaTitle ?? post.title;
+  const title = stripSiteName(post.metaTitle ?? post.title) ?? post.title;
   const description = post.metaDescription ?? post.excerpt ?? undefined;
-  const canonicalUrl = `${APP_URL}/blog/${slug}`;
-  const ogImage = post.featuredImage ?? "/og-image.png";
+  const canonicalUrl = getCanonicalUrl(`/blog/${slug}`);
+  const ogImage = getSocialImageUrl(post.featuredImage ?? "/og-image.png");
 
   return {
     title,
@@ -60,16 +62,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       url: canonicalUrl,
       type: "article",
       publishedTime: post.publishDate?.toISOString(),
-      authors: post.author?.name ? [post.author.name] : ["PublishRoad"],
-      siteName: "PublishRoad",
-      images: [{ url: ogImage, width: 1200, height: 630, alt: title }],
+      authors: post.author?.name ? [post.author.name] : [SITE_NAME],
+      siteName: SITE_NAME,
+      images: getSocialImages(title, ogImage),
     },
-    twitter: {
-      card: "summary_large_image",
+    twitter: buildTwitterMetadata({
       title,
       description,
-      images: [ogImage],
-    },
+      image: ogImage,
+    }),
   };
 }
 
@@ -79,37 +80,8 @@ export default async function BlogPostPage({ params }: Props) {
 
   if (!post) notFound();
 
-  const canonicalUrl = `${APP_URL}/blog/${slug}`;
-  const blogPostingSchema = {
-    "@context": "https://schema.org",
-    "@type": "BlogPosting",
-    headline: post.title,
-    description: post.excerpt ?? "",
-    url: canonicalUrl,
-    datePublished: post.publishDate?.toISOString(),
-    dateModified: post.updatedAt?.toISOString(),
-    image: post.featuredImage ?? `${APP_URL}/og-image.png`,
-    author: {
-      "@type": "Person",
-      name: post.author?.name ?? "PublishRoad",
-    },
-    publisher: {
-      "@type": "Organization",
-      name: "PublishRoad",
-      logo: { "@type": "ImageObject", url: `${APP_URL}/favicon.png` },
-    },
-    mainEntityOfPage: { "@type": "WebPage", "@id": canonicalUrl },
-  };
-
-  const breadcrumbSchema = {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Home", item: APP_URL },
-      { "@type": "ListItem", position: 2, name: "Blog", item: `${APP_URL}/blog` },
-      { "@type": "ListItem", position: 3, name: post.title, item: canonicalUrl },
-    ],
-  };
+  const canonicalUrl = getCanonicalUrl(`/blog/${slug}`);
+  const socialImage = getSocialImageUrl(post.featuredImage ?? "/og-image.png");
 
   const sanitizedContent = sanitizeHtml(post.content, {
     allowedTags: sanitizeHtml.defaults.allowedTags.concat(["img", "h1", "h2", "span"]),
@@ -124,6 +96,43 @@ export default async function BlogPostPage({ params }: Props) {
       a: sanitizeHtml.simpleTransform("a", { rel: "noopener noreferrer" }, true),
     },
   });
+
+  const plainTextContent = sanitizedContent.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  const wordCount = plainTextContent.length > 0 ? plainTextContent.split(" ").length : undefined;
+  const blogPostingSchema = {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    headline: post.title,
+    description: post.excerpt ?? "",
+    url: canonicalUrl,
+    datePublished: post.publishDate?.toISOString(),
+    dateModified: post.updatedAt?.toISOString(),
+    articleSection: "Product Launch Distribution",
+    inLanguage: "en-US",
+    isAccessibleForFree: true,
+    wordCount,
+    image: [socialImage],
+    author: {
+      "@type": "Person",
+      name: post.author?.name ?? SITE_NAME,
+    },
+    publisher: {
+      "@type": "Organization",
+      name: SITE_NAME,
+      logo: { "@type": "ImageObject", url: `${APP_URL}/favicon.png` },
+    },
+    mainEntityOfPage: { "@type": "WebPage", "@id": canonicalUrl },
+  };
+
+  const breadcrumbSchema = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: APP_URL },
+      { "@type": "ListItem", position: 2, name: "Blog", item: `${APP_URL}/blog` },
+      { "@type": "ListItem", position: 3, name: post.title, item: canonicalUrl },
+    ],
+  };
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "var(--background)" }}>
@@ -173,15 +182,21 @@ export default async function BlogPostPage({ params }: Props) {
           dangerouslySetInnerHTML={{ __html: sanitizedContent }}
         />
 
+        <div className="mt-16 rounded-[1.5rem] bg-white p-6" style={{ border: "1px solid rgba(226,232,240,0.8)", boxShadow: "0 2px 16px rgba(91,88,246,0.05)" }}>
+          <p className="text-sm text-slate-600 leading-relaxed">
+            Want a tailored launch plan instead of doing everything manually? Compare our <Link href="/pricing" className="font-medium hover:underline" style={{ color: "var(--indigo)" }}>pricing options</Link> or see the <Link href="/hire-us" className="font-medium hover:underline" style={{ color: "var(--indigo)" }}>done-for-you launch service</Link>.
+          </p>
+        </div>
+
         {/* Back link */}
-        <div className="mt-16 pt-8" style={{ borderTop: "1px solid rgba(226,232,240,0.8)" }}>
-          <a
+        <div className="mt-8 pt-8" style={{ borderTop: "1px solid rgba(226,232,240,0.8)" }}>
+          <Link
             href="/blog"
             className="inline-flex items-center gap-2 text-sm font-medium hover:underline"
             style={{ color: "var(--indigo)" }}
           >
             ← Back to Blog
-          </a>
+          </Link>
         </div>
       </article>
     </div>

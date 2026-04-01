@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
+export const revalidate = 300;
+
 export async function GET() {
   const countries = await db.country.findMany({
     where: { isActive: true },
@@ -10,10 +12,6 @@ export async function GET() {
 
   const worldwide = { id: "worldwide", name: "Worldwide", slug: "worldwide", flagEmoji: "🌍" };
   const response = NextResponse.json([worldwide, ...countries]);
-  // Static lookup data: long-lived browser/proxy cache.
-  response.headers.set(
-    "Cache-Control",
-    "public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800"
-  );
+  response.headers.set("Cache-Control", "public, s-maxage=300, stale-while-revalidate=600");
   return response;
 }

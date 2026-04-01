@@ -31,14 +31,14 @@ export function AppSidebar({ groups, bottomSlot, exactMatch = [] }: AppSidebarPr
   }
 
   return (
-    <aside className="w-[260px] shrink-0 min-h-screen bg-white border-r border-gray-200 flex flex-col">
+    <aside className="w-[260px] shrink-0 sticky top-0 h-screen bg-white border-r border-gray-200 flex flex-col">
       {/* Logo */}
       <div className="h-[70px] flex items-center px-6 border-b border-gray-200">
         <Image src="/logo.png" alt="PublishRoad" width={130} height={37} sizes="130px" style={{ height: "auto" }} priority />
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-4 py-5 space-y-6">
+      <nav className="flex-1 min-h-0 overflow-y-auto px-4 py-5 space-y-6">
         {groups.map((group, gi) => (
           <div key={gi}>
             {group.title && (

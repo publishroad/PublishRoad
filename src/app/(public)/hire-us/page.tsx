@@ -1,20 +1,28 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { buildTwitterMetadata, getSiteUrl, getSocialImages } from "@/lib/seo";
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://publishroad.com";
+const APP_URL = getSiteUrl();
 
 export const metadata: Metadata = {
-  title: "Hire Us — Done-For-You Product Launch Distribution | PublishRoad",
+  title: "Hire Us — Done-For-You Product Launch Distribution",
   description:
-    "Let our team handle your entire product launch distribution. We submit to directories, secure guest posts, distribute press releases, reach influencers, Reddit communities, and investors — all done for you. One flat fee: $999.",
+    "Let our team handle your product distribution. Two packages: $399 for full directory submissions, or $999 for directory submissions + guest posts + press release connections. Done for you in 25 days.",
   alternates: { canonical: `${APP_URL}/hire-us` },
   openGraph: {
-    title: "Hire Us — Done-For-You Product Launch Distribution | PublishRoad",
+    title: "Hire Us — Done-For-You Product Launch Distribution",
     description:
-      "Skip the DIY grind. We handle your full product launch distribution — directories, guest posts, press releases, influencers, Reddit & investors. One flat $999 fee.",
+      "Skip the DIY grind. Choose from two packages: $399 for directory submissions, or $999 for the full service including guest posts and press release connections. 25-day delivery.",
     url: `${APP_URL}/hire-us`,
-    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Hire PublishRoad" }],
+    type: "website",
+    siteName: "PublishRoad",
+    images: getSocialImages("Hire PublishRoad"),
   },
+  twitter: buildTwitterMetadata({
+    title: "Hire Us — Done-For-You Product Launch Distribution",
+    description:
+      "Skip the DIY grind. Choose from two packages: $399 for directory submissions, or $999 for the full service including guest posts and press release connections. 25-day delivery.",
+  }),
 };
 
 const serviceSchema = {
@@ -27,13 +35,23 @@ const serviceSchema = {
     url: APP_URL,
   },
   description:
-    "Full-service product launch distribution. We handle directory submissions, guest post outreach, press release distribution, social influencer outreach, Reddit community seeding, and investor introductions.",
-  offers: {
-    "@type": "Offer",
-    price: "999",
-    priceCurrency: "USD",
-    description: "One-time flat fee for full done-for-you launch distribution.",
-  },
+    "Done-for-you product distribution in two packages. Starter ($399): full directory submissions. Complete ($999): directory submissions + guest posts on up to 20 sites + press release team connection. All completed within 25 days.",
+  offers: [
+    {
+      "@type": "Offer",
+      price: "399",
+      priceCurrency: "USD",
+      name: "Starter",
+      description: "Directory submissions to your full curated list. 25-day delivery.",
+    },
+    {
+      "@type": "Offer",
+      price: "999",
+      priceCurrency: "USD",
+      name: "Complete",
+      description: "Directory submissions + guest posts on up to 20 sites + press release team connection. 25-day delivery.",
+    },
+  ],
 };
 
 export default function HireUsPage() {
@@ -118,14 +136,15 @@ export default function HireUsPage() {
               fontWeight: 300,
             }}
           >
-            Stop spending weeks submitting to directories and chasing influencers. Our team executes your
-            full distribution strategy — from day one to first traction — so you can stay focused on building.
+            Stop spending weeks manually submitting to directories and chasing guest posts. Our team takes your
+            PublishRoad curation list and executes everything — submissions, guest posts, and press release
+            connections — so you can stay focused on building.
           </p>
 
           {/* CTAs */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
             <Link
-              href="/contact"
+              href="#pricing"
               className="inline-flex items-center justify-center rounded-full font-semibold text-white text-base"
               style={{
                 background: "#5B58F6",
@@ -135,10 +154,10 @@ export default function HireUsPage() {
                 textDecoration: "none",
               }}
             >
-              Hire Us — $999 →
+              View Packages — from $399 →
             </Link>
             <a
-              href="#what-we-do"
+              href="#pricing"
               className="inline-flex items-center justify-center rounded-full font-medium text-base"
               style={{
                 background: "rgba(255,255,255,0.7)",
@@ -155,7 +174,7 @@ export default function HireUsPage() {
           </div>
 
           <p style={{ color: "#94a3b8", fontSize: "0.875rem", marginTop: "1rem", fontWeight: 300 }}>
-            One flat fee · No hidden costs · Results in 14 days
+            No hidden costs · Starter in 15 days · Complete in 25 days
           </p>
 
           {/* Trust row */}
@@ -244,7 +263,7 @@ export default function HireUsPage() {
                 margin: "0 auto",
               }}
             >
-              Six distribution channels. All executed by our team. All tailored to your product.
+              Three focused services. All executed by our team. All based on your curated list.
             </p>
           </div>
 
@@ -328,7 +347,7 @@ export default function HireUsPage() {
                 letterSpacing: "-0.02em",
               }}
             >
-              From brief to traction in 14 days
+              From brief to traction in 25 days
             </h2>
           </div>
 
@@ -419,7 +438,7 @@ export default function HireUsPage() {
               >
                 You&apos;ve already built the product. Now you need eyes on it — fast. Our service is for
                 builders who know that distribution is the bottleneck, and don&apos;t have 40 hours to
-                manually submit to 200+ directories.
+                manually submit to every site on their list and chase guest post placements.
               </p>
               <div className="space-y-3">
                 {idealFor.map((item, i) => (
@@ -495,8 +514,8 @@ export default function HireUsPage() {
       {/* ══════════════════════════════════════
           PRICING BLOCK
       ══════════════════════════════════════ */}
-      <section style={{ background: "#ffffff", padding: "6rem 0" }}>
-        <div className="max-w-[800px] mx-auto px-6 lg:px-8 text-center">
+      <section id="pricing" style={{ background: "#ffffff", padding: "6rem 0" }}>
+        <div className="max-w-[960px] mx-auto px-6 lg:px-8 text-center">
           <p
             style={{
               color: "#5B58F6",
@@ -519,59 +538,115 @@ export default function HireUsPage() {
               marginBottom: "1rem",
             }}
           >
-            One flat fee. Everything included.
+            Two packages. Pick what you need.
           </h2>
           <p style={{ color: "#64748b", fontSize: "1.05rem", fontWeight: 300, marginBottom: "3rem" }}>
             No retainer. No monthly subscription. No upsells after you pay.
           </p>
 
-          {/* Price card */}
-          <div
-            className="relative mx-auto max-w-[480px]"
-            style={{
-              background: "linear-gradient(135deg, #5B58F6 0%, #7C3AED 100%)",
-              borderRadius: "2rem",
-              padding: "2.5rem",
-              boxShadow: "0 0 60px rgba(91,88,246,0.35), 0 20px 60px rgba(91,88,246,0.2)",
-            }}
-          >
+          {/* Two price cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+
+            {/* Starter — $399 */}
             <div
-              className="inline-block rounded-full px-3 py-1 text-xs font-semibold mb-4"
-              style={{ background: "rgba(255,255,255,0.2)", color: "white" }}
-            >
-              Done-For-You Service
-            </div>
-            <div style={{ fontFamily: "var(--font-heading)", fontSize: "5rem", fontWeight: 800, color: "white", lineHeight: 1 }}>
-              $999
-            </div>
-            <p style={{ color: "rgba(255,255,255,0.7)", fontSize: "0.9rem", marginTop: "0.5rem", marginBottom: "2rem" }}>
-              One-time · No recurring fees
-            </p>
-
-            <div className="space-y-3 mb-8 text-left">
-              {pricingIncludes.map((item, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <svg className="w-4 h-4 shrink-0" style={{ color: "rgba(255,255,255,0.9)" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span style={{ color: "rgba(255,255,255,0.9)", fontSize: "0.9rem" }}>{item}</span>
-                </div>
-              ))}
-            </div>
-
-            <Link
-              href="/contact"
-              className="block w-full text-center rounded-full font-semibold"
               style={{
-                background: "white",
-                color: "#5B58F6",
-                padding: "14px 0",
-                textDecoration: "none",
-                fontSize: "1rem",
+                background: "#ffffff",
+                borderRadius: "2rem",
+                padding: "2.5rem",
+                border: "1px solid rgba(91,88,246,0.2)",
+                boxShadow: "0 4px 32px rgba(91,88,246,0.07)",
+                display: "flex",
+                flexDirection: "column",
               }}
             >
-              Get Started — $999 →
-            </Link>
+              <div
+                className="inline-block self-start rounded-full px-3 py-1 text-xs font-semibold mb-4"
+                style={{ background: "rgba(91,88,246,0.08)", color: "#5B58F6" }}
+              >
+                Starter
+              </div>
+              <div style={{ fontFamily: "var(--font-heading)", fontSize: "4rem", fontWeight: 800, color: "#020617", lineHeight: 1 }}>
+                $399
+              </div>
+              <p style={{ color: "#94a3b8", fontSize: "0.9rem", marginTop: "0.5rem", marginBottom: "2rem" }}>
+                One-time · No recurring fees
+              </p>
+              <div className="space-y-3 mb-8 text-left flex-1">
+                {starterIncludes.map((item, i) => (
+                  <div key={i} className="flex items-start gap-3">
+                    <svg className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "#5B58F6" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span style={{ color: "#374151", fontSize: "0.9rem" }}>{item}</span>
+                  </div>
+                ))}
+              </div>
+              <Link
+                href="/hire-us/start?package=starter"
+                className="block w-full text-center rounded-full font-semibold"
+                style={{
+                  background: "#5B58F6",
+                  color: "white",
+                  padding: "14px 0",
+                  textDecoration: "none",
+                  fontSize: "1rem",
+                  marginTop: "auto",
+                }}
+              >
+                Get Started — $399 →
+              </Link>
+            </div>
+
+            {/* Complete — $999 */}
+            <div
+              className="relative"
+              style={{
+                background: "linear-gradient(135deg, #5B58F6 0%, #7C3AED 100%)",
+                borderRadius: "2rem",
+                padding: "2.5rem",
+                boxShadow: "0 0 60px rgba(91,88,246,0.35), 0 20px 60px rgba(91,88,246,0.2)",
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <div
+                className="inline-block self-start rounded-full px-3 py-1 text-xs font-semibold mb-4"
+                style={{ background: "rgba(255,255,255,0.2)", color: "white" }}
+              >
+                Complete ✦ Most Popular
+              </div>
+              <div style={{ fontFamily: "var(--font-heading)", fontSize: "4rem", fontWeight: 800, color: "white", lineHeight: 1 }}>
+                $999
+              </div>
+              <p style={{ color: "rgba(255,255,255,0.7)", fontSize: "0.9rem", marginTop: "0.5rem", marginBottom: "2rem" }}>
+                One-time · No recurring fees
+              </p>
+              <div className="space-y-3 mb-8 text-left flex-1">
+                {completeIncludes.map((item, i) => (
+                  <div key={i} className="flex items-start gap-3">
+                    <svg className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "rgba(255,255,255,0.9)" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span style={{ color: "rgba(255,255,255,0.9)", fontSize: "0.9rem" }}>{item}</span>
+                  </div>
+                ))}
+              </div>
+              <Link
+                href="/hire-us/start?package=complete"
+                className="block w-full text-center rounded-full font-semibold"
+                style={{
+                  background: "white",
+                  color: "#5B58F6",
+                  padding: "14px 0",
+                  textDecoration: "none",
+                  fontSize: "1rem",
+                  marginTop: "auto",
+                }}
+              >
+                Get Started — $999 →
+              </Link>
+            </div>
+
           </div>
 
           <p style={{ color: "#94a3b8", fontSize: "0.875rem", marginTop: "1.5rem", fontWeight: 300 }}>
@@ -756,11 +831,11 @@ export default function HireUsPage() {
               Stop leaving growth on the table.
             </h2>
             <p className="text-slate-400 font-light mb-10 text-lg" style={{ maxWidth: "560px", margin: "0 auto 2.5rem" }}>
-              Every day you don&apos;t distribute is a day your competitors get the placement you should have.
-              For $999, we fix that — completely done for you.
+              Every day you don&apos;t distribute is a day your competitors get the placements you should have.
+              Starting at $399 for full directory submissions, or $999 for the complete package with guest posts and press release connections — all done for you in 25 days.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link href="/contact">
+              <Link href="/hire-us/start?package=starter">
                 <button
                   className="rounded-full px-10 h-14 text-base font-semibold text-white"
                   style={{
@@ -768,7 +843,7 @@ export default function HireUsPage() {
                     boxShadow: "0 0 30px rgba(91,88,246,0.5), 0 8px 20px rgba(91,88,246,0.3)",
                   }}
                 >
-                  Hire Us — $999 →
+                  View Packages — from $399 →
                 </button>
               </Link>
               <Link href="/pricing">
@@ -791,73 +866,55 @@ export default function HireUsPage() {
 
 const heroBadges = [
   "Fully managed execution",
-  "6 distribution channels",
-  "Results in 14 days",
-  "One flat $999 fee",
+  "2 packages from $399",
+  "Results in 25 days",
+  "No recurring fees",
 ];
 
 const proofStats = [
-  { value: "6", label: "Distribution channels covered" },
-  { value: "200+", label: "Sites & platforms in our database" },
-  { value: "14", label: "Days to full execution" },
-  { value: "$999", label: "One-time flat fee" },
+  { value: "2", label: "Packages to choose from" },
+  { value: "20+", label: "Guest post sites (Complete)" },
+  { value: "25", label: "Days to full execution" },
+  { value: "$399", label: "Starting price" },
 ];
 
 const services = [
   {
     icon: "🌐",
-    title: "Product Directory Submissions",
+    title: "Full Directory Submissions",
     description:
-      "We identify and submit your product to the most relevant product directories, startup listings, and app catalogues — targeting sites with real traffic and high domain authority.",
+      "We submit your app to every distribution site on your curated PublishRoad list — all handled by our team so you don't lift a finger. Every relevant directory, startup listing, and app catalogue gets your product.",
   },
   {
     icon: "✍️",
-    title: "Guest Post & Backlink Outreach",
+    title: "Guest Posting (Up to 20 Sites)",
     description:
-      "We find authoritative blogs in your niche and reach out for guest post placements and contextual backlinks that drive both SEO value and referral traffic.",
+      "We secure and publish guest posts on up to 20 sites from your curated list. Each post is tailored to the site's audience and includes a contextual link back to your product.",
   },
   {
     icon: "📰",
-    title: "Press Release Distribution",
+    title: "Press Release Connection",
     description:
-      "We write and distribute a professional press release across the top PR platforms, increasing your chances of editorial pickup and news coverage.",
-  },
-  {
-    icon: "🤳",
-    title: "Social Influencer Outreach",
-    description:
-      "We identify micro and mid-tier influencers whose audience aligns with your product and initiate genuine outreach campaigns on your behalf.",
-  },
-  {
-    icon: "💬",
-    title: "Reddit Community Seeding",
-    description:
-      "We find the exact subreddits where your target users hang out and craft authentic posts that generate discussion, upvotes, and real user interest.",
-  },
-  {
-    icon: "💰",
-    title: "Investor & Fund Introductions",
-    description:
-      "We match your product to relevant early-stage investors and funds based on sector, stage, and ticket size — and submit a tailored pitch on your behalf.",
+      "We connect you directly with our press release team. Depending on the press release type and distribution tier you choose, it may be included at no extra charge or require a separate fee — we'll walk you through the options.",
   },
 ];
 
 const processSteps = [
   {
     title: "Submit Your Brief",
-    description: "Fill in your product URL, keywords, target country, and a short description. Takes 5 minutes.",
+    description: "Share your product URL, keywords, target country, and a short description. Takes 5 minutes.",
   },
   {
-    title: "We Build Your Strategy",
-    description: "Our team runs your product through our AI matching engine and hand-curates the best opportunities.",
+    title: "We Review Your List",
+    description: "Our team goes through your curated PublishRoad list and maps out every directory and guest post target.",
   },
   {
     title: "We Execute Everything",
-    description: "Submissions, outreach, press releases, and community posts are all handled by our team.",
+    description: "We submit to all directories, publish up to 20 guest posts, and connect you with our press release team — all within 25 days.",
   },
   {
     title: "You Get a Full Report",
-    description: "Receive a detailed breakdown of every action taken, every site submitted, and every outreach sent.",
+    description: "Receive a detailed breakdown of every submission made, every guest post published, and your press release options.",
   },
 ];
 
@@ -878,7 +935,7 @@ const fitChecks = [
   {
     icon: "⏱️",
     title: "Short on time",
-    description: "If you'd rather build features than manually submit to 200 directories, this is for you.",
+    description: "If you'd rather build features than manually submit to every site on your curation list, this is for you.",
   },
   {
     icon: "🎯",
@@ -892,83 +949,95 @@ const fitChecks = [
   },
 ];
 
-const pricingIncludes = [
-  "Product directory submissions (up to 40 sites)",
-  "Guest post & backlink outreach (up to 15 targets)",
-  "Press release written + distributed",
-  "Social influencer outreach (up to 10 profiles)",
-  "Reddit community seeding (up to 8 subreddits)",
-  "Investor & fund introductions (up to 10 leads)",
-  "Full execution report with all links",
-  "14-day delivery guarantee",
+const starterIncludes = [
+  "Submissions to all sites on your curated distribution list",
+  "Full execution report with all submission links",
+  "15-day delivery guarantee",
+];
+
+const completeIncludes = [
+  "Everything in the Starter package",
+  "Guest posts on up to 20 sites from your curation list",
+  "Direct introduction to our press release team",
+  "Press release may be included free or charged separately by tier",
+  "Full execution report with all submissions & published links",
+  "25-day delivery guarantee",
 ];
 
 const advantages = [
   {
-    icon: "🤖",
-    title: "AI-Matched, Human-Executed",
+    icon: "🗄️",
+    title: "Your Curated List, Fully Executed",
     description:
-      "Our AI finds the best distribution opportunities for your exact product. Our team then personally executes every action — no automation spam, no shortcuts.",
+      "We work directly from your PublishRoad curation list — no guessing, no generic databases. Every submission and guest post targets the exact sites curated for your product.",
   },
   {
-    icon: "🗄️",
-    title: "Curated Database of 200+ Platforms",
+    icon: "✍️",
+    title: "Real Guest Posts, Not Spam",
     description:
-      "We don't use generic site lists. Every directory, blog, subreddit, and fund in our database is manually reviewed for quality, traffic, and relevance.",
+      "Each guest post is written and placed by our team on real sites from your list — up to 20 placements, each with a contextual backlink to your product.",
+  },
+  {
+    icon: "📰",
+    title: "Press Release Flexibility",
+    description:
+      "We connect you with our press release team and explain all available tiers. Some options are included in your fee; others can be added based on your budget and goals.",
   },
   {
     icon: "📋",
     title: "Full Transparency",
     description:
-      "You receive a detailed report of every submission made, every outreach sent, and every post published — with links and timestamps.",
+      "You receive a detailed report of every directory submitted and every guest post published — with live links and timestamps.",
   },
   {
     icon: "⚡",
-    title: "14-Day Turnaround",
+    title: "25-Day Turnaround",
     description:
-      "We commit to completing your full distribution within 14 days of receiving your brief. Fast enough to support a live launch.",
+      "We commit to completing everything within 25 days of receiving your brief and payment.",
   },
   {
     icon: "💼",
-    title: "Flat Fee, No Surprises",
+    title: "Two Packages, No Surprises",
     description:
-      "$999 covers everything. No upsells, no add-ons, no monthly retainer. One payment for one complete launch.",
-  },
-  {
-    icon: "🎯",
-    title: "Country & Niche Targeted",
-    description:
-      "Your distribution is filtered by target country and product category — so every placement reaches the audience that actually matters to you.",
+      "$399 for directory submissions. $999 for the full package including guest posts and press release connections. Press release costs (if any) are clarified upfront before you commit.",
   },
 ];
 
 const faqItems = [
   {
-    q: "What exactly do you do for $999?",
-    a: "We execute your entire product launch distribution across 6 channels: directory submissions (up to 40 sites), guest post & backlink outreach (up to 15 targets), press release writing and distribution, social influencer outreach (up to 10 profiles), Reddit community posting (up to 8 subreddits), and investor introductions (up to 10 leads). Everything is done by our team and delivered within 14 days.",
+    q: "What's the difference between the two packages?",
+    a: "The Starter ($399) covers directory submissions only — we submit your app to every site on your PublishRoad curation list and send you a full report. The Complete ($999) includes everything in Starter plus guest posts on up to 20 sites from your list, and a direct introduction to our press release team.",
+  },
+  {
+    q: "Which package should I choose?",
+    a: "If you mainly need visibility through directory listings, Starter at $399 is the right pick. If you also want SEO-boosting guest posts and press coverage, the Complete package at $999 gives you all three services.",
   },
   {
     q: "How do I get started?",
-    a: "Click 'Hire Us' and send us a message via the contact page with your product URL, target country, and a brief description. We review every request and reply within 24 hours to confirm it's a good fit before you pay.",
+    a: "Click 'Get Started' on the package you want and reach out via the contact page with your product URL and PublishRoad curation list. We review every request and reply within 24 hours to confirm it's a good fit before you pay.",
   },
   {
     q: "How long does it take?",
-    a: "We guarantee full execution within 14 days of receiving your completed brief and payment. Most engagements are completed in 7–10 days.",
+    a: "Starter is delivered within 15 days. Complete is delivered within 25 days. Both timelines begin from when we receive your brief and payment.",
+  },
+  {
+    q: "How does the press release work? (Complete only)",
+    a: "We introduce you to our press release partners and walk you through all available tiers. Depending on the distribution scope you choose, the press release may be included at no extra charge or require a separate fee. We'll give you a clear breakdown before you commit to anything.",
   },
   {
     q: "Do you guarantee results?",
-    a: "We guarantee execution — every action we commit to will be completed and documented. We do not guarantee specific traffic numbers, backlinks being accepted, or investor responses, as those depend on third parties. What we do guarantee is that every placement and outreach is done properly.",
+    a: "We guarantee execution — every directory on your list will be submitted to, up to 20 guest posts will be published (Complete), and you'll be connected with the press release team. We do not guarantee acceptance by third-party sites, but every action is properly completed and documented.",
   },
   {
     q: "What do I receive at the end?",
-    a: "A detailed PDF/Google Doc report listing every directory submitted, every outreach email sent, every Reddit post published, and every investor contacted — with dates, links, and status (submitted, responded, live).",
+    a: "A detailed report with every directory submitted (Starter & Complete) and every guest post published with live links (Complete), plus a summary of press release options and next steps.",
   },
   {
     q: "Is this different from using the PublishRoad app myself?",
-    a: "Yes. The app gives you the curated list of opportunities — you execute them yourself. The Hire Us service is us doing all the work for you. Think of it as the difference between a map and a guided tour.",
+    a: "Yes. The app gives you the curated list — you do the work yourself. The Hire Us service means our team handles all the submissions and guest posts for you. Think of it as the difference between a map and a guided tour.",
   },
   {
     q: "Do you offer refunds?",
-    a: "Due to the manual nature of the work, we do not offer refunds once execution has begun. We always confirm your product is a good fit before taking payment to avoid any mismatch.",
+    a: "Due to the manual nature of the work, we do not offer refunds once execution has begun. We always confirm your product is a good fit and clarify any press release costs before taking payment.",
   },
 ];

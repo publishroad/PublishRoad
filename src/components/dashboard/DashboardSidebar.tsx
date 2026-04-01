@@ -44,6 +44,15 @@ const groups = [
           </svg>
         ),
       },
+      {
+        href: "/dashboard/hire-us",
+        label: "Hire Us",
+        icon: (
+          <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M7 8h10M7 12h8m-8 4h6M5 4h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z" />
+          </svg>
+        ),
+      },
     ],
   },
   {
@@ -72,10 +81,17 @@ const groups = [
 ];
 
 interface DashboardSidebarProps {
-  session: any; // Session type from next-auth
+  session: DashboardSession | null;
 }
 
-function UserBottomSlot({ session }: { session: any | null }) {
+type DashboardSession = Session & {
+  user?: Session["user"] & {
+    creditsRemaining?: number;
+    planSlug?: string | null;
+  };
+};
+
+function UserBottomSlot({ session }: { session: DashboardSession | null }) {
   const credits = session?.user?.creditsRemaining ?? 0;
   const initials = session?.user?.name?.[0]?.toUpperCase() ?? "U";
   const plan = session?.user?.planSlug?.toUpperCase() ?? "FREE";

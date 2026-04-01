@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { verifyAdminSession } from "@/lib/admin-auth";
 import { importWebsitesFromFile } from "@/lib/admin/bulk-website-import";
-import { checkRateLimit, bulkImportLimiter } from "@/lib/rate-limit";
+import { buildRateLimitIdentifiers, checkRateLimitForIdentifiers, bulkImportLimiter } from "@/lib/rate-limit";
 
 export const maxDuration = 120;
 
@@ -19,7 +19,11 @@ export async function POST(req: NextRequest) {
   const session = await requireAdmin();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const rl = await checkRateLimit(bulkImportLimiter, session.adminId);
+  const identifiers = buildRateLimitIdentifiers(req, {
+    scope: "bulk-import",
+    userId: session.adminId,
+  });
+  const rl = await checkRateLimitForIdentifiers(bulkImportLimiter, identifiers);
   if (!rl.success) {
     return NextResponse.json({ error: "Rate limit exceeded. Please wait before importing again." }, { status: 429 });
   }

@@ -16,7 +16,7 @@ export default function OnboardingPlanPage() {
   const [pendingPlanId, setPendingPlanId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/lookup/plans").then(async (r) => {
+    fetch("/api/lookup/plans", { cache: "force-cache" }).then(async (r) => {
       if (r.ok) {
         const data = await r.json();
         if (Array.isArray(data) && data.length > 0) {

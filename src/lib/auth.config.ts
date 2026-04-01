@@ -4,6 +4,7 @@
  * Used by middleware for JWT validation only.
  */
 import type { NextAuthConfig } from "next-auth";
+import { NEXTAUTH_SECRET } from "@/lib/auth-secret";
 
 type AuthUserLike = {
   id?: string;
@@ -92,5 +93,5 @@ export const authConfig: NextAuthConfig = {
     strategy: "jwt",
     maxAge: 24 * 60 * 60,
   },
-  secret: process.env.NEXTAUTH_SECRET,
+  secret: NEXTAUTH_SECRET,
 };

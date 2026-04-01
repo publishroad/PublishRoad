@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useRef, useState } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useForm } from "react-hook-form";
@@ -19,9 +19,45 @@ import {
 } from "@/components/ui/form";
 import { signupSchema, type SignupInput } from "@/lib/validations/auth";
 
-export default function SignupPage() {
+const ONBOARDING_PLAN_PATH = "/onboarding/plan";
+const HIRE_US_ONBOARDING_PATH = "/onboarding/hire-us";
+
+function extractHireUsPackageFromCallback(callbackUrl: string | null): "starter" | "complete" | null {
+  if (!callbackUrl) return null;
+  try {
+    const url = new URL(callbackUrl, "http://localhost");
+    if (url.pathname === HIRE_US_ONBOARDING_PATH) {
+      const pkg = url.searchParams.get("package");
+      if (pkg === "starter" || pkg === "complete") return pkg;
+    }
+  } catch {
+    // Invalid URL, ignore
+  }
+  return null;
+}
+
+function resolveSignupRedirectTarget(callbackUrl: string | null): string {
+  if (callbackUrl) {
+    try {
+      const url = new URL(callbackUrl, "http://localhost");
+      if (url.pathname === HIRE_US_ONBOARDING_PATH) {
+        return `${url.pathname}${url.search}`;
+      }
+    } catch {
+      // Ignore invalid callback URL and use default onboarding flow.
+    }
+  }
+  return ONBOARDING_PLAN_PATH;
+}
+
+function SignupPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get("callbackUrl");
+  const redirectTarget = resolveSignupRedirectTarget(callbackUrl);
+  const hireUsPackage = extractHireUsPackageFromCallback(callbackUrl);
   const [isLoading, setIsLoading] = useState(false);
+  const inFlightRef = useRef(false);
 
   const form = useForm<SignupInput>({
     resolver: zodResolver(signupSchema),
@@ -29,6 +65,8 @@ export default function SignupPage() {
   });
 
   async function onSubmit(data: SignupInput) {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setIsLoading(true);
     try {
       const response = await fetch("/api/auth/signup", {
@@ -37,7 +75,7 @@ export default function SignupPage() {
         body: JSON.stringify(data),
       });
 
-      let result: { error?: string } = {};
+      let result: { error?: string | { code?: string; message?: string } } = {};
       const raw = await response.text();
       if (raw) {
         try {
@@ -48,23 +86,42 @@ export default function SignupPage() {
       }
 
       if (!response.ok) {
-        toast.error(result.error ?? "Failed to create account");
+        const message =
+          typeof result.error === "string"
+            ? result.error
+            : result.error?.message ?? "Failed to create account";
+        toast.error(message);
         return;
       }
 
-      await signIn("credentials", {
+      const signInResult = await signIn("credentials", {
         email: data.email,
         password: data.password,
         redirect: false,
+        callbackUrl: redirectTarget,
       });
 
+      if (!signInResult || signInResult.error) {
+        toast.error("Account created, but auto sign-in failed. Please log in.");
+        router.push(`/login?${new URLSearchParams({ callbackUrl: redirectTarget }).toString()}`);
+        return;
+      }
+
       toast.success("Account created! Let's get you set up.");
-      router.push("/onboarding/plan");
+      router.push(redirectTarget);
     } catch {
       toast.error("Signup failed. Please try again.");
     } finally {
       setIsLoading(false);
+      inFlightRef.current = false;
     }
+  }
+
+  async function handleGoogleSignup() {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    setIsLoading(true);
+    await signIn("google", { callbackUrl: redirectTarget });
   }
 
   return (
@@ -93,15 +150,35 @@ export default function SignupPage() {
             border: "1px solid rgba(226, 232, 240, 0.8)",
           }}
         >
+          {/* Hire Us Banner */}
+          {hireUsPackage && (
+            <div style={{
+              background: "linear-gradient(135deg, #6366f1 0%, #818cf8 100%)",
+              borderRadius: "1rem",
+              padding: "1rem",
+              marginBottom: "1.5rem",
+              color: "#ffffff",
+              fontSize: "0.875rem",
+            }}>
+              <p style={{ fontWeight: 600, marginBottom: "0.25rem" }}>
+                Signing up for Hire Us {hireUsPackage === "starter" ? "Starter" : "Complete"}
+              </p>
+              <p style={{ fontSize: "0.8rem", opacity: 0.95, lineHeight: 1.4 }}>
+                You&apos;ll get 1 free curation to test our work. Then purchase your package to launch your full service.
+              </p>
+            </div>
+          )}
           <button
             type="button"
-            onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
+            onClick={handleGoogleSignup}
+            disabled={isLoading}
             style={{
               display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
               width: "100%", marginBottom: "1rem", borderRadius: "999px",
               padding: "11px 24px", background: "#ffffff", color: "#475569",
               fontWeight: 500, fontSize: "0.875rem", border: "1px solid #e2e8f0",
-              cursor: "pointer", transition: "all 0.2s",
+              cursor: isLoading ? "not-allowed" : "pointer", transition: "all 0.2s",
+              opacity: isLoading ? 0.7 : 1,
             }}
           >
             <svg width="18" height="18" viewBox="0 0 24 24">
@@ -232,5 +309,13 @@ export default function SignupPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignupPageContent />
+    </Suspense>
   );
 }

@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import {
   Form,
@@ -25,26 +24,6 @@ type CredentialsResult = {
   redirectUrl?: string;
 };
 
-function mapCredentialsCodeToMessage(code?: string | null): string {
-  if (code === "email_not_found") {
-    return "Email is not registered.";
-  }
-
-  if (code === "wrong_password") {
-    return "Password is incorrect.";
-  }
-
-  if (code === "social_login_only") {
-    return "This account uses Google login. Please continue with Google.";
-  }
-
-  if (code === "account_locked") {
-    return "Account temporarily locked. Please try again in 30 minutes.";
-  }
-
-  return "Invalid email or password.";
-}
-
 function parseCredentialsSignInResult(
   result: { error?: string | null; status?: number; url?: string | null } | undefined
 ): CredentialsResult {
@@ -60,20 +39,12 @@ function parseCredentialsSignInResult(
   try {
     const url = new URL(result.url, window.location.origin);
     const error = url.searchParams.get("error");
-    const code = url.searchParams.get("code");
 
     if (error === "CredentialsSignin") {
-      return { success: false, errorMessage: mapCredentialsCodeToMessage(code) };
+      return { success: false, errorMessage: "Invalid email or password." };
     }
 
     if (error) {
-      const code = url.searchParams.get("code");
-      if (code === "account_locked") {
-        return {
-          success: false,
-          errorMessage: "Account temporarily locked. Please try again in 30 minutes.",
-        };
-      }
       return { success: false, errorMessage: "Invalid email or password." };
     }
   } catch {
@@ -128,14 +99,14 @@ const btnOutline: React.CSSProperties = {
   transition: "all 0.2s",
 };
 
-export default function LoginPage() {
+function LoginPageContent() {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") ?? "/dashboard";
   const error = searchParams.get("error");
-  const code = searchParams.get("code");
   const [isLoading, setIsLoading] = useState(false);
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [authError, setAuthError] = useState<string | null>(null);
+  const inFlightRef = useRef(false);
 
   const form = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
@@ -145,18 +116,8 @@ export default function LoginPage() {
   useEffect(() => {
     if (!error || error === "account_exists") return;
 
-    if (error === "CredentialsSignin") {
-      setAuthError(mapCredentialsCodeToMessage(code));
-      return;
-    }
-
-    if (error === "CallbackRouteError") {
-      setAuthError("Account temporarily locked. Please try again in 30 minutes.");
-      return;
-    }
-
-    setAuthError("Sign-in failed. Please try again.");
-  }, [code, error]);
+    setAuthError("Invalid email or password.");
+  }, [error]);
 
   useEffect(() => {
     const subscription = form.watch(() => {
@@ -169,6 +130,8 @@ export default function LoginPage() {
   }, [authError, form]);
 
   async function onSubmit(data: LoginInput) {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setIsLoading(true);
     setAuthError(null);
     try {
@@ -195,10 +158,14 @@ export default function LoginPage() {
       setAuthError("An unexpected error occurred. Please try again.");
     } finally {
       setIsLoading(false);
+      inFlightRef.current = false;
     }
   }
 
   async function handleGoogleSignIn() {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    setIsLoading(true);
     await signIn("google", { callbackUrl });
   }
 
@@ -329,12 +296,20 @@ export default function LoginPage() {
 
           <p style={{ textAlign: "center", fontSize: "0.875rem", color: "#64748b", marginTop: "1.5rem", fontWeight: 300 }}>
             Don&apos;t have an account?{" "}
-            <Link href="/signup" style={{ color: "#5B58F6", fontWeight: 500, textDecoration: "none" }}>
+            <Link href={`/signup?${new URLSearchParams({ callbackUrl }).toString()}`} style={{ color: "#5B58F6", fontWeight: 500, textDecoration: "none" }}>
               Create one free
             </Link>
           </p>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageContent />
+    </Suspense>
   );
 }

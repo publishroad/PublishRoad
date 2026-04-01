@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
+import { getSiteUrl } from "@/lib/seo";
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://publishroad.com";
+const APP_URL = getSiteUrl();
 
 export const metadata: Metadata = {
-  title: "Privacy Policy | PublishRoad",
+  title: "Privacy Policy",
   description:
     "Read PublishRoad's Privacy Policy — how we collect, use, and protect your data, your GDPR rights, cookie policy, data retention, and how to contact us.",
   alternates: { canonical: `${APP_URL}/privacy` },
-  robots: { index: true, follow: false },
+  robots: { index: true, follow: true },
 };
 
 export default function PrivacyPage() {

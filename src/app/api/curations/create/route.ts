@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { checkRateLimit, curationLimiter, getClientIp } from "@/lib/rate-limit";
+import { buildRateLimitIdentifiers, checkRateLimitForIdentifiers, curationLimiter } from "@/lib/rate-limit";
 import { createCurationSchema } from "@/lib/validations/curation";
 import { runCuration } from "@/lib/curation-engine";
+import { attachHireUsCuration } from "@/lib/hire-us";
 
 export const maxDuration = 60;
 
@@ -16,8 +16,11 @@ export async function POST(req: NextRequest) {
   const userId = session.user.id;
 
   // Rate limit
-  const ip = getClientIp(req);
-  const rl = await checkRateLimit(curationLimiter, userId);
+  const identifiers = buildRateLimitIdentifiers(req, {
+    scope: "curation-create",
+    userId,
+  });
+  const rl = await checkRateLimitForIdentifiers(curationLimiter, identifiers);
   if (!rl.success) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
@@ -32,7 +35,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { productUrl, countryId: rawCountryId, categoryId, keywords, description } = parsed.data;
+  const {
+    productUrl,
+    countryId: rawCountryId,
+    categoryId,
+    keywords,
+    description,
+    hireUs,
+    hireUsPackage,
+  } = parsed.data;
   const countryId = rawCountryId === "worldwide" ? null : rawCountryId;
 
   // Check credits with SELECT FOR UPDATE (handled in engine)
@@ -45,6 +56,16 @@ export async function POST(req: NextRequest) {
       keywords,
       description: description ?? null,
     });
+
+    if (hireUs && hireUsPackage) {
+      await attachHireUsCuration({
+        userId,
+        curationId: curation.id,
+        packageSlug: hireUsPackage,
+      }).catch((error) => {
+        console.error("Failed to attach hire-us curation to lead", error);
+      });
+    }
 
     return NextResponse.json({ curationId: curation.id }, { status: 201 });
   } catch (error: unknown) {

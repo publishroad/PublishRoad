@@ -35,8 +35,9 @@ export async function POST(req: NextRequest) {
 
   const { planId, provider, successPath, cancelPath } = parsed.data;
   const userId = session.user.id;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
-  const successUrl = `${appUrl}${successPath ?? "/onboarding/curation"}?paid=1`;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
+  const resolvedSuccessPath = successPath ?? "/onboarding/curation";
+  const successPathWithPaid = `${resolvedSuccessPath}${resolvedSuccessPath.includes("?") ? "&" : "?"}paid=1`;
   const cancelUrl = `${appUrl}${cancelPath ?? "/onboarding/plan"}`;
 
   const [user, plan] = await Promise.all([
@@ -47,8 +48,10 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
   if (!plan) return NextResponse.json({ error: "Plan not found or inactive" }, { status: 404 });
 
+  let checkoutProvider = provider as ActivePaymentProvider | undefined;
+
   // If no provider specified, check how many are active
-  if (!provider) {
+  if (!checkoutProvider) {
     const activeProviders = await getActivePaymentProvidersList();
     if (activeProviders.length === 0) {
       return NextResponse.json({ error: "No payment gateway is active. Contact support." }, { status: 400 });
@@ -57,8 +60,12 @@ export async function POST(req: NextRequest) {
       // Let the frontend show a payment method picker
       return NextResponse.json({ selectProvider: activeProviders });
     }
-    // Exactly 1 active — fall through to checkout with that provider
+    checkoutProvider = activeProviders[0];
   }
+
+  const successUrl = checkoutProvider === "stripe"
+    ? `${appUrl}/api/payments/stripe/success?session_id={CHECKOUT_SESSION_ID}&next=${encodeURIComponent(successPathWithPaid)}`
+    : `${appUrl}${successPathWithPaid}`;
 
   const stripeCustomerId = user.stripeCustomerId ? decryptField(user.stripeCustomerId) : null;
 
@@ -69,7 +76,8 @@ export async function POST(req: NextRequest) {
       stripeCustomerId,
       successUrl,
       cancelUrl,
-      provider: provider as ActivePaymentProvider | undefined,
+      provider: checkoutProvider,
+      currencyOverride: "USD",
     });
 
     if (result.type === "razorpay") {

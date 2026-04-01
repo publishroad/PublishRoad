@@ -1,18 +1,38 @@
 import type { NextConfig } from "next";
 
+if (!process.env.NEXTAUTH_SECRET) {
+  throw new Error("NEXTAUTH_SECRET must be defined");
+}
+
+if (process.env.NODE_ENV === "production" && process.env.NEXTAUTH_SECRET.length < 32) {
+  throw new Error("NEXTAUTH_SECRET must be at least 32 characters in production");
+}
+
+if (process.env.NODE_ENV === "production" && !process.env.EMAIL_QUEUE_SECRET) {
+  console.warn(
+    "[EmailQueue] EMAIL_QUEUE_SECRET is not set at build time. Internal queue auth will remain disabled until the variable is configured."
+  );
+}
+
+if (process.env.NODE_ENV === "production" && !process.env.EMAIL_QUEUE_ALLOWED_IPS) {
+  console.warn(
+    "[EmailQueue] EMAIL_QUEUE_ALLOWED_IPS is not set at build time. Internal queue IP allowlisting will remain disabled until the variable is configured."
+  );
+}
+
 const isDev = process.env.NODE_ENV !== "production";
 const scriptSrc = isDev
-  ? "'self' https://js.stripe.com https://us-assets.i.posthog.com https://eu-assets.i.posthog.com https://va.vercel-scripts.com 'unsafe-inline' 'unsafe-eval'"
-  : "'self' https://js.stripe.com https://us-assets.i.posthog.com https://eu-assets.i.posthog.com https://va.vercel-scripts.com 'unsafe-inline'";
+  ? "'self' https://js.stripe.com https://checkout.razorpay.com https://*.razorpay.com https://*.razorpay.in https://*.rzp.io https://us-assets.i.posthog.com https://eu-assets.i.posthog.com https://va.vercel-scripts.com 'unsafe-inline' 'unsafe-eval'"
+  : "'self' https://js.stripe.com https://checkout.razorpay.com https://*.razorpay.com https://*.razorpay.in https://*.rzp.io https://us-assets.i.posthog.com https://eu-assets.i.posthog.com https://va.vercel-scripts.com 'unsafe-inline'";
 
 const ContentSecurityPolicy = `
   default-src 'self';
   script-src ${scriptSrc};
-  frame-src https://js.stripe.com;
+  frame-src https://js.stripe.com https://checkout.razorpay.com https://*.razorpay.com https://*.razorpay.in https://*.rzp.io;
   img-src 'self' https://images.publishroad.com https://lh3.googleusercontent.com data: blob:;
   style-src 'self' 'unsafe-inline';
   font-src 'self';
-  connect-src 'self' https://api.stripe.com https://vitals.vercel-insights.com https://us.i.posthog.com https://us-assets.i.posthog.com https://eu.i.posthog.com https://eu-assets.i.posthog.com;
+  connect-src 'self' https://api.stripe.com https://api.razorpay.com https://checkout.razorpay.com https://*.razorpay.com https://*.razorpay.in https://*.rzp.io https://vitals.vercel-insights.com https://us.i.posthog.com https://us-assets.i.posthog.com https://eu.i.posthog.com https://eu-assets.i.posthog.com;
   object-src 'none';
   base-uri 'self';
   form-action 'self';

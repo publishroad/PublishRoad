@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { invalidateUserProfile } from "@/lib/cache";
-import { sendEmail } from "@/lib/email";
+import { enqueueEmailJob } from "@/lib/email/queue";
 
 export async function DELETE(req: NextRequest) {
   const session = await auth();
@@ -29,12 +29,11 @@ export async function DELETE(req: NextRequest) {
 
   await invalidateUserProfile(userId);
 
-  // Send confirmation email (fire and forget)
-  sendEmail({
+  await enqueueEmailJob("account_deleted", {
     to: user.email,
     subject: "Your PublishRoad account has been deleted",
     text: "Your account and all associated data have been permanently deleted. We're sorry to see you go.",
-  }).catch(() => {});
+  });
 
   return NextResponse.json({ success: true });
 }

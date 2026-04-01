@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
+export const revalidate = 300;
+
 export async function GET() {
   const plans = await db.planConfig.findMany({
     where: { isActive: true },
@@ -8,10 +10,6 @@ export async function GET() {
   });
 
   const response = NextResponse.json(plans);
-  // Static pricing catalog: cache aggressively with SWR.
-  response.headers.set(
-    "Cache-Control",
-    "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400"
-  );
+  response.headers.set("Cache-Control", "public, s-maxage=300, stale-while-revalidate=600");
   return response;
 }

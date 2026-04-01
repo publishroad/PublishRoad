@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, KeyboardEvent } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState, useEffect, KeyboardEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -22,13 +22,16 @@ interface Category {
   slug: string;
 }
 
-export default function OnboardingCurationPage() {
+function OnboardingCurationPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [countries, setCountries] = useState<Country[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [keywords, setKeywords] = useState<string[]>([]);
   const [keywordInput, setKeywordInput] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const hireUs = searchParams.get("hireUs") === "1";
+  const hireUsPackage = searchParams.get("hireUsPackage") === "complete" ? "complete" : "starter";
 
   const {
     register,
@@ -86,7 +89,11 @@ export default function OnboardingCurationPage() {
       const res = await fetch("/api/curations/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...data, keywords }),
+        body: JSON.stringify({
+          ...data,
+          keywords,
+          ...(hireUs ? { hireUs: true, hireUsPackage } : {}),
+        }),
       });
 
       const result = await res.json();
@@ -158,6 +165,11 @@ export default function OnboardingCurationPage() {
         <p className="text-slate-500 font-light max-w-md mx-auto">
           We&apos;ll use this to find the best distribution sites for your launch.
         </p>
+        {hireUs && (
+          <p className="text-xs text-indigo-600 mt-3 font-medium">
+            Hire Us is active. Your request will appear in Dashboard Hire Us after you submit this curation.
+          </p>
+        )}
       </div>
 
       <div className="max-w-xl mx-auto">
@@ -308,5 +320,13 @@ export default function OnboardingCurationPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function OnboardingCurationPage() {
+  return (
+    <Suspense fallback={null}>
+      <OnboardingCurationPageContent />
+    </Suspense>
   );
 }

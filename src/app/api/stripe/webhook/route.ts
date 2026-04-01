@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { constructWebhookEvent } from "@/lib/stripe";
 import { db } from "@/lib/db";
 import { redis } from "@/lib/redis";
-import { encryptField, decryptField, hashLookupValue } from "@/lib/server-utils";
+import { decryptField, hashLookupValue } from "@/lib/server-utils";
 import { invalidateUserProfile } from "@/lib/cache";
-import { getActivePaymentProvider, getStripeWebhookSecret } from "@/lib/payments/service";
+import { getStripeWebhookSecret, isPaymentProviderActive } from "@/lib/payments/service";
+import { parseHireUsPackageSlug } from "@/lib/hire-us";
+import { fulfillStripeCheckoutSession } from "@/lib/payments/stripe-fulfillment";
 import type Stripe from "stripe";
 
 export const dynamic = "force-dynamic";
@@ -14,8 +16,8 @@ const LEGACY_CUSTOMER_LOOKUP_CACHE_TTL_SECONDS = 3600;
 const LEGACY_CUSTOMER_SCAN_LIMIT = 100;
 
 export async function POST(req: NextRequest) {
-  const activeProvider = await getActivePaymentProvider();
-  if (!activeProvider || activeProvider !== "stripe") {
+  const isStripeActive = await isPaymentProviderActive("stripe");
+  if (!isStripeActive) {
     return NextResponse.json({ received: true, skipped: true }, { status: 200 });
   }
 
@@ -42,7 +44,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Event too old" }, { status: 400 });
   }
 
-  // Idempotency check
   const existing = await db.processedStripeEvent.findUnique({
     where: { eventId: event.id },
   });
@@ -78,54 +79,7 @@ export async function POST(req: NextRequest) {
 }
 
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
-  const userId = session.metadata?.userId;
-  const planId = session.metadata?.planId;
-  if (!userId || !planId) return;
-
-  const plan = await db.planConfig.findUnique({
-    where: { id: planId },
-    select: { credits: true },
-  });
-  if (!plan) return;
-
-  await db.payment.create({
-    data: {
-      userId,
-      planId,
-      stripePaymentIntentId:
-        typeof session.payment_intent === "string" ? session.payment_intent : null,
-      stripeSubscriptionId:
-        typeof session.subscription === "string" ? session.subscription : null,
-      amountCents: session.amount_total ?? 0,
-      currency: session.currency ?? "usd",
-      status: "completed",
-    },
-  });
-
-  await db.user.update({
-    where: { id: userId },
-    data: {
-      planId,
-      creditsRemaining: plan.credits,
-      ...(typeof session.customer === "string"
-        ? {
-            stripeCustomerId: encryptField(session.customer),
-            stripeCustomerHash: hashLookupValue(session.customer),
-          }
-        : {}),
-    },
-  });
-
-  await db.notification.create({
-    data: {
-      userId,
-      type: "payment_success",
-      title: "Payment successful",
-      message: "Your plan has been upgraded. Credits have been added to your account.",
-    },
-  });
-
-  await invalidateUserProfile(userId);
+  await fulfillStripeCheckoutSession(session);
 }
 
 async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
@@ -259,8 +213,11 @@ async function findUserByStripeCustomer(customerId: string) {
           });
         return user;
       }
-    } catch {
-      // skip invalid encrypted values
+    } catch (error) {
+      console.error("Failed to decrypt legacy stripeCustomerId during webhook lookup", {
+        userId: user.id,
+        error,
+      });
     }
   }
   return null;

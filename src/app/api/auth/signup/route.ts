@@ -1,116 +1,330 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { isDisposableEmail } from "@/lib/utils"
 import { hashPassword } from "@/lib/server-utils";
+import { withDbRetry } from "@/lib/db-resilience";
 import { signupSchema } from "@/lib/validations/auth";
-import { sendVerificationEmail, sendWelcomeEmail } from "@/lib/email";
-import { signupLimiter, getClientIp, checkRateLimit } from "@/lib/rate-limit";
+import { enqueueEmailJob } from "@/lib/email/queue";
+import {
+  buildRateLimitIdentifiers,
+  checkRateLimitForIdentifiers,
+  getClientIp,
+  signupLimiter,
+  tryAcquireBackpressure,
+} from "@/lib/rate-limit";
+import { runIdempotentJson } from "@/lib/idempotency";
 
-export async function POST(request: NextRequest) {
+const SIGNUP_MAX_INFLIGHT = Number(process.env.SIGNUP_MAX_INFLIGHT ?? 100);
+const SIGNUP_CONFLICT_WAIT_MS = Number(process.env.SIGNUP_CONFLICT_WAIT_MS ?? 2500);
+const SIGNUP_CONFLICT_POLL_MS = 120;
+
+function isDuplicateEmailError(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+    return false;
+  }
+
+  if (error.code !== "P2002") {
+    return false;
+  }
+
+  const target = (error.meta as { target?: string[] | string } | undefined)?.target;
+  if (!target) {
+    return true;
+  }
+
+  if (Array.isArray(target)) {
+    return target.includes("email");
+  }
+
+  return String(target).includes("email");
+}
+
+function isConflictLikeDbError(error: unknown): boolean {
+  if (isDuplicateEmailError(error)) {
+    return true;
+  }
+
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    return error.code === "P2034";
+  }
+
+  const dbCode =
+    typeof error === "object" && error !== null && "code" in error
+      ? String((error as { code?: unknown }).code ?? "")
+      : "";
+
+  if (dbCode === "23505" || dbCode === "40001") {
+    return true;
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  return /duplicate|unique|already exists|conflict|serialization/i.test(message);
+}
+
+function logSignupError(error: unknown, context: string, extra?: Record<string, unknown>) {
+  const details =
+    error instanceof Error
+      ? {
+          name: error.name,
+          message: error.message,
+          stack: error.stack,
+        }
+      : {
+          message: String(error),
+        };
+
+  console.error("[Signup] Failure", {
+    context,
+    ...extra,
+    ...details,
+  });
+}
+
+async function resolveExistingEmailConflict(email: string): Promise<boolean> {
   try {
-    // Rate limit: 5 signups per minute per IP
-    const ip = getClientIp(request);
-    const { success, headers } = await checkRateLimit(signupLimiter, ip);
-
-    if (!success) {
-      return NextResponse.json(
-        { error: "Too many signup attempts. Please try again later." },
-        { status: 429, headers }
-      );
-    }
-
-    const body = await request.json().catch(() => null);
-    const parsed = signupSchema.safeParse(body);
-
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: parsed.error.issues[0]?.message ?? "Invalid input" },
-        { status: 422 }
-      );
-    }
-
-    const { name, email, password } = parsed.data;
-
-    // Block disposable email addresses
-    if (isDisposableEmail(email)) {
-      return NextResponse.json(
-        { error: "Please use a real email address." },
-        { status: 422 }
-      );
-    }
-
-    let existing: { id: string; authProvider: "email" | "google"; deletedAt: Date | null } | { id: string } | null = null;
-
-    try {
-      existing = await db.user.findFirst({
-        where: { email },
-        select: {
-          id: true,
-          authProvider: true,
-          deletedAt: true,
-        },
-      });
-    } catch {
-      // Fallback for drifted schemas where one of the optional account-state columns is missing.
-      existing = await db.user.findFirst({
+    const existing = await withDbRetry(() =>
+      db.user.findUnique({
         where: { email },
         select: { id: true },
-      });
-    }
-
-    if (existing) {
-      if ("deletedAt" in existing && existing.deletedAt) {
-        return NextResponse.json(
-          { error: "This account has been deleted. Please contact support." },
-          { status: 409 }
-        );
-      }
-      if ("authProvider" in existing && existing.authProvider === "google") {
-        return NextResponse.json(
-          { error: "An account with this email already exists via Google. Please sign in with Google." },
-          { status: 409 }
-        );
-      }
-      return NextResponse.json(
-        { error: "An account with this email already exists." },
-        { status: 409 }
-      );
-    }
-
-    // Hash password and create user
-    const passwordHash = await hashPassword(password);
-    const verifyToken = randomBytes(32).toString("hex");
-
-    const user = await db.user.create({
-      data: {
-        name,
-        email,
-        passwordHash,
-        authProvider: "email",
-        creditsRemaining: 1,
-        emailVerifyToken: verifyToken,
-      },
-    });
-
-    void Promise.allSettled([
-      sendVerificationEmail(email, name, verifyToken),
-      sendWelcomeEmail(email, name),
-    ]).then((emailResults) => {
-      if (emailResults[0].status === "rejected") {
-        console.error("Failed to send verification email:", emailResults[0].reason);
-      }
-      if (emailResults[1].status === "rejected") {
-        console.error("Failed to send welcome email:", emailResults[1].reason);
-      }
-    });
-
-    return NextResponse.json({ success: true, userId: user.id }, { status: 201 });
-  } catch (error) {
-    console.error("Signup failed:", error);
-    return NextResponse.json(
-      { error: "Signup temporarily unavailable. Please try again." },
-      { status: 500 }
+      })
     );
+    return !!existing;
+  } catch (lookupError) {
+    logSignupError(lookupError, "conflict-lookup", { email });
+    return false;
   }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForExistingEmailConflict(email: string): Promise<boolean> {
+  const deadline = Date.now() + SIGNUP_CONFLICT_WAIT_MS;
+
+  while (Date.now() < deadline) {
+    if (await resolveExistingEmailConflict(email)) {
+      return true;
+    }
+
+    await sleep(SIGNUP_CONFLICT_POLL_MS);
+  }
+
+  return resolveExistingEmailConflict(email);
+}
+
+export async function POST(request: NextRequest) {
+  const body = await request.json().catch(() => null);
+  const parsed = signupSchema.safeParse(body);
+  const ip = getClientIp(request);
+
+  return runIdempotentJson({
+    request,
+    scope: "signup",
+    payload: parsed.success ? parsed.data : body,
+    clientIp: ip,
+    execute: async () => {
+      try {
+        const rateLimitIdentifiers = buildRateLimitIdentifiers(request, {
+          scope: "signup",
+        });
+
+        const { success, headers } = await checkRateLimitForIdentifiers(signupLimiter, rateLimitIdentifiers);
+
+        if (!success) {
+          return {
+            status: 429,
+            headers,
+            body: {
+              success: false,
+              error: {
+                code: "RATE_LIMITED",
+                message: "Too many signup attempts. Please try again later.",
+              },
+            },
+          };
+        }
+
+        const release = tryAcquireBackpressure("signup", SIGNUP_MAX_INFLIGHT);
+        if (!release) {
+          return {
+            status: 429,
+            headers: { ...headers, "Retry-After": "1" },
+            body: {
+              success: false,
+              error: {
+                code: "RATE_LIMITED",
+                message: "Server is busy. Please retry shortly.",
+              },
+            },
+          };
+        }
+
+        try {
+          if (!parsed.success) {
+            return {
+              status: 422,
+              body: {
+                success: false,
+                error: {
+                  code: "VALIDATION_ERROR",
+                  message: parsed.error.issues[0]?.message ?? "Invalid input",
+                },
+              },
+            };
+          }
+
+          const { name, email, password } = parsed.data;
+
+          if (isDisposableEmail(email)) {
+            return {
+              status: 422,
+              body: {
+                success: false,
+                error: {
+                  code: "INVALID_EMAIL",
+                  message: "Please use a real email address.",
+                },
+              },
+            };
+          }
+
+          const passwordHash = await hashPassword(password);
+          const verifyToken = randomBytes(32).toString("hex");
+
+          let user: { id: string };
+
+          try {
+            user = await withDbRetry(() =>
+              db.$transaction(
+                async (tx) =>
+                  tx.user.create({
+                    data: {
+                      name,
+                      email,
+                      passwordHash,
+                      authProvider: "email",
+                      creditsRemaining: 1,
+                      emailVerifyToken: verifyToken,
+                    },
+                    select: { id: true },
+                  }),
+                {
+                  isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+                }
+              )
+            );
+          } catch (dbError) {
+            if (isConflictLikeDbError(dbError)) {
+              return {
+                status: 409,
+                body: {
+                  success: false,
+                  error: {
+                    code: "ACCOUNT_EXISTS",
+                    message: "An account with this email already exists. Please sign in.",
+                  },
+                },
+              };
+            }
+
+            if (await waitForExistingEmailConflict(email)) {
+              return {
+                status: 409,
+                body: {
+                  success: false,
+                  error: {
+                    code: "ACCOUNT_EXISTS",
+                    message: "An account with this email already exists. Please sign in.",
+                  },
+                },
+              };
+            }
+
+            logSignupError(dbError, "db-create", { email });
+            return {
+              status: 503,
+              body: {
+                success: false,
+                error: {
+                  code: "SIGNUP_UNAVAILABLE",
+                  message: "Signup is temporarily unavailable. Please try again.",
+                },
+              },
+            };
+          }
+
+          let emailQueued = true;
+          try {
+            await Promise.all([
+              enqueueEmailJob("verification", {
+                to: email,
+                name,
+                token: verifyToken,
+              }),
+              enqueueEmailJob("welcome", {
+                to: email,
+                name,
+              }),
+            ]);
+          } catch (queueError) {
+            emailQueued = false;
+            logSignupError(queueError, "email-queue", { email, userId: user.id });
+          }
+
+          return {
+            status: 201,
+            body: {
+              success: true,
+              userId: user.id,
+              emailQueued,
+              emailDelivery: emailQueued ? "queued" : "queue_failed",
+            },
+          };
+        } finally {
+          release();
+        }
+      } catch (error) {
+        if (isConflictLikeDbError(error)) {
+          return {
+            status: 409,
+            body: {
+              success: false,
+              error: {
+                code: "ACCOUNT_EXISTS",
+                message: "An account with this email already exists. Please sign in.",
+              },
+            },
+          };
+        }
+
+        if (parsed.success && (await waitForExistingEmailConflict(parsed.data.email))) {
+          return {
+            status: 409,
+            body: {
+              success: false,
+              error: {
+                code: "ACCOUNT_EXISTS",
+                message: "An account with this email already exists. Please sign in.",
+              },
+            },
+          };
+        }
+
+        logSignupError(error, "unhandled", { ip });
+        return {
+          status: 503,
+          body: {
+            success: false,
+            error: {
+              code: "SIGNUP_UNAVAILABLE",
+              message: "Signup is temporarily unavailable. Please try again.",
+            },
+          },
+        };
+      }
+    },
+  });
 }

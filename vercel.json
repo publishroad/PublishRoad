@@ -1,4 +1,10 @@
 {
+  "crons": [
+    {
+      "path": "/api/internal/jobs/email/process",
+      "schedule": "0 3 * * *"
+    }
+  ],
   "headers": [
     {
       "source": "/api/(.*)",

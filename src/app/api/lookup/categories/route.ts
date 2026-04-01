@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
+export const revalidate = 300;
+
 export async function GET() {
   const categories = await db.category.findMany({
     where: { isActive: true },
@@ -9,10 +11,6 @@ export async function GET() {
   });
 
   const response = NextResponse.json(categories);
-  // Static lookup data: long-lived browser/proxy cache.
-  response.headers.set(
-    "Cache-Control",
-    "public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800"
-  );
+  response.headers.set("Cache-Control", "public, s-maxage=300, stale-while-revalidate=600");
   return response;
 }

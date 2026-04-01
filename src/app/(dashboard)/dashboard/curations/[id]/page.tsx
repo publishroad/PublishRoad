@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
+import Link from "next/link";
 import { useStreamingCuration } from "@/hooks/useStreamingCuration";
 import { AppHeader } from "@/components/dashboard/AppHeader";
 import { ProgressTracker } from "@/components/dashboard/ProgressTracker";
@@ -52,20 +53,6 @@ interface CurationResult {
     ticketSize: string | null;
     logoUrl: string | null;
   };
-}
-
-interface CurationData {
-  id: string;
-  productUrl: string;
-  countryName?: string | null;
-  categoryName?: string | null;
-  status: "pending" | "processing" | "completed" | "failed";
-  keywords: string[];
-  description: string | null;
-  results: CurationResult[];
-  maskedCount: number;
-  lockedSections: string[];
-  planSlug: string;
 }
 
 const sectionLabels = {
@@ -133,7 +120,7 @@ export default function CurationDetailPage() {
   const [showProgress, setShowProgress] = useState(false);
   const [updatingResultId, setUpdatingResultId] = useState<string | null>(null);
 
-  const { data: curation, isLoading, error, isStreaming, mutate, refresh } = useStreamingCuration(id);
+  const { data: curation, isLoading, mutate, refresh } = useStreamingCuration(id);
 
   useEffect(() => {
     if (curation?.status === "processing" || curation?.status === "pending") {
@@ -258,6 +245,24 @@ export default function CurationDetailPage() {
             {/* Results Sections */}
             {curation.status === "completed" && (
               <div className="space-y-4">
+                {curation.hireUsLead && (
+                  <div className="rounded-2xl border border-[#dbe4ff] bg-[linear-gradient(125deg,#f8fbff_0%,#eef3ff_45%,#ffffff_100%)] p-4 sm:p-5">
+                    <p className="text-xs uppercase tracking-[0.15em] text-[#465FFF] font-semibold">PublishRoad Team Status</p>
+                    <p className="text-sm text-slate-700 mt-2">
+                      This curation is part of your Hire Us {curation.hireUsLead.packageSlug === "complete" ? "Complete" : "Starter"} package.
+                      Our team is handling execution, and you can track actions and updates in your Hire Us tab.
+                    </p>
+                    <div className="mt-3">
+                      <Link
+                        href="/dashboard/hire-us"
+                        className="inline-flex items-center h-9 px-4 rounded-xl bg-[#465FFF] text-white text-sm font-medium hover:bg-[#3d55e8] transition-colors"
+                      >
+                        View Team Updates
+                      </Link>
+                    </div>
+                  </div>
+                )}
+
                 <div className="overflow-hidden rounded-[28px] border border-[#dbe4ff] bg-[linear-gradient(130deg,#f8fbff_0%,#eef3ff_45%,#ffffff_100%)] p-5 shadow-[0_10px_35px_rgba(70,95,255,0.08)] sm:p-6">
                   <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                     <div className="max-w-2xl">
@@ -310,17 +315,19 @@ export default function CurationDetailPage() {
                   <UpsellBanner maskedCount={curation.maskedCount} planSlug={planSlug} />
                 )}
 
-                {sectionsToShow.map((section) => (
-                  <CurationSection
-                    key={section}
-                    section={section}
-                    results={sectionResults[section]}
-                    locked={(curation.lockedSections ?? []).includes(section)}
-                    planSlug={curation.planSlug ?? "free"}
-                    updatingResultId={updatingResultId}
-                    onToggleComplete={handleTaskStatusChange}
-                  />
-                ))}
+                <div id="curation-list" className="scroll-mt-24 space-y-4">
+                  {sectionsToShow.map((section) => (
+                    <CurationSection
+                      key={section}
+                      section={section}
+                      results={sectionResults[section]}
+                      locked={(curation.lockedSections ?? []).includes(section)}
+                      planSlug={curation.planSlug ?? "free"}
+                      updatingResultId={updatingResultId}
+                      onToggleComplete={handleTaskStatusChange}
+                    />
+                  ))}
+                </div>
               </div>
             )}
 

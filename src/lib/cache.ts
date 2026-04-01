@@ -68,10 +68,10 @@ export async function getCachedWithLock<T>(
 
   try {
     const data = await fetchFn();
-    if (ttlSeconds !== null) {
+    if (ttlSeconds != null && ttlSeconds > 0) {
       await redis.set(key, data as unknown, { ex: ttlSeconds });
     } else {
-      await redis.set(key, data as unknown); // No TTL for immutable data
+      await redis.set(key, data as unknown); // No TTL for immutable data or non-positive TTL
     }
     return data;
   } finally {

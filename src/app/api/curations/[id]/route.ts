@@ -5,6 +5,45 @@ import { getCachedWithLock } from "@/lib/cache";
 import { redis } from "@/lib/redis";
 import { applyPlanResultMasking } from "@/lib/curation-mask-policy";
 
+type HireUsLeadCandidate = {
+  id: string;
+  status: string;
+  serviceType: string | null;
+  createdAt: Date;
+  message: string | null;
+  notes: string | null;
+};
+
+function findHireUsLeadForCuration(
+  leads: HireUsLeadCandidate[],
+  curationId: string
+): HireUsLeadCandidate | null {
+  const lead = leads.find((item) => {
+    if (!item.notes) return false;
+    try {
+      const parsed = JSON.parse(item.notes) as { curationId?: unknown };
+      return parsed.curationId === curationId;
+    } catch {
+      return false;
+    }
+  });
+
+  return lead ?? null;
+}
+
+function derivePrimaryCategoryName(
+  results: Array<{ website?: { category?: { name?: string | null } | null } | null }>
+): string | null {
+  const categoryCounts = new Map<string, number>();
+  for (const result of results) {
+    const categoryName = result.website?.category?.name;
+    if (!categoryName) continue;
+    categoryCounts.set(categoryName, (categoryCounts.get(categoryName) ?? 0) + 1);
+  }
+
+  return [...categoryCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+}
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -22,7 +61,7 @@ export async function GET(
   const data = await getCachedWithLock(
     cacheKey,
     // No TTL for completed curations — immutable
-    0,
+    null,
     async () => {
       const curation = await db.curation.findUnique({
         where: { id },
@@ -72,19 +111,34 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // Determine masking based on plan
+  const candidateHireUsLeads = await db.serviceLead.findMany({
+    where: {
+      userId,
+      serviceType: { in: ["hire_us_starter", "hire_us_complete"] },
+    },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      status: true,
+      serviceType: true,
+      createdAt: true,
+      message: true,
+      notes: true,
+    },
+    take: 20,
+  });
+
+  const hireUsLead = findHireUsLeadForCuration(candidateHireUsLeads, id);
+
+  // Paid Hire Us curations should always be visible as full PRO results.
   const planSlug = session.user.planSlug ?? "free";
-  const { results, maskedCount, lockedSections } = applyPlanResultMasking(data.results, planSlug);
+  const effectivePlanSlug = hireUsLead ? "pro" : planSlug;
+  const { results, maskedCount, lockedSections } = applyPlanResultMasking(
+    data.results,
+    effectivePlanSlug
+  );
 
-  const categoryCounts = new Map<string, number>();
-  for (const result of data.results) {
-    const categoryName = result.website?.category?.name;
-    if (!categoryName) continue;
-    categoryCounts.set(categoryName, (categoryCounts.get(categoryName) ?? 0) + 1);
-  }
-
-  const categoryName =
-    [...categoryCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  const categoryName = derivePrimaryCategoryName(data.results);
 
   return NextResponse.json({
     id: data.id,
@@ -98,6 +152,15 @@ export async function GET(
     maskedCount,
     lockedSections,
     planSlug,
+    hireUsLead: hireUsLead
+      ? {
+          id: hireUsLead.id,
+          status: hireUsLead.status,
+          packageSlug: hireUsLead.serviceType === "hire_us_complete" ? "complete" : "starter",
+          createdAt: hireUsLead.createdAt,
+          message: hireUsLead.message,
+        }
+      : null,
   });
 }
 

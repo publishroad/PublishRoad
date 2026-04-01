@@ -65,16 +65,16 @@ export default function NewCurationPage() {
   const { data: countries = [] } = useQuery({
     queryKey: ["countries"],
     queryFn: fetchCountries,
-    staleTime: 60 * 60 * 1000,
-    gcTime: 2 * 60 * 60 * 1000,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
   const { data: categories = [] } = useQuery({
     queryKey: ["categories"],
     queryFn: fetchCategories,
-    staleTime: 60 * 60 * 1000,
-    gcTime: 2 * 60 * 60 * 1000,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 

@@ -52,6 +52,11 @@ enum WebsiteType {
   press_release
 }
 
+enum PaymentType {
+  plan
+  hire_us
+}
+
 enum PaymentStatus {
   pending
   completed
@@ -378,9 +383,11 @@ model Payment {
   id                     String        @id @default(cuid())
   userId                 String        @map("user_id")
   planId                 String?       @map("plan_id")
+  providerPaymentId      String?       @map("provider_payment_id")
   stripePaymentIntentId  String?       @map("stripe_payment_intent_id")
   stripeSubscriptionId   String?       @map("stripe_subscription_id")
   stripeInvoiceId        String?       @map("stripe_invoice_id")
+  paymentType            PaymentType   @default(plan) @map("payment_type")
   amountCents            Int           @map("amount_cents")
   currency               String        @default("usd")
   status                 PaymentStatus @default(pending)
