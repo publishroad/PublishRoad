@@ -9,6 +9,8 @@ import { createRazorpayOrder } from "@/lib/payments/razorpay";
 
 export type ActivePaymentProvider = "stripe" | "razorpay" | "paypal";
 
+const PAYMENT_PROVIDER_ORDER: ActivePaymentProvider[] = ["stripe", "paypal", "razorpay"];
+
 export class UnsupportedPaymentProviderError extends Error {
   constructor(public provider: ActivePaymentProvider) {
     super(`Configured payment provider (${provider}) is not yet enabled for this flow.`);
@@ -55,7 +57,11 @@ export async function getActivePaymentProvidersList(): Promise<ActivePaymentProv
   const rows = await db.$queryRaw<Array<{ provider: ActivePaymentProvider }>>`
     SELECT provider FROM payment_gateway_config WHERE is_active = true
   `;
-  return rows.map((r) => r.provider);
+
+  const uniqueProviders = Array.from(new Set(rows.map((r) => r.provider)));
+  return uniqueProviders.sort(
+    (a, b) => PAYMENT_PROVIDER_ORDER.indexOf(a) - PAYMENT_PROVIDER_ORDER.indexOf(b)
+  );
 }
 
 function getDecryptedValueOrThrow(value: string | null, missingMessage: string, invalidMessage: string): string {

@@ -12,11 +12,19 @@ create type "public"."CurationStatus" as enum ('pending', 'processing', 'complet
 
 create type "public"."EmailProvider" as enum ('resend', 'smtp', 'sendgrid', 'ses');
 
+create type "public"."InfluencerPlatform" as enum ('tiktok', 'instagram', 'youtube', 'twitter');
+
+create type "public"."InvestmentStage" as enum ('pre_seed', 'seed', 'series_a', 'series_b', 'series_c', 'growth', 'late_stage');
+
 create type "public"."LeadStatus" as enum ('new', 'contacted', 'closed');
 
 create type "public"."PaymentProvider" as enum ('stripe', 'razorpay', 'paypal');
 
 create type "public"."PaymentStatus" as enum ('pending', 'completed', 'failed', 'refunded');
+
+create type "public"."PaymentType" as enum ('plan', 'hire_us');
+
+create type "public"."PostingDifficulty" as enum ('easy', 'medium', 'hard');
 
 create type "public"."UserResultStatus" as enum ('saved', 'hidden');
 
@@ -79,6 +87,15 @@ create type "public"."WebsiteType" as enum ('distribution', 'guest_post', 'press
 
 
 
+  create table "public"."beta_config" (
+    "id" text not null default 'default'::text,
+    "enabled" boolean not null default false,
+    "updated_at" timestamp(3) without time zone not null,
+    "updated_by_id" text
+      );
+
+
+
   create table "public"."blog_posts" (
     "id" text not null,
     "slug" text not null,
@@ -136,14 +153,17 @@ create type "public"."WebsiteType" as enum ('distribution', 'guest_post', 'press
   create table "public"."curation_results" (
     "id" text not null,
     "curation_id" text not null,
-    "website_id" text not null,
+    "website_id" text,
     "match_score" double precision not null,
     "match_reason" text,
     "section" public."CurationSection" not null,
     "rank" integer not null,
     "user_status" public."UserResultStatus",
     "user_notes" text,
-    "created_at" timestamp(3) without time zone not null default CURRENT_TIMESTAMP
+    "created_at" timestamp(3) without time zone not null default CURRENT_TIMESTAMP,
+    "fund_id" text,
+    "influencer_id" text,
+    "reddit_channel_id" text
       );
 
 
@@ -166,7 +186,7 @@ create type "public"."WebsiteType" as enum ('distribution', 'guest_post', 'press
   create table "public"."email_provider_config" (
     "id" text not null default 'default'::text,
     "provider" public."EmailProvider" not null default 'resend'::public."EmailProvider",
-    "from_address" text not null default 'PublishRoad <noreply@publishroad.com>'::text,
+    "from_address" text not null,
     "api_key" text,
     "host" text,
     "port" integer,
@@ -176,6 +196,70 @@ create type "public"."WebsiteType" as enum ('distribution', 'guest_post', 'press
     "additional_config" jsonb not null default '{}'::jsonb,
     "updated_at" timestamp(3) without time zone not null,
     "updated_by_id" text
+      );
+
+
+
+  create table "public"."fund_categories" (
+    "fund_id" text not null,
+    "category_id" text not null
+      );
+
+
+
+  create table "public"."fund_tags" (
+    "fund_id" text not null,
+    "tag_id" text not null
+      );
+
+
+
+  create table "public"."funds" (
+    "id" text not null,
+    "name" text not null,
+    "logo_url" text,
+    "website_url" text not null,
+    "description" text,
+    "investment_stage" public."InvestmentStage",
+    "ticket_size" text,
+    "country_id" text,
+    "is_active" boolean not null default true,
+    "tag_slugs" text[] default ARRAY[]::text[],
+    "created_at" timestamp(3) without time zone not null default CURRENT_TIMESTAMP,
+    "updated_at" timestamp(3) without time zone not null,
+    "category_slugs" text[] default ARRAY[]::text[]
+      );
+
+
+
+  create table "public"."influencer_categories" (
+    "influencer_id" text not null,
+    "category_id" text not null
+      );
+
+
+
+  create table "public"."influencer_tags" (
+    "influencer_id" text not null,
+    "tag_id" text not null
+      );
+
+
+
+  create table "public"."influencers" (
+    "id" text not null,
+    "name" text not null,
+    "platform" public."InfluencerPlatform" not null,
+    "followers_count" integer not null default 0,
+    "country_id" text,
+    "description" text,
+    "profile_link" text not null,
+    "email" text,
+    "is_active" boolean not null default true,
+    "tag_slugs" text[] default ARRAY[]::text[],
+    "created_at" timestamp(3) without time zone not null default CURRENT_TIMESTAMP,
+    "updated_at" timestamp(3) without time zone not null,
+    "category_slugs" text[] default ARRAY[]::text[]
       );
 
 
@@ -193,14 +277,15 @@ create type "public"."WebsiteType" as enum ('distribution', 'guest_post', 'press
 
 
   create table "public"."payment_gateway_config" (
-    "id" text not null default 'default'::text,
-    "provider" public."PaymentProvider" not null default 'stripe'::public."PaymentProvider",
+    "id" text not null,
+    "provider" public."PaymentProvider" not null,
     "public_key" text,
     "secret_key" text,
     "webhook_secret" text,
     "additional_config" jsonb not null default '{}'::jsonb,
     "updated_at" timestamp(3) without time zone not null,
-    "updated_by_id" text
+    "updated_by_id" text,
+    "is_active" boolean not null default false
       );
 
 
@@ -215,7 +300,9 @@ create type "public"."WebsiteType" as enum ('distribution', 'guest_post', 'press
     "amount_cents" integer not null,
     "currency" text not null default 'usd'::text,
     "status" public."PaymentStatus" not null default 'pending'::public."PaymentStatus",
-    "created_at" timestamp(3) without time zone not null default CURRENT_TIMESTAMP
+    "created_at" timestamp(3) without time zone not null default CURRENT_TIMESTAMP,
+    "provider_payment_id" text,
+    "payment_type" public."PaymentType" not null default 'plan'::public."PaymentType"
       );
 
 
@@ -240,6 +327,37 @@ create type "public"."WebsiteType" as enum ('distribution', 'guest_post', 'press
   create table "public"."processed_stripe_events" (
     "event_id" text not null,
     "processed_at" timestamp(3) without time zone not null default CURRENT_TIMESTAMP
+      );
+
+
+
+  create table "public"."reddit_channel_categories" (
+    "reddit_channel_id" text not null,
+    "category_id" text not null
+      );
+
+
+
+  create table "public"."reddit_channel_tags" (
+    "reddit_channel_id" text not null,
+    "tag_id" text not null
+      );
+
+
+
+  create table "public"."reddit_channels" (
+    "id" text not null,
+    "name" text not null,
+    "url" text not null,
+    "weekly_visitors" integer not null default 0,
+    "total_members" integer not null default 0,
+    "description" text,
+    "posting_difficulty" public."PostingDifficulty",
+    "is_active" boolean not null default true,
+    "tag_slugs" text[] default ARRAY[]::text[],
+    "created_at" timestamp(3) without time zone not null default CURRENT_TIMESTAMP,
+    "updated_at" timestamp(3) without time zone not null,
+    "category_slugs" text[] default ARRAY[]::text[]
       );
 
 
@@ -313,7 +431,15 @@ create type "public"."WebsiteType" as enum ('distribution', 'guest_post', 'press
     "deleted_at" timestamp(3) without time zone,
     "created_at" timestamp(3) without time zone not null default CURRENT_TIMESTAMP,
     "updated_at" timestamp(3) without time zone not null,
-    "stripe_customer_hash" text
+    "stripe_customer_hash" text,
+    "credits_reset_at" timestamp(3) without time zone
+      );
+
+
+
+  create table "public"."website_categories" (
+    "website_id" text not null,
+    "category_id" text not null
       );
 
 
@@ -362,6 +488,8 @@ CREATE INDEX audit_logs_entity_entity_id_idx ON public.audit_logs USING btree (e
 
 CREATE UNIQUE INDEX audit_logs_pkey ON public.audit_logs USING btree (id);
 
+CREATE UNIQUE INDEX beta_config_pkey ON public.beta_config USING btree (id);
+
 CREATE UNIQUE INDEX blog_posts_pkey ON public.blog_posts USING btree (id);
 
 CREATE UNIQUE INDEX blog_posts_slug_key ON public.blog_posts USING btree (slug);
@@ -392,6 +520,20 @@ CREATE INDEX curations_user_id_created_at_idx ON public.curations USING btree (u
 
 CREATE UNIQUE INDEX email_provider_config_pkey ON public.email_provider_config USING btree (id);
 
+CREATE UNIQUE INDEX fund_categories_pkey ON public.fund_categories USING btree (fund_id, category_id);
+
+CREATE UNIQUE INDEX fund_tags_pkey ON public.fund_tags USING btree (fund_id, tag_id);
+
+CREATE UNIQUE INDEX funds_pkey ON public.funds USING btree (id);
+
+CREATE UNIQUE INDEX influencer_categories_pkey ON public.influencer_categories USING btree (influencer_id, category_id);
+
+CREATE UNIQUE INDEX influencer_tags_pkey ON public.influencer_tags USING btree (influencer_id, tag_id);
+
+CREATE UNIQUE INDEX influencers_pkey ON public.influencers USING btree (id);
+
+CREATE INDEX influencers_platform_is_active_idx ON public.influencers USING btree (platform, is_active);
+
 CREATE UNIQUE INDEX notifications_pkey ON public.notifications USING btree (id);
 
 CREATE INDEX notifications_user_id_is_read_created_at_idx ON public.notifications USING btree (user_id, is_read, created_at DESC);
@@ -405,6 +547,14 @@ CREATE UNIQUE INDEX plan_configs_pkey ON public.plan_configs USING btree (id);
 CREATE UNIQUE INDEX plan_configs_slug_key ON public.plan_configs USING btree (slug);
 
 CREATE UNIQUE INDEX processed_stripe_events_pkey ON public.processed_stripe_events USING btree (event_id);
+
+CREATE UNIQUE INDEX reddit_channel_categories_pkey ON public.reddit_channel_categories USING btree (reddit_channel_id, category_id);
+
+CREATE UNIQUE INDEX reddit_channel_tags_pkey ON public.reddit_channel_tags USING btree (reddit_channel_id, tag_id);
+
+CREATE UNIQUE INDEX reddit_channels_pkey ON public.reddit_channels USING btree (id);
+
+CREATE UNIQUE INDEX reddit_channels_url_key ON public.reddit_channels USING btree (url);
 
 CREATE UNIQUE INDEX referrals_code_key ON public.referrals USING btree (code);
 
@@ -430,6 +580,8 @@ CREATE UNIQUE INDEX users_pkey ON public.users USING btree (id);
 
 CREATE INDEX users_stripe_customer_hash_idx ON public.users USING btree (stripe_customer_hash);
 
+CREATE UNIQUE INDEX website_categories_pkey ON public.website_categories USING btree (website_id, category_id);
+
 CREATE UNIQUE INDEX website_tags_pkey ON public.website_tags USING btree (website_id, tag_id);
 
 CREATE INDEX websites_country_id_is_active_idx ON public.websites USING btree (country_id, is_active);
@@ -448,6 +600,8 @@ alter table "public"."ai_config" add constraint "ai_config_pkey" PRIMARY KEY usi
 
 alter table "public"."audit_logs" add constraint "audit_logs_pkey" PRIMARY KEY using index "audit_logs_pkey";
 
+alter table "public"."beta_config" add constraint "beta_config_pkey" PRIMARY KEY using index "beta_config_pkey";
+
 alter table "public"."blog_posts" add constraint "blog_posts_pkey" PRIMARY KEY using index "blog_posts_pkey";
 
 alter table "public"."categories" add constraint "categories_pkey" PRIMARY KEY using index "categories_pkey";
@@ -462,6 +616,18 @@ alter table "public"."curations" add constraint "curations_pkey" PRIMARY KEY usi
 
 alter table "public"."email_provider_config" add constraint "email_provider_config_pkey" PRIMARY KEY using index "email_provider_config_pkey";
 
+alter table "public"."fund_categories" add constraint "fund_categories_pkey" PRIMARY KEY using index "fund_categories_pkey";
+
+alter table "public"."fund_tags" add constraint "fund_tags_pkey" PRIMARY KEY using index "fund_tags_pkey";
+
+alter table "public"."funds" add constraint "funds_pkey" PRIMARY KEY using index "funds_pkey";
+
+alter table "public"."influencer_categories" add constraint "influencer_categories_pkey" PRIMARY KEY using index "influencer_categories_pkey";
+
+alter table "public"."influencer_tags" add constraint "influencer_tags_pkey" PRIMARY KEY using index "influencer_tags_pkey";
+
+alter table "public"."influencers" add constraint "influencers_pkey" PRIMARY KEY using index "influencers_pkey";
+
 alter table "public"."notifications" add constraint "notifications_pkey" PRIMARY KEY using index "notifications_pkey";
 
 alter table "public"."payment_gateway_config" add constraint "payment_gateway_config_pkey" PRIMARY KEY using index "payment_gateway_config_pkey";
@@ -472,6 +638,12 @@ alter table "public"."plan_configs" add constraint "plan_configs_pkey" PRIMARY K
 
 alter table "public"."processed_stripe_events" add constraint "processed_stripe_events_pkey" PRIMARY KEY using index "processed_stripe_events_pkey";
 
+alter table "public"."reddit_channel_categories" add constraint "reddit_channel_categories_pkey" PRIMARY KEY using index "reddit_channel_categories_pkey";
+
+alter table "public"."reddit_channel_tags" add constraint "reddit_channel_tags_pkey" PRIMARY KEY using index "reddit_channel_tags_pkey";
+
+alter table "public"."reddit_channels" add constraint "reddit_channels_pkey" PRIMARY KEY using index "reddit_channels_pkey";
+
 alter table "public"."referrals" add constraint "referrals_pkey" PRIMARY KEY using index "referrals_pkey";
 
 alter table "public"."service_leads" add constraint "service_leads_pkey" PRIMARY KEY using index "service_leads_pkey";
@@ -481,6 +653,8 @@ alter table "public"."sub_categories" add constraint "sub_categories_pkey" PRIMA
 alter table "public"."tags" add constraint "tags_pkey" PRIMARY KEY using index "tags_pkey";
 
 alter table "public"."users" add constraint "users_pkey" PRIMARY KEY using index "users_pkey";
+
+alter table "public"."website_categories" add constraint "website_categories_pkey" PRIMARY KEY using index "website_categories_pkey";
 
 alter table "public"."website_tags" add constraint "website_tags_pkey" PRIMARY KEY using index "website_tags_pkey";
 
@@ -494,6 +668,10 @@ alter table "public"."audit_logs" add constraint "audit_logs_admin_id_fkey" FORE
 
 alter table "public"."audit_logs" validate constraint "audit_logs_admin_id_fkey";
 
+alter table "public"."beta_config" add constraint "beta_config_updated_by_id_fkey" FOREIGN KEY (updated_by_id) REFERENCES public.admin_users(id) ON UPDATE CASCADE ON DELETE SET NULL not valid;
+
+alter table "public"."beta_config" validate constraint "beta_config_updated_by_id_fkey";
+
 alter table "public"."blog_posts" add constraint "blog_posts_author_id_fkey" FOREIGN KEY (author_id) REFERENCES public.admin_users(id) ON UPDATE CASCADE ON DELETE RESTRICT not valid;
 
 alter table "public"."blog_posts" validate constraint "blog_posts_author_id_fkey";
@@ -506,7 +684,19 @@ alter table "public"."curation_results" add constraint "curation_results_curatio
 
 alter table "public"."curation_results" validate constraint "curation_results_curation_id_fkey";
 
-alter table "public"."curation_results" add constraint "curation_results_website_id_fkey" FOREIGN KEY (website_id) REFERENCES public.websites(id) ON UPDATE CASCADE ON DELETE RESTRICT not valid;
+alter table "public"."curation_results" add constraint "curation_results_fund_id_fkey" FOREIGN KEY (fund_id) REFERENCES public.funds(id) ON UPDATE CASCADE ON DELETE SET NULL not valid;
+
+alter table "public"."curation_results" validate constraint "curation_results_fund_id_fkey";
+
+alter table "public"."curation_results" add constraint "curation_results_influencer_id_fkey" FOREIGN KEY (influencer_id) REFERENCES public.influencers(id) ON UPDATE CASCADE ON DELETE SET NULL not valid;
+
+alter table "public"."curation_results" validate constraint "curation_results_influencer_id_fkey";
+
+alter table "public"."curation_results" add constraint "curation_results_reddit_channel_id_fkey" FOREIGN KEY (reddit_channel_id) REFERENCES public.reddit_channels(id) ON UPDATE CASCADE ON DELETE SET NULL not valid;
+
+alter table "public"."curation_results" validate constraint "curation_results_reddit_channel_id_fkey";
+
+alter table "public"."curation_results" add constraint "curation_results_website_id_fkey" FOREIGN KEY (website_id) REFERENCES public.websites(id) ON UPDATE CASCADE ON DELETE SET NULL not valid;
 
 alter table "public"."curation_results" validate constraint "curation_results_website_id_fkey";
 
@@ -521,6 +711,46 @@ alter table "public"."curations" validate constraint "curations_user_id_fkey";
 alter table "public"."email_provider_config" add constraint "email_provider_config_updated_by_id_fkey" FOREIGN KEY (updated_by_id) REFERENCES public.admin_users(id) ON UPDATE CASCADE ON DELETE SET NULL not valid;
 
 alter table "public"."email_provider_config" validate constraint "email_provider_config_updated_by_id_fkey";
+
+alter table "public"."fund_categories" add constraint "fund_categories_category_id_fkey" FOREIGN KEY (category_id) REFERENCES public.categories(id) ON UPDATE CASCADE ON DELETE CASCADE not valid;
+
+alter table "public"."fund_categories" validate constraint "fund_categories_category_id_fkey";
+
+alter table "public"."fund_categories" add constraint "fund_categories_fund_id_fkey" FOREIGN KEY (fund_id) REFERENCES public.funds(id) ON UPDATE CASCADE ON DELETE CASCADE not valid;
+
+alter table "public"."fund_categories" validate constraint "fund_categories_fund_id_fkey";
+
+alter table "public"."fund_tags" add constraint "fund_tags_fund_id_fkey" FOREIGN KEY (fund_id) REFERENCES public.funds(id) ON UPDATE CASCADE ON DELETE CASCADE not valid;
+
+alter table "public"."fund_tags" validate constraint "fund_tags_fund_id_fkey";
+
+alter table "public"."fund_tags" add constraint "fund_tags_tag_id_fkey" FOREIGN KEY (tag_id) REFERENCES public.tags(id) ON UPDATE CASCADE ON DELETE CASCADE not valid;
+
+alter table "public"."fund_tags" validate constraint "fund_tags_tag_id_fkey";
+
+alter table "public"."funds" add constraint "funds_country_id_fkey" FOREIGN KEY (country_id) REFERENCES public.countries(id) ON UPDATE CASCADE ON DELETE SET NULL not valid;
+
+alter table "public"."funds" validate constraint "funds_country_id_fkey";
+
+alter table "public"."influencer_categories" add constraint "influencer_categories_category_id_fkey" FOREIGN KEY (category_id) REFERENCES public.categories(id) ON UPDATE CASCADE ON DELETE CASCADE not valid;
+
+alter table "public"."influencer_categories" validate constraint "influencer_categories_category_id_fkey";
+
+alter table "public"."influencer_categories" add constraint "influencer_categories_influencer_id_fkey" FOREIGN KEY (influencer_id) REFERENCES public.influencers(id) ON UPDATE CASCADE ON DELETE CASCADE not valid;
+
+alter table "public"."influencer_categories" validate constraint "influencer_categories_influencer_id_fkey";
+
+alter table "public"."influencer_tags" add constraint "influencer_tags_influencer_id_fkey" FOREIGN KEY (influencer_id) REFERENCES public.influencers(id) ON UPDATE CASCADE ON DELETE CASCADE not valid;
+
+alter table "public"."influencer_tags" validate constraint "influencer_tags_influencer_id_fkey";
+
+alter table "public"."influencer_tags" add constraint "influencer_tags_tag_id_fkey" FOREIGN KEY (tag_id) REFERENCES public.tags(id) ON UPDATE CASCADE ON DELETE CASCADE not valid;
+
+alter table "public"."influencer_tags" validate constraint "influencer_tags_tag_id_fkey";
+
+alter table "public"."influencers" add constraint "influencers_country_id_fkey" FOREIGN KEY (country_id) REFERENCES public.countries(id) ON UPDATE CASCADE ON DELETE SET NULL not valid;
+
+alter table "public"."influencers" validate constraint "influencers_country_id_fkey";
 
 alter table "public"."notifications" add constraint "notifications_user_id_fkey" FOREIGN KEY (user_id) REFERENCES public.users(id) ON UPDATE CASCADE ON DELETE CASCADE not valid;
 
@@ -537,6 +767,22 @@ alter table "public"."payments" validate constraint "payments_plan_id_fkey";
 alter table "public"."payments" add constraint "payments_user_id_fkey" FOREIGN KEY (user_id) REFERENCES public.users(id) ON UPDATE CASCADE ON DELETE RESTRICT not valid;
 
 alter table "public"."payments" validate constraint "payments_user_id_fkey";
+
+alter table "public"."reddit_channel_categories" add constraint "reddit_channel_categories_category_id_fkey" FOREIGN KEY (category_id) REFERENCES public.categories(id) ON UPDATE CASCADE ON DELETE CASCADE not valid;
+
+alter table "public"."reddit_channel_categories" validate constraint "reddit_channel_categories_category_id_fkey";
+
+alter table "public"."reddit_channel_categories" add constraint "reddit_channel_categories_reddit_channel_id_fkey" FOREIGN KEY (reddit_channel_id) REFERENCES public.reddit_channels(id) ON UPDATE CASCADE ON DELETE CASCADE not valid;
+
+alter table "public"."reddit_channel_categories" validate constraint "reddit_channel_categories_reddit_channel_id_fkey";
+
+alter table "public"."reddit_channel_tags" add constraint "reddit_channel_tags_reddit_channel_id_fkey" FOREIGN KEY (reddit_channel_id) REFERENCES public.reddit_channels(id) ON UPDATE CASCADE ON DELETE CASCADE not valid;
+
+alter table "public"."reddit_channel_tags" validate constraint "reddit_channel_tags_reddit_channel_id_fkey";
+
+alter table "public"."reddit_channel_tags" add constraint "reddit_channel_tags_tag_id_fkey" FOREIGN KEY (tag_id) REFERENCES public.tags(id) ON UPDATE CASCADE ON DELETE CASCADE not valid;
+
+alter table "public"."reddit_channel_tags" validate constraint "reddit_channel_tags_tag_id_fkey";
 
 alter table "public"."referrals" add constraint "referrals_referred_user_id_fkey" FOREIGN KEY (referred_user_id) REFERENCES public.users(id) ON UPDATE CASCADE ON DELETE SET NULL not valid;
 
@@ -557,6 +803,14 @@ alter table "public"."sub_categories" validate constraint "sub_categories_catego
 alter table "public"."users" add constraint "users_plan_id_fkey" FOREIGN KEY (plan_id) REFERENCES public.plan_configs(id) ON UPDATE CASCADE ON DELETE SET NULL not valid;
 
 alter table "public"."users" validate constraint "users_plan_id_fkey";
+
+alter table "public"."website_categories" add constraint "website_categories_category_id_fkey" FOREIGN KEY (category_id) REFERENCES public.categories(id) ON UPDATE CASCADE ON DELETE CASCADE not valid;
+
+alter table "public"."website_categories" validate constraint "website_categories_category_id_fkey";
+
+alter table "public"."website_categories" add constraint "website_categories_website_id_fkey" FOREIGN KEY (website_id) REFERENCES public.websites(id) ON UPDATE CASCADE ON DELETE CASCADE not valid;
+
+alter table "public"."website_categories" validate constraint "website_categories_website_id_fkey";
 
 alter table "public"."website_tags" add constraint "website_tags_tag_id_fkey" FOREIGN KEY (tag_id) REFERENCES public.tags(id) ON UPDATE CASCADE ON DELETE CASCADE not valid;
 
@@ -620,6 +874,19 @@ grant truncate on table "public"."_prisma_migrations" to "service_role";
 
 grant update on table "public"."_prisma_migrations" to "service_role";
 
+grant delete on table "public"."admin_users" to "anon";
+
+grant insert on table "public"."admin_users" to "anon";
+
+grant references on table "public"."admin_users" to "anon";
+
+grant select on table "public"."admin_users" to "anon";
+
+grant trigger on table "public"."admin_users" to "anon";
+
+grant truncate on table "public"."admin_users" to "anon";
+
+grant update on table "public"."admin_users" to "anon";
 
 grant delete on table "public"."admin_users" to "authenticated";
 
@@ -635,18 +902,6 @@ grant truncate on table "public"."admin_users" to "authenticated";
 
 grant update on table "public"."admin_users" to "authenticated";
 
-revoke delete on table "public"."admin_users" from "authenticated";
-
-revoke insert on table "public"."admin_users" from "authenticated";
-
-revoke references on table "public"."admin_users" from "authenticated";
-
-revoke trigger on table "public"."admin_users" from "authenticated";
-
-revoke truncate on table "public"."admin_users" from "authenticated";
-
-revoke update on table "public"."admin_users" from "authenticated";
-
 grant delete on table "public"."admin_users" to "service_role";
 
 grant insert on table "public"."admin_users" to "service_role";
@@ -661,6 +916,19 @@ grant truncate on table "public"."admin_users" to "service_role";
 
 grant update on table "public"."admin_users" to "service_role";
 
+grant delete on table "public"."ai_config" to "anon";
+
+grant insert on table "public"."ai_config" to "anon";
+
+grant references on table "public"."ai_config" to "anon";
+
+grant select on table "public"."ai_config" to "anon";
+
+grant trigger on table "public"."ai_config" to "anon";
+
+grant truncate on table "public"."ai_config" to "anon";
+
+grant update on table "public"."ai_config" to "anon";
 
 grant delete on table "public"."ai_config" to "authenticated";
 
@@ -675,18 +943,6 @@ grant trigger on table "public"."ai_config" to "authenticated";
 grant truncate on table "public"."ai_config" to "authenticated";
 
 grant update on table "public"."ai_config" to "authenticated";
-
-revoke delete on table "public"."ai_config" from "authenticated";
-
-revoke insert on table "public"."ai_config" from "authenticated";
-
-revoke references on table "public"."ai_config" from "authenticated";
-
-revoke trigger on table "public"."ai_config" from "authenticated";
-
-revoke truncate on table "public"."ai_config" from "authenticated";
-
-revoke update on table "public"."ai_config" from "authenticated";
 
 grant delete on table "public"."ai_config" to "service_role";
 
@@ -743,6 +999,48 @@ grant trigger on table "public"."audit_logs" to "service_role";
 grant truncate on table "public"."audit_logs" to "service_role";
 
 grant update on table "public"."audit_logs" to "service_role";
+
+grant delete on table "public"."beta_config" to "anon";
+
+grant insert on table "public"."beta_config" to "anon";
+
+grant references on table "public"."beta_config" to "anon";
+
+grant select on table "public"."beta_config" to "anon";
+
+grant trigger on table "public"."beta_config" to "anon";
+
+grant truncate on table "public"."beta_config" to "anon";
+
+grant update on table "public"."beta_config" to "anon";
+
+grant delete on table "public"."beta_config" to "authenticated";
+
+grant insert on table "public"."beta_config" to "authenticated";
+
+grant references on table "public"."beta_config" to "authenticated";
+
+grant select on table "public"."beta_config" to "authenticated";
+
+grant trigger on table "public"."beta_config" to "authenticated";
+
+grant truncate on table "public"."beta_config" to "authenticated";
+
+grant update on table "public"."beta_config" to "authenticated";
+
+grant delete on table "public"."beta_config" to "service_role";
+
+grant insert on table "public"."beta_config" to "service_role";
+
+grant references on table "public"."beta_config" to "service_role";
+
+grant select on table "public"."beta_config" to "service_role";
+
+grant trigger on table "public"."beta_config" to "service_role";
+
+grant truncate on table "public"."beta_config" to "service_role";
+
+grant update on table "public"."beta_config" to "service_role";
 
 grant delete on table "public"."blog_posts" to "anon";
 
@@ -1038,6 +1336,258 @@ grant truncate on table "public"."email_provider_config" to "service_role";
 
 grant update on table "public"."email_provider_config" to "service_role";
 
+grant delete on table "public"."fund_categories" to "anon";
+
+grant insert on table "public"."fund_categories" to "anon";
+
+grant references on table "public"."fund_categories" to "anon";
+
+grant select on table "public"."fund_categories" to "anon";
+
+grant trigger on table "public"."fund_categories" to "anon";
+
+grant truncate on table "public"."fund_categories" to "anon";
+
+grant update on table "public"."fund_categories" to "anon";
+
+grant delete on table "public"."fund_categories" to "authenticated";
+
+grant insert on table "public"."fund_categories" to "authenticated";
+
+grant references on table "public"."fund_categories" to "authenticated";
+
+grant select on table "public"."fund_categories" to "authenticated";
+
+grant trigger on table "public"."fund_categories" to "authenticated";
+
+grant truncate on table "public"."fund_categories" to "authenticated";
+
+grant update on table "public"."fund_categories" to "authenticated";
+
+grant delete on table "public"."fund_categories" to "service_role";
+
+grant insert on table "public"."fund_categories" to "service_role";
+
+grant references on table "public"."fund_categories" to "service_role";
+
+grant select on table "public"."fund_categories" to "service_role";
+
+grant trigger on table "public"."fund_categories" to "service_role";
+
+grant truncate on table "public"."fund_categories" to "service_role";
+
+grant update on table "public"."fund_categories" to "service_role";
+
+grant delete on table "public"."fund_tags" to "anon";
+
+grant insert on table "public"."fund_tags" to "anon";
+
+grant references on table "public"."fund_tags" to "anon";
+
+grant select on table "public"."fund_tags" to "anon";
+
+grant trigger on table "public"."fund_tags" to "anon";
+
+grant truncate on table "public"."fund_tags" to "anon";
+
+grant update on table "public"."fund_tags" to "anon";
+
+grant delete on table "public"."fund_tags" to "authenticated";
+
+grant insert on table "public"."fund_tags" to "authenticated";
+
+grant references on table "public"."fund_tags" to "authenticated";
+
+grant select on table "public"."fund_tags" to "authenticated";
+
+grant trigger on table "public"."fund_tags" to "authenticated";
+
+grant truncate on table "public"."fund_tags" to "authenticated";
+
+grant update on table "public"."fund_tags" to "authenticated";
+
+grant delete on table "public"."fund_tags" to "service_role";
+
+grant insert on table "public"."fund_tags" to "service_role";
+
+grant references on table "public"."fund_tags" to "service_role";
+
+grant select on table "public"."fund_tags" to "service_role";
+
+grant trigger on table "public"."fund_tags" to "service_role";
+
+grant truncate on table "public"."fund_tags" to "service_role";
+
+grant update on table "public"."fund_tags" to "service_role";
+
+grant delete on table "public"."funds" to "anon";
+
+grant insert on table "public"."funds" to "anon";
+
+grant references on table "public"."funds" to "anon";
+
+grant select on table "public"."funds" to "anon";
+
+grant trigger on table "public"."funds" to "anon";
+
+grant truncate on table "public"."funds" to "anon";
+
+grant update on table "public"."funds" to "anon";
+
+grant delete on table "public"."funds" to "authenticated";
+
+grant insert on table "public"."funds" to "authenticated";
+
+grant references on table "public"."funds" to "authenticated";
+
+grant select on table "public"."funds" to "authenticated";
+
+grant trigger on table "public"."funds" to "authenticated";
+
+grant truncate on table "public"."funds" to "authenticated";
+
+grant update on table "public"."funds" to "authenticated";
+
+grant delete on table "public"."funds" to "service_role";
+
+grant insert on table "public"."funds" to "service_role";
+
+grant references on table "public"."funds" to "service_role";
+
+grant select on table "public"."funds" to "service_role";
+
+grant trigger on table "public"."funds" to "service_role";
+
+grant truncate on table "public"."funds" to "service_role";
+
+grant update on table "public"."funds" to "service_role";
+
+grant delete on table "public"."influencer_categories" to "anon";
+
+grant insert on table "public"."influencer_categories" to "anon";
+
+grant references on table "public"."influencer_categories" to "anon";
+
+grant select on table "public"."influencer_categories" to "anon";
+
+grant trigger on table "public"."influencer_categories" to "anon";
+
+grant truncate on table "public"."influencer_categories" to "anon";
+
+grant update on table "public"."influencer_categories" to "anon";
+
+grant delete on table "public"."influencer_categories" to "authenticated";
+
+grant insert on table "public"."influencer_categories" to "authenticated";
+
+grant references on table "public"."influencer_categories" to "authenticated";
+
+grant select on table "public"."influencer_categories" to "authenticated";
+
+grant trigger on table "public"."influencer_categories" to "authenticated";
+
+grant truncate on table "public"."influencer_categories" to "authenticated";
+
+grant update on table "public"."influencer_categories" to "authenticated";
+
+grant delete on table "public"."influencer_categories" to "service_role";
+
+grant insert on table "public"."influencer_categories" to "service_role";
+
+grant references on table "public"."influencer_categories" to "service_role";
+
+grant select on table "public"."influencer_categories" to "service_role";
+
+grant trigger on table "public"."influencer_categories" to "service_role";
+
+grant truncate on table "public"."influencer_categories" to "service_role";
+
+grant update on table "public"."influencer_categories" to "service_role";
+
+grant delete on table "public"."influencer_tags" to "anon";
+
+grant insert on table "public"."influencer_tags" to "anon";
+
+grant references on table "public"."influencer_tags" to "anon";
+
+grant select on table "public"."influencer_tags" to "anon";
+
+grant trigger on table "public"."influencer_tags" to "anon";
+
+grant truncate on table "public"."influencer_tags" to "anon";
+
+grant update on table "public"."influencer_tags" to "anon";
+
+grant delete on table "public"."influencer_tags" to "authenticated";
+
+grant insert on table "public"."influencer_tags" to "authenticated";
+
+grant references on table "public"."influencer_tags" to "authenticated";
+
+grant select on table "public"."influencer_tags" to "authenticated";
+
+grant trigger on table "public"."influencer_tags" to "authenticated";
+
+grant truncate on table "public"."influencer_tags" to "authenticated";
+
+grant update on table "public"."influencer_tags" to "authenticated";
+
+grant delete on table "public"."influencer_tags" to "service_role";
+
+grant insert on table "public"."influencer_tags" to "service_role";
+
+grant references on table "public"."influencer_tags" to "service_role";
+
+grant select on table "public"."influencer_tags" to "service_role";
+
+grant trigger on table "public"."influencer_tags" to "service_role";
+
+grant truncate on table "public"."influencer_tags" to "service_role";
+
+grant update on table "public"."influencer_tags" to "service_role";
+
+grant delete on table "public"."influencers" to "anon";
+
+grant insert on table "public"."influencers" to "anon";
+
+grant references on table "public"."influencers" to "anon";
+
+grant select on table "public"."influencers" to "anon";
+
+grant trigger on table "public"."influencers" to "anon";
+
+grant truncate on table "public"."influencers" to "anon";
+
+grant update on table "public"."influencers" to "anon";
+
+grant delete on table "public"."influencers" to "authenticated";
+
+grant insert on table "public"."influencers" to "authenticated";
+
+grant references on table "public"."influencers" to "authenticated";
+
+grant select on table "public"."influencers" to "authenticated";
+
+grant trigger on table "public"."influencers" to "authenticated";
+
+grant truncate on table "public"."influencers" to "authenticated";
+
+grant update on table "public"."influencers" to "authenticated";
+
+grant delete on table "public"."influencers" to "service_role";
+
+grant insert on table "public"."influencers" to "service_role";
+
+grant references on table "public"."influencers" to "service_role";
+
+grant select on table "public"."influencers" to "service_role";
+
+grant trigger on table "public"."influencers" to "service_role";
+
+grant truncate on table "public"."influencers" to "service_role";
+
+grant update on table "public"."influencers" to "service_role";
+
 grant delete on table "public"."notifications" to "anon";
 
 grant insert on table "public"."notifications" to "anon";
@@ -1122,6 +1672,19 @@ grant truncate on table "public"."payment_gateway_config" to "service_role";
 
 grant update on table "public"."payment_gateway_config" to "service_role";
 
+grant delete on table "public"."payments" to "anon";
+
+grant insert on table "public"."payments" to "anon";
+
+grant references on table "public"."payments" to "anon";
+
+grant select on table "public"."payments" to "anon";
+
+grant trigger on table "public"."payments" to "anon";
+
+grant truncate on table "public"."payments" to "anon";
+
+grant update on table "public"."payments" to "anon";
 
 grant delete on table "public"."payments" to "authenticated";
 
@@ -1136,18 +1699,6 @@ grant trigger on table "public"."payments" to "authenticated";
 grant truncate on table "public"."payments" to "authenticated";
 
 grant update on table "public"."payments" to "authenticated";
-
-revoke delete on table "public"."payments" from "authenticated";
-
-revoke insert on table "public"."payments" from "authenticated";
-
-revoke references on table "public"."payments" from "authenticated";
-
-revoke trigger on table "public"."payments" from "authenticated";
-
-revoke truncate on table "public"."payments" from "authenticated";
-
-revoke update on table "public"."payments" from "authenticated";
 
 grant delete on table "public"."payments" to "service_role";
 
@@ -1246,6 +1797,132 @@ grant trigger on table "public"."processed_stripe_events" to "service_role";
 grant truncate on table "public"."processed_stripe_events" to "service_role";
 
 grant update on table "public"."processed_stripe_events" to "service_role";
+
+grant delete on table "public"."reddit_channel_categories" to "anon";
+
+grant insert on table "public"."reddit_channel_categories" to "anon";
+
+grant references on table "public"."reddit_channel_categories" to "anon";
+
+grant select on table "public"."reddit_channel_categories" to "anon";
+
+grant trigger on table "public"."reddit_channel_categories" to "anon";
+
+grant truncate on table "public"."reddit_channel_categories" to "anon";
+
+grant update on table "public"."reddit_channel_categories" to "anon";
+
+grant delete on table "public"."reddit_channel_categories" to "authenticated";
+
+grant insert on table "public"."reddit_channel_categories" to "authenticated";
+
+grant references on table "public"."reddit_channel_categories" to "authenticated";
+
+grant select on table "public"."reddit_channel_categories" to "authenticated";
+
+grant trigger on table "public"."reddit_channel_categories" to "authenticated";
+
+grant truncate on table "public"."reddit_channel_categories" to "authenticated";
+
+grant update on table "public"."reddit_channel_categories" to "authenticated";
+
+grant delete on table "public"."reddit_channel_categories" to "service_role";
+
+grant insert on table "public"."reddit_channel_categories" to "service_role";
+
+grant references on table "public"."reddit_channel_categories" to "service_role";
+
+grant select on table "public"."reddit_channel_categories" to "service_role";
+
+grant trigger on table "public"."reddit_channel_categories" to "service_role";
+
+grant truncate on table "public"."reddit_channel_categories" to "service_role";
+
+grant update on table "public"."reddit_channel_categories" to "service_role";
+
+grant delete on table "public"."reddit_channel_tags" to "anon";
+
+grant insert on table "public"."reddit_channel_tags" to "anon";
+
+grant references on table "public"."reddit_channel_tags" to "anon";
+
+grant select on table "public"."reddit_channel_tags" to "anon";
+
+grant trigger on table "public"."reddit_channel_tags" to "anon";
+
+grant truncate on table "public"."reddit_channel_tags" to "anon";
+
+grant update on table "public"."reddit_channel_tags" to "anon";
+
+grant delete on table "public"."reddit_channel_tags" to "authenticated";
+
+grant insert on table "public"."reddit_channel_tags" to "authenticated";
+
+grant references on table "public"."reddit_channel_tags" to "authenticated";
+
+grant select on table "public"."reddit_channel_tags" to "authenticated";
+
+grant trigger on table "public"."reddit_channel_tags" to "authenticated";
+
+grant truncate on table "public"."reddit_channel_tags" to "authenticated";
+
+grant update on table "public"."reddit_channel_tags" to "authenticated";
+
+grant delete on table "public"."reddit_channel_tags" to "service_role";
+
+grant insert on table "public"."reddit_channel_tags" to "service_role";
+
+grant references on table "public"."reddit_channel_tags" to "service_role";
+
+grant select on table "public"."reddit_channel_tags" to "service_role";
+
+grant trigger on table "public"."reddit_channel_tags" to "service_role";
+
+grant truncate on table "public"."reddit_channel_tags" to "service_role";
+
+grant update on table "public"."reddit_channel_tags" to "service_role";
+
+grant delete on table "public"."reddit_channels" to "anon";
+
+grant insert on table "public"."reddit_channels" to "anon";
+
+grant references on table "public"."reddit_channels" to "anon";
+
+grant select on table "public"."reddit_channels" to "anon";
+
+grant trigger on table "public"."reddit_channels" to "anon";
+
+grant truncate on table "public"."reddit_channels" to "anon";
+
+grant update on table "public"."reddit_channels" to "anon";
+
+grant delete on table "public"."reddit_channels" to "authenticated";
+
+grant insert on table "public"."reddit_channels" to "authenticated";
+
+grant references on table "public"."reddit_channels" to "authenticated";
+
+grant select on table "public"."reddit_channels" to "authenticated";
+
+grant trigger on table "public"."reddit_channels" to "authenticated";
+
+grant truncate on table "public"."reddit_channels" to "authenticated";
+
+grant update on table "public"."reddit_channels" to "authenticated";
+
+grant delete on table "public"."reddit_channels" to "service_role";
+
+grant insert on table "public"."reddit_channels" to "service_role";
+
+grant references on table "public"."reddit_channels" to "service_role";
+
+grant select on table "public"."reddit_channels" to "service_role";
+
+grant trigger on table "public"."reddit_channels" to "service_role";
+
+grant truncate on table "public"."reddit_channels" to "service_role";
+
+grant update on table "public"."reddit_channels" to "service_role";
 
 grant delete on table "public"."referrals" to "anon";
 
@@ -1415,6 +2092,19 @@ grant truncate on table "public"."tags" to "service_role";
 
 grant update on table "public"."tags" to "service_role";
 
+grant delete on table "public"."users" to "anon";
+
+grant insert on table "public"."users" to "anon";
+
+grant references on table "public"."users" to "anon";
+
+grant select on table "public"."users" to "anon";
+
+grant trigger on table "public"."users" to "anon";
+
+grant truncate on table "public"."users" to "anon";
+
+grant update on table "public"."users" to "anon";
 
 grant delete on table "public"."users" to "authenticated";
 
@@ -1430,18 +2120,6 @@ grant truncate on table "public"."users" to "authenticated";
 
 grant update on table "public"."users" to "authenticated";
 
-revoke delete on table "public"."users" from "authenticated";
-
-revoke insert on table "public"."users" from "authenticated";
-
-revoke references on table "public"."users" from "authenticated";
-
-revoke trigger on table "public"."users" from "authenticated";
-
-revoke truncate on table "public"."users" from "authenticated";
-
-revoke update on table "public"."users" from "authenticated";
-
 grant delete on table "public"."users" to "service_role";
 
 grant insert on table "public"."users" to "service_role";
@@ -1455,6 +2133,48 @@ grant trigger on table "public"."users" to "service_role";
 grant truncate on table "public"."users" to "service_role";
 
 grant update on table "public"."users" to "service_role";
+
+grant delete on table "public"."website_categories" to "anon";
+
+grant insert on table "public"."website_categories" to "anon";
+
+grant references on table "public"."website_categories" to "anon";
+
+grant select on table "public"."website_categories" to "anon";
+
+grant trigger on table "public"."website_categories" to "anon";
+
+grant truncate on table "public"."website_categories" to "anon";
+
+grant update on table "public"."website_categories" to "anon";
+
+grant delete on table "public"."website_categories" to "authenticated";
+
+grant insert on table "public"."website_categories" to "authenticated";
+
+grant references on table "public"."website_categories" to "authenticated";
+
+grant select on table "public"."website_categories" to "authenticated";
+
+grant trigger on table "public"."website_categories" to "authenticated";
+
+grant truncate on table "public"."website_categories" to "authenticated";
+
+grant update on table "public"."website_categories" to "authenticated";
+
+grant delete on table "public"."website_categories" to "service_role";
+
+grant insert on table "public"."website_categories" to "service_role";
+
+grant references on table "public"."website_categories" to "service_role";
+
+grant select on table "public"."website_categories" to "service_role";
+
+grant trigger on table "public"."website_categories" to "service_role";
+
+grant truncate on table "public"."website_categories" to "service_role";
+
+grant update on table "public"."website_categories" to "service_role";
 
 grant delete on table "public"."website_tags" to "anon";
 
