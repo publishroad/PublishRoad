@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/internal/jobs/email/process",
-      "schedule": "* * * * *"
+      "schedule": "0 3 * * *"
     }
   ],
   "headers": [

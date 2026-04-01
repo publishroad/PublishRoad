@@ -43,6 +43,7 @@ const QUEUE_DEAD_KEY = "queue:email:dead";
 
 const MAX_ATTEMPTS = Number(process.env.EMAIL_QUEUE_MAX_ATTEMPTS ?? 5);
 const RETRY_BASE_MS = Number(process.env.EMAIL_QUEUE_RETRY_BASE_MS ?? 2000);
+const SHOULD_PROCESS_IMMEDIATELY = process.env.EMAIL_QUEUE_IMMEDIATE_PROCESS !== "false";
 
 const isRedisConfigured =
   !!process.env.UPSTASH_REDIS_REST_URL &&
@@ -272,6 +273,18 @@ export async function enqueueEmailJob(
   };
 
   await enqueueRaw(job);
+
+  if (SHOULD_PROCESS_IMMEDIATELY) {
+    try {
+      await processEmailQueueBatch(1);
+    } catch (error) {
+      console.error("[EmailQueue] Immediate processing failed; job remains queued", {
+        jobId: job.id,
+        error,
+      });
+    }
+  }
+
   return { accepted: true, jobId: job.id };
 }
 
