@@ -15,12 +15,13 @@ type FinancialsQueryInput = {
 };
 
 const SCHEMA_CHECK_TTL_MS = 5 * 60 * 1000;
-let paymentTypeColumnCache: { value: boolean; checkedAt: number } | null = null;
+const paymentsColumnCache = new Map<string, { value: boolean; checkedAt: number }>();
 
-async function hasPaymentTypeColumn(): Promise<boolean> {
+async function hasPaymentsColumn(columnName: string): Promise<boolean> {
   const now = Date.now();
-  if (paymentTypeColumnCache && now - paymentTypeColumnCache.checkedAt < SCHEMA_CHECK_TTL_MS) {
-    return paymentTypeColumnCache.value;
+  const cached = paymentsColumnCache.get(columnName);
+  if (cached && now - cached.checkedAt < SCHEMA_CHECK_TTL_MS) {
+    return cached.value;
   }
 
   const rows = await db.$queryRaw<Array<{ exists: boolean }>>(Prisma.sql`
@@ -29,13 +30,29 @@ async function hasPaymentTypeColumn(): Promise<boolean> {
       FROM information_schema.columns
       WHERE table_schema = 'public'
         AND table_name = 'payments'
-        AND column_name = 'payment_type'
+        AND column_name = ${columnName}
     ) AS exists
   `);
 
   const exists = !!rows[0]?.exists;
-  paymentTypeColumnCache = { value: exists, checkedAt: now };
+  paymentsColumnCache.set(columnName, { value: exists, checkedAt: now });
   return exists;
+}
+
+async function hasPaymentTypeColumn(): Promise<boolean> {
+  return hasPaymentsColumn("payment_type");
+}
+
+async function resolveProviderPaymentIdExpr(): Promise<Prisma.Sql> {
+  if (await hasPaymentsColumn("provider_payment_id")) {
+    return Prisma.sql`p.provider_payment_id`;
+  }
+
+  if (await hasPaymentsColumn("providerPaymentId")) {
+    return Prisma.sql`p."providerPaymentId"`;
+  }
+
+  return Prisma.sql`NULL::text`;
 }
 
 function inferProvider(payment: {
@@ -50,7 +67,7 @@ function inferProvider(payment: {
     }
     return "PayPal";
   }
-  return "—";
+  return "Legacy / Other";
 }
 
 function toNumber(value: unknown): number {
@@ -63,7 +80,11 @@ function toNumber(value: unknown): number {
   return 0;
 }
 
-function buildWhereSql(input: FinancialsQueryInput, paymentTypeExpr: Prisma.Sql): Prisma.Sql {
+function buildWhereSql(
+  input: FinancialsQueryInput,
+  paymentTypeExpr: Prisma.Sql,
+  providerPaymentIdExpr: Prisma.Sql,
+): Prisma.Sql {
   const whereParts: Prisma.Sql[] = [];
 
   if (input.typeParam === "plan" || input.typeParam === "hire_us") {
@@ -88,9 +109,24 @@ function buildWhereSql(input: FinancialsQueryInput, paymentTypeExpr: Prisma.Sql)
   if (input.providerParam === "stripe") {
     whereParts.push(Prisma.sql`(p.stripe_payment_intent_id IS NOT NULL OR p.stripe_subscription_id IS NOT NULL)`);
   } else if (input.providerParam === "razorpay") {
-    whereParts.push(Prisma.sql`(p.stripe_payment_intent_id IS NULL AND p.stripe_subscription_id IS NULL AND (p.provider_payment_id LIKE 'pay_%' OR p.provider_payment_id LIKE 'order_%'))`);
+    whereParts.push(Prisma.sql`
+      (
+        p.stripe_payment_intent_id IS NULL
+        AND p.stripe_subscription_id IS NULL
+        AND ${providerPaymentIdExpr} IS NOT NULL
+        AND (${providerPaymentIdExpr} LIKE 'pay_%' OR ${providerPaymentIdExpr} LIKE 'order_%')
+      )
+    `);
   } else if (input.providerParam === "paypal") {
-    whereParts.push(Prisma.sql`(p.stripe_payment_intent_id IS NULL AND p.stripe_subscription_id IS NULL AND p.provider_payment_id IS NOT NULL AND p.provider_payment_id NOT LIKE 'pay_%' AND p.provider_payment_id NOT LIKE 'order_%')`);
+    whereParts.push(Prisma.sql`
+      (
+        p.stripe_payment_intent_id IS NULL
+        AND p.stripe_subscription_id IS NULL
+        AND ${providerPaymentIdExpr} IS NOT NULL
+        AND ${providerPaymentIdExpr} NOT LIKE 'pay_%'
+        AND ${providerPaymentIdExpr} NOT LIKE 'order_%'
+      )
+    `);
   }
 
   if (input.search) {
@@ -185,6 +221,7 @@ async function fetchFinancialStats(args: { paymentTypeExpr: Prisma.Sql; whereSql
 
 async function fetchFinancialTransactions(args: {
   paymentTypeExpr: Prisma.Sql;
+  providerPaymentIdExpr: Prisma.Sql;
   whereSql: Prisma.Sql;
   limit: number;
   skip: number;
@@ -199,7 +236,7 @@ async function fetchFinancialTransactions(args: {
       ${args.paymentTypeExpr} AS payment_type,
       p.stripe_payment_intent_id,
       p.stripe_subscription_id,
-      p.provider_payment_id,
+      ${args.providerPaymentIdExpr} AS provider_payment_id,
       u.id AS user_id,
       u.name AS user_name,
       u.email AS user_email,
@@ -256,7 +293,10 @@ async function fetchFinancialChart(args: {
 
 export async function getAdminFinancials(input: FinancialsQueryInput) {
   const skip = (input.page - 1) * input.limit;
-  const paymentTypeColumnExists = await hasPaymentTypeColumn();
+  const [paymentTypeColumnExists, providerPaymentIdExpr] = await Promise.all([
+    hasPaymentTypeColumn(),
+    resolveProviderPaymentIdExpr(),
+  ]);
 
   const inferredHireUsExpr = Prisma.sql`
     CASE
@@ -281,13 +321,13 @@ export async function getAdminFinancials(input: FinancialsQueryInput) {
         END
       `
     : inferredHireUsExpr;
-  const whereSql = buildWhereSql(input, paymentTypeExpr);
+  const whereSql = buildWhereSql(input, paymentTypeExpr, providerPaymentIdExpr);
 
   const defaultStatsFrom = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
   const statsWhereSql = buildWhereSql({
     ...input,
     fromParam: input.fromParam ?? defaultStatsFrom.toISOString().slice(0, 10),
-  }, paymentTypeExpr);
+  }, paymentTypeExpr, providerPaymentIdExpr);
 
   const isYearly = input.chartGrouping === "year";
   const chartStart = new Date();
@@ -303,11 +343,11 @@ export async function getAdminFinancials(input: FinancialsQueryInput) {
   const chartWhereSql = buildWhereSql({
     ...input,
     fromParam: input.fromParam ?? chartStart.toISOString().slice(0, 10),
-  }, paymentTypeExpr);
+  }, paymentTypeExpr, providerPaymentIdExpr);
 
   const [statsRows, transactionsRows, totalRows, chartRows] = await Promise.all([
     fetchFinancialStats({ paymentTypeExpr, whereSql: statsWhereSql }),
-    fetchFinancialTransactions({ paymentTypeExpr, whereSql, limit: input.limit, skip }),
+    fetchFinancialTransactions({ paymentTypeExpr, providerPaymentIdExpr, whereSql, limit: input.limit, skip }),
     fetchFinancialTotal(whereSql),
     fetchFinancialChart({ paymentTypeExpr, chartWhereSql, truncUnit }),
   ]);

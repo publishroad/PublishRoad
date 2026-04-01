@@ -337,8 +337,10 @@ export function PaymentConfigForm({ initialConfigs }: PaymentConfigFormProps) {
       {/* Active gateway banner */}
       <div className={`rounded-lg px-4 py-3 text-sm ${activeProviders.length > 0 ? "bg-navy/5 border border-navy/20 text-navy" : "bg-yellow-50 border border-yellow-200 text-yellow-800"}`}>
         {activeProviders.length > 0
-          ? <>Active: <span className="font-semibold">{activeProviders.map((p) => PROVIDER_META[p.provider].label).join(" + ")}</span> — payments enabled. {activeProviders.length > 1 && "Customers will choose at checkout."}</>
-          : <>No payment gateway is active. Configure and enable one below to accept payments.</>
+          ? <>
+              Active: <span className="font-semibold">{activeProviders.map((p) => PROVIDER_META[p.provider].label).join(" + ")}</span> — payments enabled. {activeProviders.length > 1 ? "Customers will see a gateway chooser popup at checkout." : "With one active gateway, checkout will go directly without a popup."}
+            </>
+          : <>No payment gateway is active. Configure and enable one or more gateways below to accept payments.</>
         }
       </div>
 
