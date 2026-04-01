@@ -1,5 +1,5 @@
 // Cache audit logs for 60 seconds — immutable historical data
-export const revalidate = 60;
+export const revalidate = 0;
 import { db } from "@/lib/db";
 import Link from "next/link";
 import { formatDate } from "@/lib/utils";

@@ -1,5 +1,5 @@
 // Cache website list for 60 seconds — changes are infrequent
-export const revalidate = 60;
+export const revalidate = 0;
 
 import { db } from "@/lib/db";
 import Link from "next/link";

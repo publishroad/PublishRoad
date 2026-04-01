@@ -181,6 +181,18 @@ type StatsRow = {
   hire_us_count: number | string | bigint;
 };
 
+type SegmentUsersRow = {
+  starter_users: number | string | bigint;
+  pro_users: number | string | bigint;
+  lifetime_users: number | string | bigint;
+  hire_us_starter_users: number | string | bigint;
+  hire_us_complete_users: number | string | bigint;
+};
+
+type FreeUsersRow = {
+  free_users: number | string | bigint;
+};
+
 type TransactionRow = {
   id: string;
   created_at: Date;
@@ -216,6 +228,48 @@ async function fetchFinancialStats(args: { paymentTypeExpr: Prisma.Sql; whereSql
     FROM payments p
     JOIN users u ON u.id = p.user_id
     ${args.whereSql}
+  `);
+}
+
+async function fetchFinancialSegmentUsers(args: { paymentTypeExpr: Prisma.Sql; whereSql: Prisma.Sql }) {
+  return db.$queryRaw<SegmentUsersRow[]>(Prisma.sql`
+    SELECT
+      COUNT(DISTINCT CASE WHEN ${args.paymentTypeExpr} = 'plan' AND COALESCE(pc.slug, '') = 'starter' THEN p.user_id END) AS starter_users,
+      COUNT(DISTINCT CASE WHEN ${args.paymentTypeExpr} = 'plan' AND COALESCE(pc.slug, '') = 'pro' THEN p.user_id END) AS pro_users,
+      COUNT(DISTINCT CASE WHEN ${args.paymentTypeExpr} = 'plan' AND COALESCE(pc.slug, '') = 'lifetime' THEN p.user_id END) AS lifetime_users,
+      COUNT(DISTINCT CASE WHEN ${args.paymentTypeExpr} = 'hire_us' AND p.amount_cents = 39900 THEN p.user_id END) AS hire_us_starter_users,
+      COUNT(DISTINCT CASE WHEN ${args.paymentTypeExpr} = 'hire_us' AND p.amount_cents = 99900 THEN p.user_id END) AS hire_us_complete_users
+    FROM payments p
+    JOIN users u ON u.id = p.user_id
+    LEFT JOIN plan_configs pc ON pc.id = p.plan_id
+    ${args.whereSql}
+  `);
+}
+
+async function fetchFreeUsersInRange(input: FinancialsQueryInput) {
+  const whereParts: Prisma.Sql[] = [Prisma.sql`COALESCE(pc.slug, 'free') = 'free'`];
+
+  if (input.fromParam) {
+    const fromDate = new Date(input.fromParam);
+    if (!Number.isNaN(fromDate.valueOf())) whereParts.push(Prisma.sql`u.created_at >= ${fromDate}`);
+  }
+
+  if (input.toParam) {
+    const toDate = new Date(input.toParam);
+    toDate.setHours(23, 59, 59, 999);
+    if (!Number.isNaN(toDate.valueOf())) whereParts.push(Prisma.sql`u.created_at <= ${toDate}`);
+  }
+
+  if (input.search) {
+    const like = `%${input.search}%`;
+    whereParts.push(Prisma.sql`(LOWER(u.email) LIKE ${like} OR LOWER(COALESCE(u.name, '')) LIKE ${like})`);
+  }
+
+  return db.$queryRaw<FreeUsersRow[]>(Prisma.sql`
+    SELECT COUNT(*) AS free_users
+    FROM users u
+    LEFT JOIN plan_configs pc ON pc.id = u.plan_id
+    WHERE ${Prisma.join(whereParts, " AND ")}
   `);
 }
 
@@ -322,11 +376,12 @@ export async function getAdminFinancials(input: FinancialsQueryInput) {
       `
     : inferredHireUsExpr;
   const whereSql = buildWhereSql(input, paymentTypeExpr, providerPaymentIdExpr);
-
-  const defaultStatsFrom = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
-  const statsWhereSql = buildWhereSql({
+  const statsWhereSql = whereSql;
+  const segmentWhereSql = buildWhereSql({
     ...input,
-    fromParam: input.fromParam ?? defaultStatsFrom.toISOString().slice(0, 10),
+    typeParam: "all",
+    statusParam: "all",
+    providerParam: "all",
   }, paymentTypeExpr, providerPaymentIdExpr);
 
   const isYearly = input.chartGrouping === "year";
@@ -345,8 +400,15 @@ export async function getAdminFinancials(input: FinancialsQueryInput) {
     fromParam: input.fromParam ?? chartStart.toISOString().slice(0, 10),
   }, paymentTypeExpr, providerPaymentIdExpr);
 
-  const [statsRows, transactionsRows, totalRows, chartRows] = await Promise.all([
+  const [statsRows, segmentUsersRows, freeUsersRows, transactionsRows, totalRows, chartRows] = await Promise.all([
     fetchFinancialStats({ paymentTypeExpr, whereSql: statsWhereSql }),
+    fetchFinancialSegmentUsers({ paymentTypeExpr, whereSql: segmentWhereSql }),
+    fetchFreeUsersInRange({
+      ...input,
+      typeParam: "all",
+      statusParam: "all",
+      providerParam: "all",
+    }),
     fetchFinancialTransactions({ paymentTypeExpr, providerPaymentIdExpr, whereSql, limit: input.limit, skip }),
     fetchFinancialTotal(whereSql),
     fetchFinancialChart({ paymentTypeExpr, chartWhereSql, truncUnit }),
@@ -359,6 +421,13 @@ export async function getAdminFinancials(input: FinancialsQueryInput) {
     total_count: 0,
     plan_count: 0,
     hire_us_count: 0,
+  };
+  const segmentUsersRow = segmentUsersRows[0] ?? {
+    starter_users: 0,
+    pro_users: 0,
+    lifetime_users: 0,
+    hire_us_starter_users: 0,
+    hire_us_complete_users: 0,
   };
 
   const transactions = transactionsRows.map((p) => ({
@@ -386,6 +455,12 @@ export async function getAdminFinancials(input: FinancialsQueryInput) {
   const totalCount = toNumber(statsRow.total_count);
   const planCount = toNumber(statsRow.plan_count);
   const hireUsCount = toNumber(statsRow.hire_us_count);
+  const freeUsers = toNumber(freeUsersRows[0]?.free_users ?? 0);
+  const starterUsers = toNumber(segmentUsersRow.starter_users);
+  const proUsers = toNumber(segmentUsersRow.pro_users);
+  const lifetimeUsers = toNumber(segmentUsersRow.lifetime_users);
+  const hireUsStarterUsers = toNumber(segmentUsersRow.hire_us_starter_users);
+  const hireUsCompleteUsers = toNumber(segmentUsersRow.hire_us_complete_users);
 
   return {
     stats: {
@@ -395,6 +470,12 @@ export async function getAdminFinancials(input: FinancialsQueryInput) {
       totalCount,
       planCount,
       hireUsCount,
+      freeUsers,
+      starterUsers,
+      proUsers,
+      lifetimeUsers,
+      hireUsStarterUsers,
+      hireUsCompleteUsers,
       totalRevenueFormatted: formatCurrency(totalRevenue, "USD"),
       planRevenueFormatted: formatCurrency(planRevenue, "USD"),
       hireUsRevenueFormatted: formatCurrency(hireUsRevenue, "USD"),

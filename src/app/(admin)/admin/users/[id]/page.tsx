@@ -1,5 +1,5 @@
 // Cache user details for 60 seconds — admin changes are infrequent
-export const revalidate = 60;
+export const revalidate = 0;
 
 import { db } from "@/lib/db";
 import { notFound } from "next/navigation";
@@ -16,9 +16,15 @@ export default async function AdminUserDetailPage({
   const [user, plans, curations] = await Promise.all([
     db.user.findUnique({
       where: { id },
-      include: {
-        plan: true,
-        payments: { orderBy: { createdAt: "desc" }, take: 5 },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        createdAt: true,
+        authProvider: true,
+        emailVerifiedAt: true,
+        planId: true,
+        creditsRemaining: true,
       },
     }),
     db.planConfig.findMany({ where: { isActive: true }, orderBy: { priceCents: "asc" } }),

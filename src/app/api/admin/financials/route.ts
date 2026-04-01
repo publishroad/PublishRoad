@@ -4,6 +4,8 @@ import { verifyAdminSession } from "@/lib/admin-auth";
 import { getAdminFinancials } from "@/lib/admin/financials-service";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
 
 async function requireAdmin() {
   const cookieStore = await cookies();
@@ -45,9 +47,13 @@ export async function GET(req: NextRequest) {
       toParam,
     });
 
-    return NextResponse.json(data);
+    const response = NextResponse.json(data);
+    response.headers.set("Cache-Control", "private, no-store, no-cache, must-revalidate, max-age=0");
+    return response;
   } catch (error) {
     console.error("Admin financials API failed:", error);
-    return NextResponse.json({ error: "Failed to load financials data" }, { status: 500 });
+    const response = NextResponse.json({ error: "Failed to load financials data" }, { status: 500 });
+    response.headers.set("Cache-Control", "private, no-store, no-cache, must-revalidate, max-age=0");
+    return response;
   }
 }

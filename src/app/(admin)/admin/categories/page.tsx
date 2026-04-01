@@ -1,5 +1,5 @@
-// Cache lookup table for 300 seconds — rarely changes
-export const revalidate = 300;
+// Always render fresh in admin so lookup changes reflect immediately.
+export const revalidate = 0;
 
 import { db } from "@/lib/db";
 import { LookupManager } from "@/components/admin/LookupManager";

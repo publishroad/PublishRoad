@@ -38,6 +38,12 @@ type ApiResponse = {
     totalCount: number;
     planCount: number;
     hireUsCount: number;
+    freeUsers: number;
+    starterUsers: number;
+    proUsers: number;
+    lifetimeUsers: number;
+    hireUsStarterUsers: number;
+    hireUsCompleteUsers: number;
     totalRevenueFormatted: string;
     planRevenueFormatted: string;
     hireUsRevenueFormatted: string;
@@ -103,14 +109,20 @@ export function FinancialsDashboard() {
   const { data, isLoading, isError, error } = useQuery<ApiResponse>({
     queryKey: ["admin-financials", page, typeFilter, statusFilter, providerFilter, chartGrouping, search, dateRange],
     queryFn: async () => {
-      const res = await fetch(`/api/admin/financials?${buildParams()}`);
+      const res = await fetch(`/api/admin/financials?${buildParams()}`, {
+        cache: "no-store",
+      });
       if (!res.ok) {
         const payload = await res.json().catch(() => null);
         throw new Error(payload?.error ?? "Failed to fetch financials");
       }
       return res.json() as Promise<ApiResponse>;
     },
-    staleTime: 30_000,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 
   function handlePill(pill: (typeof DATE_PILLS)[number]) {
@@ -130,6 +142,8 @@ export function FinancialsDashboard() {
   }
 
   const stats = data?.stats;
+  const segmentWindowLabel = dateRange ? "selected period" : "all time";
+
   const statCards = [
     {
       label: "Total Revenue",
@@ -158,10 +172,61 @@ export function FinancialsDashboard() {
     {
       label: "All Transactions",
       value: stats ? stats.totalCount.toLocaleString() : "—",
-      sub: "All time",
+      sub: dateRange ? "Selected period" : "All time",
       icon: "📊",
       iconBg: "bg-orange-50",
       iconColor: "text-orange-600",
+    },
+  ];
+
+  const userMixCards = [
+    {
+      label: "Free Users",
+      value: stats ? stats.freeUsers.toLocaleString() : "—",
+      sub: dateRange ? "Free signups in selected period" : "All free users",
+      icon: "🆓",
+      iconBg: "bg-slate-50",
+      iconColor: "text-slate-600",
+    },
+    {
+      label: "Starter Users",
+      value: stats ? stats.starterUsers.toLocaleString() : "—",
+      sub: `Distinct users — ${segmentWindowLabel}`,
+      icon: "🌱",
+      iconBg: "bg-cyan-50",
+      iconColor: "text-cyan-600",
+    },
+    {
+      label: "Pro Users",
+      value: stats ? stats.proUsers.toLocaleString() : "—",
+      sub: `Distinct users — ${segmentWindowLabel}`,
+      icon: "⚡",
+      iconBg: "bg-indigo-50",
+      iconColor: "text-indigo-600",
+    },
+    {
+      label: "Lifetime Users",
+      value: stats ? stats.lifetimeUsers.toLocaleString() : "—",
+      sub: `Distinct users — ${segmentWindowLabel}`,
+      icon: "♾️",
+      iconBg: "bg-violet-50",
+      iconColor: "text-violet-600",
+    },
+    {
+      label: "Hire Us Starter",
+      value: stats ? stats.hireUsStarterUsers.toLocaleString() : "—",
+      sub: `Distinct users — ${segmentWindowLabel}`,
+      icon: "🤝",
+      iconBg: "bg-amber-50",
+      iconColor: "text-amber-600",
+    },
+    {
+      label: "Hire Us Complete",
+      value: stats ? stats.hireUsCompleteUsers.toLocaleString() : "—",
+      sub: `Distinct users — ${segmentWindowLabel}`,
+      icon: "🚀",
+      iconBg: "bg-emerald-50",
+      iconColor: "text-emerald-600",
     },
   ];
 
@@ -178,6 +243,18 @@ export function FinancialsDashboard() {
         {statCards.map((s) => (
           <StatCard key={s.label} {...s} />
         ))}
+      </div>
+
+      <div>
+        <div className="mb-3">
+          <h2 className="text-sm font-semibold text-gray-900">User Breakdown</h2>
+          <p className="text-xs text-gray-400 mt-0.5">Updates automatically from the selected financial period</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-5">
+          {userMixCards.map((s) => (
+            <StatCard key={s.label} {...s} />
+          ))}
+        </div>
       </div>
 
       {/* Filters */}

@@ -1,5 +1,5 @@
 // Cache blog list for 60 seconds — admin view, changes are infrequent
-export const revalidate = 60;
+export const revalidate = 0;
 import { db } from "@/lib/db";
 import Link from "next/link";
 import { formatDate } from "@/lib/utils";

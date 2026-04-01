@@ -1,5 +1,5 @@
 // Cache settings for 300 seconds — form-based, changes are infrequent
-export const revalidate = 300;
+export const revalidate = 0;
 
 import { db } from "@/lib/db";
 import { isMissingRelationError } from "@/lib/db-error-utils";

@@ -1,5 +1,5 @@
 // Cache pricing for 300 seconds — changes are infrequent
-export const revalidate = 300;
+export const revalidate = 0;
 import { db } from "@/lib/db";
 import { PricingAdminForm } from "@/components/admin/PricingAdminForm";
 import { AppHeader } from "@/components/dashboard/AppHeader";

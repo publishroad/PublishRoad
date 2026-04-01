@@ -1,5 +1,5 @@
 // Cache blog editor for 300 seconds — changes are saved to database
-export const revalidate = 300;
+export const revalidate = 0;
 import { db } from "@/lib/db";
 import { notFound } from "next/navigation";
 import { BlogEditor } from "@/components/admin/BlogEditor";
