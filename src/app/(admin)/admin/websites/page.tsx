@@ -2,12 +2,13 @@
 export const revalidate = 0;
 
 import { db } from "@/lib/db";
+import { Prisma } from "@prisma/client";
 import Link from "next/link";
 import { formatDate } from "@/lib/utils";
 import { AppHeader } from "@/components/dashboard/AppHeader";
 import { BulkImportModal } from "@/components/admin/BulkImportModal";
 
-interface SearchParams { q?: string; type?: string; page?: string; }
+interface SearchParams { q?: string; type?: string; category?: string; page?: string; }
 const PAGE_SIZE = 25;
 
 const typeStyle: Record<string, string> = {
@@ -20,15 +21,67 @@ export default async function AdminWebsitesPage({ searchParams }: { searchParams
   const params = await searchParams;
   const page = parseInt(params.page ?? "1");
   const skip = (page - 1) * PAGE_SIZE;
-  const where = {
-    ...(params.q ? { OR: [{ name: { contains: params.q, mode: "insensitive" as const } }, { url: { contains: params.q, mode: "insensitive" as const } }] } : {}),
-    ...(params.type ? { type: params.type as "distribution" | "guest_post" | "press_release" } : {}),
-  };
+  const baseFilters: Prisma.WebsiteWhereInput[] = [
+    ...(params.q
+      ? [{
+          OR: [
+            { name: { contains: params.q, mode: "insensitive" as const } },
+            { url: { contains: params.q, mode: "insensitive" as const } },
+          ],
+        }]
+      : []),
+    ...(params.type
+      ? [{ type: params.type as "distribution" | "guest_post" | "press_release" }]
+      : []),
+  ];
+  const categoryFilter: Prisma.WebsiteWhereInput[] = params.category
+    ? [
+        {
+          OR: [
+            { categoryId: params.category },
+            { websiteCategories: { some: { categoryId: params.category } } },
+          ],
+        },
+      ]
+    : [];
+  const where: Prisma.WebsiteWhereInput =
+    baseFilters.length > 0 || categoryFilter.length > 0
+      ? { AND: [...baseFilters, ...categoryFilter] }
+      : {};
 
-  const [websites, total] = await Promise.all([
+  const [websites, total, categories] = await Promise.all([
     db.website.findMany({ where, orderBy: [{ isActive: "desc" }, { da: "desc" }], skip, take: PAGE_SIZE }),
     db.website.count({ where }),
+    db.category.findMany({
+      where: { isActive: true },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
   ]);
+
+  const categoryCountRows = await Promise.all(
+    categories.map(async (category) => {
+      const countWhere: Prisma.WebsiteWhereInput = {
+        AND: [
+          ...baseFilters,
+          {
+            OR: [
+              { categoryId: category.id },
+              { websiteCategories: { some: { categoryId: category.id } } },
+            ],
+          },
+        ],
+      };
+
+      const count = await db.website.count({ where: countWhere });
+      return { categoryId: category.id, count };
+    })
+  );
+
+  const categoryCountById = new Map(
+    categoryCountRows.map((row) => [row.categoryId, row.count])
+  );
+
   const totalPages = Math.ceil(total / PAGE_SIZE);
   type WebsiteRow = (typeof websites)[number];
 
@@ -55,6 +108,14 @@ export default async function AdminWebsitesPage({ searchParams }: { searchParams
               <option value="distribution">Distribution</option>
               <option value="guest_post">Guest Post</option>
               <option value="press_release">Press Release</option>
+            </select>
+            <select name="category" defaultValue={params.category} className="h-9 rounded-xl border border-gray-200 px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#465FFF]/20 focus:border-[#465FFF]">
+              <option value="">All Categories</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name} ({(categoryCountById.get(category.id) ?? 0).toLocaleString()})
+                </option>
+              ))}
             </select>
             <button type="submit" className="h-9 px-4 rounded-xl bg-[#465FFF] text-white text-sm font-medium hover:bg-[#3d55e8] transition-colors">Filter</button>
           </form>
@@ -111,8 +172,8 @@ export default async function AdminWebsitesPage({ searchParams }: { searchParams
           <div className="flex items-center justify-between">
             <p className="text-sm text-gray-400">Page {page} of {totalPages}</p>
             <div className="flex gap-2">
-              {page > 1 && <Link href={`/admin/websites?${new URLSearchParams({ ...(params.q ? { q: params.q } : {}), ...(params.type ? { type: params.type } : {}), page: String(page - 1) })}`} className="h-9 px-4 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium hover:bg-gray-50 flex items-center transition-colors">Previous</Link>}
-              {page < totalPages && <Link href={`/admin/websites?${new URLSearchParams({ ...(params.q ? { q: params.q } : {}), ...(params.type ? { type: params.type } : {}), page: String(page + 1) })}`} className="h-9 px-4 rounded-xl bg-[#465FFF] text-white text-sm font-medium flex items-center transition-colors">Next</Link>}
+              {page > 1 && <Link href={`/admin/websites?${new URLSearchParams({ ...(params.q ? { q: params.q } : {}), ...(params.type ? { type: params.type } : {}), ...(params.category ? { category: params.category } : {}), page: String(page - 1) })}`} className="h-9 px-4 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium hover:bg-gray-50 flex items-center transition-colors">Previous</Link>}
+              {page < totalPages && <Link href={`/admin/websites?${new URLSearchParams({ ...(params.q ? { q: params.q } : {}), ...(params.type ? { type: params.type } : {}), ...(params.category ? { category: params.category } : {}), page: String(page + 1) })}`} className="h-9 px-4 rounded-xl bg-[#465FFF] text-white text-sm font-medium flex items-center transition-colors">Next</Link>}
             </div>
           </div>
         )}

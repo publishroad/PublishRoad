@@ -77,23 +77,23 @@ export async function PUT(
         await tx.websiteCategory.createMany({ data: categoryIds.map((categoryId) => ({ websiteId: id, categoryId })) });
       }
 
-      await tx.websiteCountry.deleteMany({ where: { websiteId: id } }).catch((error) => {
-        if (!isMissingRelationError(error, "website_countries")) {
-          throw error;
-        }
-      });
-      if (countryIds.length > 0) {
-        await tx.websiteCountry
-          .createMany({ data: countryIds.map((countryId) => ({ websiteId: id, countryId })) })
-          .catch((error) => {
-            if (!isMissingRelationError(error, "website_countries")) {
-              throw error;
-            }
-          });
-      }
-
       return updatedWebsite;
     });
+
+    // Keep country relation sync outside the main transaction so legacy schemas
+    // without website_countries do not invalidate core website field updates.
+    try {
+      await db.websiteCountry.deleteMany({ where: { websiteId: id } });
+      if (countryIds.length > 0) {
+        await db.websiteCountry.createMany({
+          data: countryIds.map((countryId) => ({ websiteId: id, countryId })),
+        });
+      }
+    } catch (error) {
+      if (!isMissingRelationError(error, "website_countries")) {
+        throw error;
+      }
+    }
 
     return NextResponse.json(website);
   } catch (error) {
