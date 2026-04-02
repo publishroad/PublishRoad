@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { mkdir, writeFile } from "fs/promises";
+import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import path from "path";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
@@ -13,6 +13,49 @@ const ALLOWED_IMAGE_TYPES = new Set([
   "image/webp",
   "image/gif",
 ]);
+
+type R2Config = {
+  accountId: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  bucketName: string;
+  publicUrl: string;
+  endpoint: string;
+};
+
+function getR2Config(): R2Config | null {
+  const accountId = process.env.R2_ACCOUNT_ID?.trim() ?? "";
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID?.trim() ?? "";
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY?.trim() ?? "";
+  const bucketName = process.env.R2_BUCKET_NAME?.trim() ?? "";
+  const publicUrl = process.env.R2_PUBLIC_URL?.trim() ?? "";
+  const endpoint = process.env.R2_ENDPOINT?.trim() ?? "";
+
+  if (!accountId || !accessKeyId || !secretAccessKey || !bucketName || !publicUrl || !endpoint) {
+    return null;
+  }
+
+  return {
+    accountId,
+    accessKeyId,
+    secretAccessKey,
+    bucketName,
+    publicUrl: publicUrl.replace(/\/+$/, ""),
+    endpoint,
+  };
+}
+
+function createR2Client(config: R2Config) {
+  return new S3Client({
+    region: "auto",
+    endpoint: config.endpoint,
+    forcePathStyle: true,
+    credentials: {
+      accessKeyId: config.accessKeyId,
+      secretAccessKey: config.secretAccessKey,
+    },
+  });
+}
 
 async function requireAdmin() {
   const cookieStore = await cookies();
@@ -49,6 +92,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const r2Config = getR2Config();
+  if (!r2Config) {
+    return NextResponse.json(
+      { error: "R2 storage is not configured. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME, R2_PUBLIC_URL, and R2_ENDPOINT." },
+      { status: 500 }
+    );
+  }
+
   const formData = await req.formData();
   const file = formData.get("file");
 
@@ -72,13 +123,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unsupported image format" }, { status: 415 });
   }
 
-  const uploadsDir = path.join(process.cwd(), "public", "uploads", "blog");
-  await mkdir(uploadsDir, { recursive: true });
-
   const fileName = `${Date.now()}-${randomUUID()}${extension}`;
-  const filePath = path.join(uploadsDir, fileName);
+  const objectKey = `uploads/blog/${fileName}`;
   const bytes = await file.arrayBuffer();
-  await writeFile(filePath, Buffer.from(bytes));
+  const client = createR2Client(r2Config);
 
-  return NextResponse.json({ url: `/uploads/blog/${fileName}` });
+  await client.send(
+    new PutObjectCommand({
+      Bucket: r2Config.bucketName,
+      Key: objectKey,
+      Body: Buffer.from(bytes),
+      ContentType: file.type,
+      CacheControl: "public, max-age=31536000, immutable",
+    })
+  );
+
+  return NextResponse.json({ url: `${r2Config.publicUrl}/${objectKey}` });
 }

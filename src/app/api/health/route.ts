@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ListObjectsV2Command, S3Client } from "@aws-sdk/client-s3";
 import { db } from "@/lib/db";
 import { redis } from "@/lib/redis";
 import Stripe from "stripe";
@@ -64,6 +65,41 @@ export async function GET() {
     checks.email = "error";
   } else {
     checks.email = "ok";
+  }
+
+  // R2 storage check
+  const r2AccountId = process.env.R2_ACCOUNT_ID?.trim() ?? "";
+  const r2AccessKeyId = process.env.R2_ACCESS_KEY_ID?.trim() ?? "";
+  const r2SecretAccessKey = process.env.R2_SECRET_ACCESS_KEY?.trim() ?? "";
+  const r2BucketName = process.env.R2_BUCKET_NAME?.trim() ?? "";
+  const r2Endpoint = process.env.R2_ENDPOINT?.trim() ?? "";
+  const hasR2Config =
+    !!r2AccountId && !!r2AccessKeyId && !!r2SecretAccessKey && !!r2BucketName && !!r2Endpoint;
+
+  if (!hasR2Config) {
+    checks.r2 = process.env.NODE_ENV === "production" ? "error" : "skipped";
+  } else {
+    try {
+      const r2Client = new S3Client({
+        region: "auto",
+        endpoint: r2Endpoint,
+        forcePathStyle: true,
+        credentials: {
+          accessKeyId: r2AccessKeyId,
+          secretAccessKey: r2SecretAccessKey,
+        },
+      });
+
+      await r2Client.send(
+        new ListObjectsV2Command({
+          Bucket: r2BucketName,
+          MaxKeys: 1,
+        })
+      );
+      checks.r2 = "ok";
+    } catch {
+      checks.r2 = "error";
+    }
   }
 
   const allOk = Object.values(checks).every((v) => v === "ok" || v === "skipped");
