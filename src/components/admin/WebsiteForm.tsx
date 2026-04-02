@@ -52,6 +52,7 @@ export function WebsiteForm({ website, countries, categories, tags }: WebsiteFor
   const [selectedTags, setSelectedTags] = useState<string[]>(website?.tagIds ?? []);
   const [selectedCategories, setSelectedCategories] = useState<string[]>(website?.categoryIds ?? []);
   const [selectedCountries, setSelectedCountries] = useState<string[]>(website?.countryIds ?? []);
+  const [isWorldwideSelected, setIsWorldwideSelected] = useState<boolean>(website ? website.countryIds.length === 0 : true);
   const [duplicateDomain, setDuplicateDomain] = useState<string | null>(null);
   const [duplicateConflicts, setDuplicateConflicts] = useState<DuplicateConflict[]>([]);
   const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
@@ -61,6 +62,7 @@ export function WebsiteForm({ website, countries, categories, tags }: WebsiteFor
     setSelectedTags(website?.tagIds ?? []);
     setSelectedCategories(website?.categoryIds ?? []);
     setSelectedCountries(website?.countryIds ?? []);
+    setIsWorldwideSelected(website ? website.countryIds.length === 0 : true);
   }, [website]);
 
   const {
@@ -164,7 +166,12 @@ export function WebsiteForm({ website, countries, categories, tags }: WebsiteFor
       return;
     }
 
-    const payload = { ...data, tagIds: selectedTags, categoryIds: selectedCategories, countryIds: selectedCountries };
+    const payload = {
+      ...data,
+      tagIds: selectedTags,
+      categoryIds: selectedCategories,
+      countryIds: isWorldwideSelected ? [] : selectedCountries,
+    };
     const url = website
       ? `/api/admin/websites/${website.id}`
       : "/api/admin/websites";
@@ -289,13 +296,19 @@ export function WebsiteForm({ website, countries, categories, tags }: WebsiteFor
             {errors.traffic && <p className="text-xs text-error">{errors.traffic.message}</p>}
           </div>
           <div className="col-span-2 space-y-2">
-            <Label>Countries (optional — leave empty for Global / Any)</Label>
+            <Label>Countries (optional — leave empty for Worldwide)</Label>
             <div className="flex flex-wrap gap-2">
-              {selectedCountries.length === 0 && (
-                <span className="text-xs px-2.5 py-1 rounded-full border border-navy bg-navy text-white">
-                  🌍 Global / Any
-                </span>
-              )}
+              <button
+                type="button"
+                onClick={() => setIsWorldwideSelected((prev) => !prev)}
+                className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                  isWorldwideSelected
+                    ? "bg-navy text-white border-navy"
+                    : "border-border-gray text-medium-gray hover:border-navy hover:text-navy"
+                }`}
+              >
+                🌍 Worldwide
+              </button>
               {countries.map((c) => (
                 <button
                   key={c.id}
@@ -317,13 +330,16 @@ export function WebsiteForm({ website, countries, categories, tags }: WebsiteFor
                 </button>
               ))}
             </div>
-            {selectedCountries.length > 0 && (
+            {(selectedCountries.length > 0 || !isWorldwideSelected) && (
               <button
                 type="button"
-                onClick={() => setSelectedCountries([])}
+                onClick={() => {
+                  setSelectedCountries([]);
+                  setIsWorldwideSelected(true);
+                }}
                 className="text-xs text-medium-gray underline hover:text-navy"
               >
-                Clear all (reset to Global)
+                Clear all (reset to Worldwide)
               </button>
             )}
           </div>
