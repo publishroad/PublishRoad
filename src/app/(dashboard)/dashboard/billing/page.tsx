@@ -7,6 +7,7 @@ import { AppHeader } from "@/components/dashboard/AppHeader";
 import { CurrentPlanCard } from "@/components/dashboard/billing/CurrentPlanCard";
 import { PaymentHistorySection } from "@/components/dashboard/billing/PaymentHistorySection";
 import { PricingSection } from "@/components/dashboard/billing/PricingSection";
+import { pricingComparisonRows } from "@/components/public/PricingBelowFold";
 import { auth } from "@/lib/auth";
 import { CacheKeys, CacheTTL, getCachedWithLock } from "@/lib/cache";
 import { db } from "@/lib/db";
@@ -48,20 +49,6 @@ const fallbackPlans = [
     credits: -1,
     features: ["Unlimited curations", "50+ results each", "Priority AI matching", "All future features", "Priority support"],
   },
-];
-
-const comparisonRows = [
-  { feature: "Curations included", values: ["1", "1", "10/mo", "Unlimited"] },
-  { feature: "Results per curation", values: ["5 (masked)", "50+", "50+", "50+"] },
-  { feature: "Distribution sites (A)", values: [true, true, true, true] },
-  { feature: "Guest post sites (B)", values: [true, true, true, true] },
-  { feature: "Press release sites (C)", values: [true, true, true, true] },
-  { feature: "Country targeting", values: [true, true, true, true] },
-  { feature: "Export results", values: [false, true, true, true] },
-  { feature: "Priority AI matching", values: [false, false, true, true] },
-  { feature: "Email notifications", values: [false, false, true, true] },
-  { feature: "All future features", values: [false, false, false, true] },
-  { feature: "Priority support", values: [false, false, false, true] },
 ];
 
 async function getPlans() {
@@ -192,7 +179,7 @@ export default async function BillingPage() {
               features: (plan.features as string[]) ?? [],
             }))}
             currentPlanSlug={user?.plan?.slug ?? "free"}
-            comparisonRows={comparisonRows}
+            comparisonRows={pricingComparisonRows}
           />
 
           <PaymentHistorySection payments={recentPayments} />

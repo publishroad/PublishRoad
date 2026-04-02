@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-const comparisonRows = [
+export const pricingComparisonRows = [
   { feature: "Curations included", values: ["1", "1", "1 + all sections", "15/month"] },
   { feature: "Results per section", values: ["Up to 5", "Up to 20", "Up to 20", "Up to 20"] },
   { feature: "Distribution Sites", values: [true, true, true, true] },
@@ -72,7 +72,7 @@ export function PricingBelowFold() {
               </div>
             ))}
           </div>
-          {comparisonRows.map((row, i) => (
+          {pricingComparisonRows.map((row, i) => (
             <div
               key={i}
               className="grid grid-cols-5 border-b border-slate-50 hover:bg-slate-50/50 transition-colors"

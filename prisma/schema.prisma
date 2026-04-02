@@ -130,10 +130,11 @@ model Country {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  websites    Website[]
-  curations   Curation[]
-  influencers Influencer[]
-  funds       Fund[]
+  websites         Website[]
+  websiteCountries WebsiteCountry[]
+  curations        Curation[]
+  influencers      Influencer[]
+  funds            Fund[]
 
   @@map("countries")
 }
@@ -308,6 +309,7 @@ model Website {
   subCategory       SubCategory?      @relation(fields: [subCategoryId], references: [id])
   websiteTags       WebsiteTag[]
   websiteCategories WebsiteCategory[]
+  websiteCountries  WebsiteCountry[]
   curationResults   CurationResult[]
 
   @@index([type, isActive])
@@ -722,6 +724,17 @@ model WebsiteCategory {
 
   @@id([websiteId, categoryId])
   @@map("website_categories")
+}
+
+model WebsiteCountry {
+  websiteId String @map("website_id")
+  countryId String @map("country_id")
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  country Country @relation(fields: [countryId], references: [id], onDelete: Cascade)
+
+  @@id([websiteId, countryId])
+  @@map("website_countries")
 }
 
 model InfluencerCategory {

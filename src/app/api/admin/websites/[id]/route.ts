@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { verifyAdminSession } from "@/lib/admin-auth";
+import { findWebsiteDomainConflicts } from "@/lib/admin/website-domain-duplicates";
 import { websiteSchema } from "@/lib/validations/admin/website";
 
 async function requireAdmin() {
@@ -29,10 +30,27 @@ export async function PUT(
     return NextResponse.json({ error: "Invalid input" }, { status: 422 });
   }
 
-  const { tagIds, categoryIds, ...data } = parsed.data;
+  const { tagIds, categoryIds, countryIds, ...data } = parsed.data;
+
+  const duplicateCheck = await findWebsiteDomainConflicts({
+    url: data.url,
+    excludeWebsiteId: id,
+  });
+  if (duplicateCheck.conflicts.length > 0) {
+    return NextResponse.json(
+      {
+        error: "This domain already exists in the distribution list.",
+        duplicateDomain: duplicateCheck.domain,
+        conflicts: duplicateCheck.conflicts,
+      },
+      { status: 409 }
+    );
+  }
 
   // categoryId kept for curation backward compat — set to first selection
   const primaryCategoryId = categoryIds[0] ?? null;
+  // countryId kept for curation scoring backward compat — set to first selection
+  const primaryCountryId = countryIds[0] ?? null;
 
   try {
     const website = await db.$transaction(async (tx) => {
@@ -40,7 +58,7 @@ export async function PUT(
         where: { id },
         data: {
           ...data,
-          countryId: data.countryId || null,
+          countryId: primaryCountryId,
           categoryId: primaryCategoryId,
           description: data.description || null,
         },
@@ -56,6 +74,11 @@ export async function PUT(
       await tx.websiteCategory.deleteMany({ where: { websiteId: id } });
       if (categoryIds.length > 0) {
         await tx.websiteCategory.createMany({ data: categoryIds.map((categoryId) => ({ websiteId: id, categoryId })) });
+      }
+
+      await tx.websiteCountry.deleteMany({ where: { websiteId: id } });
+      if (countryIds.length > 0) {
+        await tx.websiteCountry.createMany({ data: countryIds.map((countryId) => ({ websiteId: id, countryId })) });
       }
 
       return updatedWebsite;
