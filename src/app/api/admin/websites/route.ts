@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { db } from "@/lib/db";
+import { isMissingRelationError } from "@/lib/db-error-utils";
 import { Prisma } from "@prisma/client";
 import { verifyAdminSession } from "@/lib/admin-auth";
 import { findWebsiteDomainConflicts } from "@/lib/admin/website-domain-duplicates";
@@ -62,7 +63,13 @@ export async function POST(req: NextRequest) {
         ? db.websiteCategory.createMany({ data: categoryIds.map((categoryId) => ({ websiteId: website.id, categoryId })) })
         : Promise.resolve(),
       countryIds.length > 0
-        ? db.websiteCountry.createMany({ data: countryIds.map((countryId) => ({ websiteId: website.id, countryId })) })
+        ? db.websiteCountry
+            .createMany({ data: countryIds.map((countryId) => ({ websiteId: website.id, countryId })) })
+            .catch((error) => {
+              if (!isMissingRelationError(error, "website_countries")) {
+                throw error;
+              }
+            })
         : Promise.resolve(),
     ]);
 
