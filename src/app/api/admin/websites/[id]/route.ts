@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { db } from "@/lib/db";
+import { isMissingRelationError } from "@/lib/db-error-utils";
 import { Prisma } from "@prisma/client";
 import { verifyAdminSession } from "@/lib/admin-auth";
 import { findWebsiteDomainConflicts } from "@/lib/admin/website-domain-duplicates";
@@ -76,9 +77,19 @@ export async function PUT(
         await tx.websiteCategory.createMany({ data: categoryIds.map((categoryId) => ({ websiteId: id, categoryId })) });
       }
 
-      await tx.websiteCountry.deleteMany({ where: { websiteId: id } });
+      await tx.websiteCountry.deleteMany({ where: { websiteId: id } }).catch((error) => {
+        if (!isMissingRelationError(error, "website_countries")) {
+          throw error;
+        }
+      });
       if (countryIds.length > 0) {
-        await tx.websiteCountry.createMany({ data: countryIds.map((countryId) => ({ websiteId: id, countryId })) });
+        await tx.websiteCountry
+          .createMany({ data: countryIds.map((countryId) => ({ websiteId: id, countryId })) })
+          .catch((error) => {
+            if (!isMissingRelationError(error, "website_countries")) {
+              throw error;
+            }
+          });
       }
 
       return updatedWebsite;
