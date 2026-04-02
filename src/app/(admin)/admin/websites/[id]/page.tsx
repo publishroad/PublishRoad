@@ -21,6 +21,7 @@ async function getData(id: string) {
       include: {
         websiteTags: { select: { tagId: true } },
         websiteCategories: { select: { categoryId: true } },
+        websiteCountries: { select: { countryId: true } },
       },
     }),
     db.country.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
@@ -34,6 +35,7 @@ async function getData(id: string) {
       ...website,
       tagIds: website.websiteTags.map((t) => t.tagId),
       categoryIds: website.websiteCategories.map((c) => c.categoryId),
+      countryIds: website.websiteCountries.map((c) => c.countryId),
     },
     countries,
     categories,

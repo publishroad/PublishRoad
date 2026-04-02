@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -27,6 +28,7 @@ interface WebsiteFormProps {
     traffic: number;
     tagIds: string[];
     categoryIds: string[];
+    countryIds: string[];
     description: string | null;
     countryId: string | null;
     isActive: boolean;
@@ -38,17 +40,35 @@ interface WebsiteFormProps {
   tags: Tag[];
 }
 
+interface DuplicateConflict {
+  id: string;
+  name: string;
+  url: string;
+  categories: Array<{ id: string; name: string }>;
+}
+
 export function WebsiteForm({ website, countries, categories, tags }: WebsiteFormProps) {
   const router = useRouter();
   const [selectedTags, setSelectedTags] = useState<string[]>(website?.tagIds ?? []);
   const [selectedCategories, setSelectedCategories] = useState<string[]>(website?.categoryIds ?? []);
+  const [selectedCountries, setSelectedCountries] = useState<string[]>(website?.countryIds ?? []);
+  const [duplicateDomain, setDuplicateDomain] = useState<string | null>(null);
+  const [duplicateConflicts, setDuplicateConflicts] = useState<DuplicateConflict[]>([]);
+  const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
+  const requestSeq = useRef(0);
 
   useEffect(() => {
     setSelectedTags(website?.tagIds ?? []);
     setSelectedCategories(website?.categoryIds ?? []);
+    setSelectedCountries(website?.countryIds ?? []);
   }, [website]);
 
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>({
+  const {
+    register,
+    handleSubmit,
+    watch,
+    formState: { errors, isSubmitting },
+  } = useForm<FormData>({
     resolver: zodResolver(websiteSchema) as Resolver<FormData>,
     defaultValues: website
       ? {
@@ -60,7 +80,7 @@ export function WebsiteForm({ website, countries, categories, tags }: WebsiteFor
           spamScore: website.spamScore,
           traffic: website.traffic,
           description: website.description ?? "",
-          countryId: website.countryId ?? "",
+          countryIds: website.countryIds,
           categoryIds: website.categoryIds,
           isActive: website.isActive,
           isPinned: website.isPinned,
@@ -80,8 +100,71 @@ export function WebsiteForm({ website, countries, categories, tags }: WebsiteFor
         },
   });
 
+  const watchedUrl = watch("url");
+
+  async function checkDuplicateUrlNow(rawUrl: string) {
+    const urlValue = rawUrl.trim();
+    if (!urlValue) {
+      setDuplicateDomain(null);
+      setDuplicateConflicts([]);
+      return;
+    }
+
+    try {
+      const parsed = new URL(urlValue);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        setDuplicateDomain(null);
+        setDuplicateConflicts([]);
+        return;
+      }
+    } catch {
+      setDuplicateDomain(null);
+      setDuplicateConflicts([]);
+      return;
+    }
+
+    const currentReq = ++requestSeq.current;
+    setIsCheckingDuplicate(true);
+
+    const res = await fetch("/api/admin/websites/check-duplicate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: urlValue,
+        excludeWebsiteId: website?.id,
+      }),
+    }).catch(() => null);
+
+    if (currentReq !== requestSeq.current) {
+      return;
+    }
+
+    setIsCheckingDuplicate(false);
+
+    if (!res?.ok) {
+      return;
+    }
+
+    const payload = await res.json().catch(() => null);
+    setDuplicateDomain(payload?.domain ?? null);
+    setDuplicateConflicts(Array.isArray(payload?.conflicts) ? payload.conflicts : []);
+  }
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void checkDuplicateUrlNow(watchedUrl ?? "");
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [watchedUrl]);
+
   async function onSubmit(data: FormData) {
-    const payload = { ...data, tagIds: selectedTags, categoryIds: selectedCategories };
+    if (duplicateConflicts.length > 0) {
+      toast.error("This domain already exists in the distribution list. Please use a different domain.");
+      return;
+    }
+
+    const payload = { ...data, tagIds: selectedTags, categoryIds: selectedCategories, countryIds: selectedCountries };
     const url = website
       ? `/api/admin/websites/${website.id}`
       : "/api/admin/websites";
@@ -95,6 +178,10 @@ export function WebsiteForm({ website, countries, categories, tags }: WebsiteFor
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
+      if (res.status === 409 && Array.isArray(err?.conflicts)) {
+        setDuplicateDomain(err.duplicateDomain ?? null);
+        setDuplicateConflicts(err.conflicts);
+      }
       toast.error(err.error ?? "Failed to save");
       return;
     }
@@ -134,7 +221,43 @@ export function WebsiteForm({ website, countries, categories, tags }: WebsiteFor
           </div>
           <div className="col-span-2 space-y-1.5">
             <Label htmlFor="url">URL</Label>
-            <Input id="url" {...register("url")} placeholder="https://techcrunch.com" />
+            <Input
+              id="url"
+              {...register("url", {
+                onBlur: (event) => {
+                  void checkDuplicateUrlNow(event.target.value ?? "");
+                },
+              })}
+              placeholder="https://techcrunch.com"
+            />
+            {isCheckingDuplicate && !errors.url && (
+              <p className="text-xs text-medium-gray">Checking for existing domains...</p>
+            )}
+            {!errors.url && duplicateConflicts.length > 0 && (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700 space-y-1">
+                <p className="font-medium">
+                  This domain already exists{duplicateDomain ? ` (${duplicateDomain})` : ""}.
+                </p>
+                {duplicateConflicts.map((conflict) => (
+                  <div key={conflict.id} className="space-y-1">
+                    <p>
+                      Existing: <span className="font-medium">{conflict.name}</span> - {conflict.url}
+                    </p>
+                    <p>
+                      Categories: {conflict.categories.length > 0
+                        ? conflict.categories.map((category) => category.name).join(", ")
+                        : "None assigned"}
+                    </p>
+                    <Link
+                      href={`/admin/websites/${conflict.id}`}
+                      className="inline-block text-xs font-medium text-red-800 underline hover:text-red-900"
+                    >
+                      Open existing record
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            )}
             {errors.url && <p className="text-xs text-error">{errors.url.message}</p>}
           </div>
           <div className="space-y-1.5">
@@ -165,14 +288,44 @@ export function WebsiteForm({ website, countries, categories, tags }: WebsiteFor
             <Input id="traffic" type="number" {...register("traffic")} min={0} />
             {errors.traffic && <p className="text-xs text-error">{errors.traffic.message}</p>}
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="countryId">Country (optional)</Label>
-            <select id="countryId" {...register("countryId")} className="w-full border border-border-gray rounded-lg px-3 py-2 text-sm">
-              <option value="">Global / Any</option>
+          <div className="col-span-2 space-y-2">
+            <Label>Countries (optional — leave empty for Global / Any)</Label>
+            <div className="flex flex-wrap gap-2">
+              {selectedCountries.length === 0 && (
+                <span className="text-xs px-2.5 py-1 rounded-full border border-navy bg-navy text-white">
+                  🌍 Global / Any
+                </span>
+              )}
               {countries.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() =>
+                    setSelectedCountries((prev) =>
+                      prev.includes(c.id)
+                        ? prev.filter((id) => id !== c.id)
+                        : [...prev, c.id]
+                    )
+                  }
+                  className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                    selectedCountries.includes(c.id)
+                      ? "bg-navy text-white border-navy"
+                      : "border-border-gray text-medium-gray hover:border-navy hover:text-navy"
+                  }`}
+                >
+                  {c.name}
+                </button>
               ))}
-            </select>
+            </div>
+            {selectedCountries.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setSelectedCountries([])}
+                className="text-xs text-medium-gray underline hover:text-navy"
+              >
+                Clear all (reset to Global)
+              </button>
+            )}
           </div>
           <div className="col-span-2 space-y-2">
             <Label>Categories (optional, select multiple)</Label>
@@ -257,7 +410,11 @@ export function WebsiteForm({ website, countries, categories, tags }: WebsiteFor
       </div>
 
       <div className="flex gap-3">
-        <Button type="submit" className="bg-navy hover:bg-blue" disabled={isSubmitting}>
+        <Button
+          type="submit"
+          className="bg-navy hover:bg-blue"
+          disabled={isSubmitting || duplicateConflicts.length > 0}
+        >
           {isSubmitting ? "Saving..." : website ? "Update Website" : "Create Website"}
         </Button>
         <Button type="button" variant="outline" onClick={() => router.back()}>

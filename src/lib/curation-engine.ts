@@ -386,7 +386,7 @@ async function processCuration(
   const websiteBaseConditions: Prisma.WebsiteWhereInput[] = [
     { isActive: true },
     { isExcluded: false },
-    ...(countryId ? [{ OR: [{ countryId }, { countryId: null }] } as Prisma.WebsiteWhereInput] : []),
+    ...(countryId ? [{ OR: [{ websiteCountries: { some: { countryId } } }, { websiteCountries: { none: {} } }] } as Prisma.WebsiteWhereInput] : []),
     ...(categoryId ? [{ OR: [{ categoryId }, { categoryId: null }] } as Prisma.WebsiteWhereInput] : []),
   ];
 

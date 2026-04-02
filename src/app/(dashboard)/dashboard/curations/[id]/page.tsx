@@ -598,7 +598,7 @@ function ResultRow({
                         <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">DA {result.website.da}</span>
                         <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">PA {result.website.pa}</span>
                         <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">Spam {result.website.spamScore}%</span>
-                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">Traffic {(result.website.traffic).toLocaleString()}</span>
+                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">Traffic {(result.website.traffic).toLocaleString()}/mo</span>
                       </>
                     )}
 
