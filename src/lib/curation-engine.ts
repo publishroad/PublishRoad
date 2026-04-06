@@ -8,6 +8,12 @@ import {
 } from "@/lib/ai";
 import { sendCurationCompleteEmail } from "@/lib/email";
 import { invalidateUserProfile } from "@/lib/cache";
+import {
+  type CurationSectionKey,
+  getGlobalEnabledCurationSections,
+  normalizeEnabledCurationSections,
+  setCurationEnabledSectionsSnapshotTx,
+} from "@/lib/curation-steps-config";
 
 interface RunCurationInput {
   userId: string;
@@ -214,6 +220,7 @@ export async function runCuration(input: RunCurationInput) {
   } = input;
 
   const LIFETIME_MONTHLY_CREDITS = 15;
+  const enabledSectionsSnapshot = await getGlobalEnabledCurationSections();
 
   // ─── Step 1: Credit check + deduction in a single transaction ─────────────
   // We use a raw transaction with SELECT FOR UPDATE to prevent race conditions
@@ -296,6 +303,14 @@ export async function runCuration(input: RunCurationInput) {
       },
     });
 
+    await setCurationEnabledSectionsSnapshotTx({
+      tx,
+      curationId: curation.id,
+      sections: enabledSectionsSnapshot,
+    }).catch(() => {
+      // Best effort: if migrations are not applied yet, generation still continues.
+    });
+
     return curation;
   });
 
@@ -306,7 +321,18 @@ export async function runCuration(input: RunCurationInput) {
   // ─── Step 2: Process asynchronously (fire and forget) ────────────────────
   // In production this would be a background job/queue (e.g., Upstash QStash).
   // For simplicity here we use a detached async function.
-  processCuration(result.id, userId, productUrl, keywords, problemStatement, solutionStatement, description, countryId, categoryId).catch(
+  processCuration(
+    result.id,
+    userId,
+    productUrl,
+    keywords,
+    problemStatement,
+    solutionStatement,
+    description,
+    countryId,
+    categoryId,
+    enabledSectionsSnapshot
+  ).catch(
     async (err) => {
       if (err instanceof Error && err.message === "CURATION_CANCELLED") {
         return;
@@ -352,7 +378,8 @@ async function processCuration(
   solutionStatement: string,
   description: string | null,
   countryId?: string | null,
-  categoryId?: string | null
+  categoryId?: string | null,
+  enabledSectionsSnapshot: CurationSectionKey[] = ["a", "b", "c", "d", "e", "f"]
 ) {
   await assertCurationStillExists(curationId);
   await setProgress(curationId, "started");
@@ -740,18 +767,19 @@ async function processCuration(
     categoryName: category?.name,
   };
 
-  const aiWebsiteResults = await rankWebsitesForCuration(productCtx, finalSites);
-
   const finalInfluencers = scoredInfluencers.slice(0, 60);
   const finalReddit = scoredReddit.slice(0, 60);
   const finalFunds = scoredFunds.slice(0, 40);
 
-  const socialAndFundResults = await rankSocialAndFundsForCuration(
-    productCtx,
-    finalInfluencers,
-    finalReddit,
-    finalFunds
-  );
+  const [aiWebsiteResults, socialAndFundResults] = await Promise.all([
+    rankWebsitesForCuration(productCtx, finalSites),
+    rankSocialAndFundsForCuration(
+      productCtx,
+      finalInfluencers,
+      finalReddit,
+      finalFunds
+    ),
+  ]);
 
   // ─── Description-priority ranking for all sections A-F ────────────────────
   // Priority order: entities with descriptions first, then entities without
@@ -955,14 +983,16 @@ async function processCuration(
     }));
 
   const allResults = [...websiteResults, ...influencerResults, ...redditResults, ...fundResults];
+  const enabledSections = new Set(normalizeEnabledCurationSections(enabledSectionsSnapshot));
+  const filteredResults = allResults.filter((result) => enabledSections.has(result.section));
 
   // ─── Step 5: Save results ──────────────────────────────────────────────────
   await assertCurationStillExists(curationId);
   await setProgress(curationId, "saving_results");
 
-  if (allResults.length > 0) {
+  if (filteredResults.length > 0) {
     await db.curationResult.createMany({
-      data: allResults.map((r) => {
+      data: filteredResults.map((r) => {
         const row = r as Record<string, unknown>;
         return {
           curationId,
@@ -1036,7 +1066,7 @@ async function processCuration(
         userId,
         type: "curation_complete",
         title: "Curation complete",
-        message: `Your curation for ${productUrl} is ready with ${allResults.length} results.`,
+        message: `Your curation for ${productUrl} is ready with ${filteredResults.length} results.`,
       },
     });
   }

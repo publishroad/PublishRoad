@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { buildTwitterMetadata, getSiteUrl, getSocialImages } from "@/lib/seo";
+import { getHireUsPricingConfig } from "@/lib/hire-us-config";
+import { formatUsdFromCents } from "@/lib/hire-us-config-shared";
 
 const APP_URL = getSiteUrl();
 
@@ -54,7 +56,61 @@ const serviceSchema = {
   ],
 };
 
-export default function HireUsPage() {
+export default async function HireUsPage() {
+  const pricingConfig = await getHireUsPricingConfig();
+  const starterPrice = formatUsdFromCents(pricingConfig.starter.priceCents);
+  const completePrice = formatUsdFromCents(pricingConfig.complete.priceCents);
+  const heroBadges = [
+    "Fully managed execution",
+    `2 packages from ${starterPrice}`,
+    "Results in 25 days",
+    "No recurring fees",
+  ];
+  const proofStats = [
+    { value: "2", label: "Packages to choose from" },
+    { value: "20+", label: "Guest post sites (Complete)" },
+    { value: "25", label: "Days to full execution" },
+    { value: starterPrice, label: "Starting price" },
+  ];
+  const advantages = [
+    {
+      icon: "🗄️",
+      title: "Your Curated List, Fully Executed",
+      description:
+        "We work directly from your PublishRoad curation list — no guessing, no generic databases. Every submission and guest post targets the exact sites curated for your product.",
+    },
+    {
+      icon: "✍️",
+      title: "Real Guest Posts, Not Spam",
+      description:
+        "Each guest post is written and placed by our team on real sites from your list — up to 20 placements, each with a contextual backlink to your product.",
+    },
+    {
+      icon: "📰",
+      title: "Press Release Flexibility",
+      description:
+        "We connect you with our press release team and explain all available tiers. Some options are included in your fee; others can be added based on your budget and goals.",
+    },
+    {
+      icon: "📋",
+      title: "Full Transparency",
+      description:
+        "You receive a detailed report of every directory submitted and every guest post published — with live links and timestamps.",
+    },
+    {
+      icon: "⚡",
+      title: "25-Day Turnaround",
+      description:
+        "We commit to completing everything within 25 days of receiving your brief and payment.",
+    },
+    {
+      icon: "💼",
+      title: "Two Packages, No Surprises",
+      description:
+        `${starterPrice} for directory submissions. ${completePrice} for the full package including guest posts and press release connections. Press release costs (if any) are clarified upfront before you commit.`,
+    },
+  ];
+
   return (
     <div style={{ fontFamily: "var(--font-sans)" }}>
       <script
@@ -154,7 +210,7 @@ export default function HireUsPage() {
                 textDecoration: "none",
               }}
             >
-              View Packages — from $399 →
+              View Packages — from {starterPrice} →
             </Link>
             <a
               href="#pricing"
@@ -566,13 +622,13 @@ export default function HireUsPage() {
                 Starter
               </div>
               <div style={{ fontFamily: "var(--font-heading)", fontSize: "4rem", fontWeight: 800, color: "#020617", lineHeight: 1 }}>
-                $399
+                {starterPrice}
               </div>
               <p style={{ color: "#94a3b8", fontSize: "0.9rem", marginTop: "0.5rem", marginBottom: "2rem" }}>
                 One-time · No recurring fees
               </p>
               <div className="space-y-3 mb-8 text-left flex-1">
-                {starterIncludes.map((item, i) => (
+                {pricingConfig.starter.includes.map((item, i) => (
                   <div key={i} className="flex items-start gap-3">
                     <svg className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "#5B58F6" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
@@ -593,7 +649,7 @@ export default function HireUsPage() {
                   marginTop: "auto",
                 }}
               >
-                Get Started — $399 →
+                Get Started — {starterPrice} →
               </Link>
             </div>
 
@@ -616,13 +672,13 @@ export default function HireUsPage() {
                 Complete ✦ Most Popular
               </div>
               <div style={{ fontFamily: "var(--font-heading)", fontSize: "4rem", fontWeight: 800, color: "white", lineHeight: 1 }}>
-                $999
+                {completePrice}
               </div>
               <p style={{ color: "rgba(255,255,255,0.7)", fontSize: "0.9rem", marginTop: "0.5rem", marginBottom: "2rem" }}>
                 One-time · No recurring fees
               </p>
               <div className="space-y-3 mb-8 text-left flex-1">
-                {completeIncludes.map((item, i) => (
+                {pricingConfig.complete.includes.map((item, i) => (
                   <div key={i} className="flex items-start gap-3">
                     <svg className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "rgba(255,255,255,0.9)" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
@@ -643,7 +699,7 @@ export default function HireUsPage() {
                   marginTop: "auto",
                 }}
               >
-                Get Started — $999 →
+                Get Started — {completePrice} →
               </Link>
             </div>
 
@@ -766,7 +822,7 @@ export default function HireUsPage() {
           </div>
 
           <div className="space-y-4">
-            {faqItems.map((item, i) => (
+            {pricingConfig.faq.map((item, i) => (
               <div
                 key={i}
                 style={{
@@ -832,7 +888,7 @@ export default function HireUsPage() {
             </h2>
             <p className="text-slate-400 font-light mb-10 text-lg" style={{ maxWidth: "560px", margin: "0 auto 2.5rem" }}>
               Every day you don&apos;t distribute is a day your competitors get the placements you should have.
-              Starting at $399 for full directory submissions, or $999 for the complete package with guest posts and press release connections — all done for you in 25 days.
+              Starting at {starterPrice} for full directory submissions, or {completePrice} for the complete package with guest posts and press release connections — all done for you in 25 days.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link href="/hire-us/start?package=starter">
@@ -843,7 +899,7 @@ export default function HireUsPage() {
                     boxShadow: "0 0 30px rgba(91,88,246,0.5), 0 8px 20px rgba(91,88,246,0.3)",
                   }}
                 >
-                  View Packages — from $399 →
+                  View Packages — from {starterPrice} →
                 </button>
               </Link>
               <Link href="/pricing">
@@ -864,19 +920,6 @@ export default function HireUsPage() {
 
 /* ─── Data ─── */
 
-const heroBadges = [
-  "Fully managed execution",
-  "2 packages from $399",
-  "Results in 25 days",
-  "No recurring fees",
-];
-
-const proofStats = [
-  { value: "2", label: "Packages to choose from" },
-  { value: "20+", label: "Guest post sites (Complete)" },
-  { value: "25", label: "Days to full execution" },
-  { value: "$399", label: "Starting price" },
-];
 
 const services = [
   {
@@ -949,95 +992,4 @@ const fitChecks = [
   },
 ];
 
-const starterIncludes = [
-  "Submissions to all sites on your curated distribution list",
-  "Full execution report with all submission links",
-  "15-day delivery guarantee",
-];
 
-const completeIncludes = [
-  "Everything in the Starter package",
-  "Guest posts on up to 20 sites from your curation list",
-  "Direct introduction to our press release team",
-  "Press release may be included free or charged separately by tier",
-  "Full execution report with all submissions & published links",
-  "25-day delivery guarantee",
-];
-
-const advantages = [
-  {
-    icon: "🗄️",
-    title: "Your Curated List, Fully Executed",
-    description:
-      "We work directly from your PublishRoad curation list — no guessing, no generic databases. Every submission and guest post targets the exact sites curated for your product.",
-  },
-  {
-    icon: "✍️",
-    title: "Real Guest Posts, Not Spam",
-    description:
-      "Each guest post is written and placed by our team on real sites from your list — up to 20 placements, each with a contextual backlink to your product.",
-  },
-  {
-    icon: "📰",
-    title: "Press Release Flexibility",
-    description:
-      "We connect you with our press release team and explain all available tiers. Some options are included in your fee; others can be added based on your budget and goals.",
-  },
-  {
-    icon: "📋",
-    title: "Full Transparency",
-    description:
-      "You receive a detailed report of every directory submitted and every guest post published — with live links and timestamps.",
-  },
-  {
-    icon: "⚡",
-    title: "25-Day Turnaround",
-    description:
-      "We commit to completing everything within 25 days of receiving your brief and payment.",
-  },
-  {
-    icon: "💼",
-    title: "Two Packages, No Surprises",
-    description:
-      "$399 for directory submissions. $999 for the full package including guest posts and press release connections. Press release costs (if any) are clarified upfront before you commit.",
-  },
-];
-
-const faqItems = [
-  {
-    q: "What's the difference between the two packages?",
-    a: "The Starter ($399) covers directory submissions only — we submit your app to every site on your PublishRoad curation list and send you a full report. The Complete ($999) includes everything in Starter plus guest posts on up to 20 sites from your list, and a direct introduction to our press release team.",
-  },
-  {
-    q: "Which package should I choose?",
-    a: "If you mainly need visibility through directory listings, Starter at $399 is the right pick. If you also want SEO-boosting guest posts and press coverage, the Complete package at $999 gives you all three services.",
-  },
-  {
-    q: "How do I get started?",
-    a: "Click 'Get Started' on the package you want and reach out via the contact page with your product URL and PublishRoad curation list. We review every request and reply within 24 hours to confirm it's a good fit before you pay.",
-  },
-  {
-    q: "How long does it take?",
-    a: "Starter is delivered within 15 days. Complete is delivered within 25 days. Both timelines begin from when we receive your brief and payment.",
-  },
-  {
-    q: "How does the press release work? (Complete only)",
-    a: "We introduce you to our press release partners and walk you through all available tiers. Depending on the distribution scope you choose, the press release may be included at no extra charge or require a separate fee. We'll give you a clear breakdown before you commit to anything.",
-  },
-  {
-    q: "Do you guarantee results?",
-    a: "We guarantee execution — every directory on your list will be submitted to, up to 20 guest posts will be published (Complete), and you'll be connected with the press release team. We do not guarantee acceptance by third-party sites, but every action is properly completed and documented.",
-  },
-  {
-    q: "What do I receive at the end?",
-    a: "A detailed report with every directory submitted (Starter & Complete) and every guest post published with live links (Complete), plus a summary of press release options and next steps.",
-  },
-  {
-    q: "Is this different from using the PublishRoad app myself?",
-    a: "Yes. The app gives you the curated list — you do the work yourself. The Hire Us service means our team handles all the submissions and guest posts for you. Think of it as the difference between a map and a guided tour.",
-  },
-  {
-    q: "Do you offer refunds?",
-    a: "Due to the manual nature of the work, we do not offer refunds once execution has begun. We always confirm your product is a good fit and clarify any press release costs before taking payment.",
-  },
-];

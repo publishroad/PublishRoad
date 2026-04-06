@@ -11,7 +11,7 @@ import {
   type ActivePaymentProvider,
 } from "@/lib/payments/service";
 import {
-  HIRE_US_PACKAGES,
+  getHireUsPackageDefinitions,
   parseHireUsPackageSlug,
   resolveHireUsCheckoutPlanId,
 } from "@/lib/hire-us";
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
   if (!packageSlug) {
     return NextResponse.json({ error: "Invalid package" }, { status: 422 });
   }
-  const packageConfig = HIRE_US_PACKAGES[packageSlug];
+  const packageConfig = (await getHireUsPackageDefinitions())[packageSlug];
 
   const planId = await resolveHireUsCheckoutPlanId(packageSlug);
   if (!planId) {

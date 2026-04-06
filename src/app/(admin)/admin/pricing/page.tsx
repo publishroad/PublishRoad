@@ -3,13 +3,16 @@ export const revalidate = 0;
 import { db } from "@/lib/db";
 import { PricingAdminForm } from "@/components/admin/PricingAdminForm";
 import { PricingComparisonEditor } from "@/components/admin/PricingComparisonEditor";
+import { HireUsPricingEditor } from "@/components/admin/HireUsPricingEditor";
 import { AppHeader } from "@/components/dashboard/AppHeader";
 import { normalizePricingComparisonRows } from "@/lib/pricing-comparison";
+import { getHireUsPricingConfig } from "@/lib/hire-us-config";
 
 export default async function AdminPricingPage() {
-  const [plans, betaConfig] = await Promise.all([
+  const [plans, betaConfig, hireUsConfig] = await Promise.all([
     db.planConfig.findMany({ orderBy: { priceCents: "asc" } }),
     db.betaConfig.findUnique({ where: { id: "default" } }),
+    getHireUsPricingConfig(),
   ]);
 
   const freePlanFullAccessEnabled = betaConfig?.enabled ?? false;
@@ -51,6 +54,8 @@ export default async function AdminPricingPage() {
           plans={plans}
           initialFreePlanFullAccessEnabled={freePlanFullAccessEnabled}
         />
+
+        <HireUsPricingEditor initialConfig={hireUsConfig} />
 
         <PricingComparisonEditor initialRows={comparisonRows} />
       </div>

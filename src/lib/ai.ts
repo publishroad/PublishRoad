@@ -3,6 +3,25 @@ import { db } from "./db";
 import { getCachedWithLock, CacheKeys, CacheTTL } from "./cache";
 import { decryptField } from "./server-utils";
 
+const DEFAULT_AI_TIMEOUT_MS = Number(process.env.CURATION_AI_TIMEOUT_MS ?? 25000);
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  return new Promise<T>((resolve, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(message));
+    }, timeoutMs);
+
+    promise
+      .then(resolve)
+      .catch(reject)
+      .finally(() => {
+        if (timer) clearTimeout(timer);
+      });
+  });
+}
+
 // ─────────────────────────────────────────────
 // Load AI config from DB (cached 5min)
 // ─────────────────────────────────────────────
@@ -59,13 +78,17 @@ export async function callAI(
   const config = await getAiConfig();
   const client = await getAiClient();
 
-  const response = await client.chat.completions.create({
-    model: config.modelName,
-    messages,
-    max_tokens: options?.maxTokens ?? config.maxTokens,
-    temperature: options?.temperature ?? config.temperature,
-    response_format: { type: "json_object" },
-  });
+  const response = await withTimeout(
+    client.chat.completions.create({
+      model: config.modelName,
+      messages,
+      max_tokens: options?.maxTokens ?? config.maxTokens,
+      temperature: options?.temperature ?? config.temperature,
+      response_format: { type: "json_object" },
+    }),
+    DEFAULT_AI_TIMEOUT_MS,
+    "AI request timed out"
+  );
 
   const content = response.choices[0]?.message?.content;
   if (!content) throw new Error("AI returned empty response");
@@ -292,7 +315,7 @@ const JSON_RULES = `Rules:
 const JSON_SCHEMA = `Return ONLY:
 {
   "results": [
-    { "entityId": "PREFIX:id", "matchScore": 0.95, "matchReason": "why relevant (max 100 chars)", "section": "x", "rank": 1 }
+    { "entityId": "PREFIX:id", "matchScore": 0.95, "matchReason": "1–2 sentences: why this fits + what the user should do or say (max 160 chars)", "section": "x", "rank": 1 }
   ]
 }`;
 
@@ -323,7 +346,10 @@ Task: From each section above, select the TOP 20 sites where this product could 
 - SECONDARY signal: Are the site's tags/description aligned with the product's domain?
 - TIEBREAKER only: DA/PA quality and low spam score
 - The section value for each result MUST be exactly "a", "b", or "c" as labeled above
-- matchReason must explain WHY this site fits this specific product (max 120 chars)
+- matchReason must be 1–2 sentences tailored to the section type (max 160 chars):
+  - Section A (distribution): why this directory fits + what to highlight in the listing
+  - Section B (guest post): why this publication fits + what angle or topic to pitch
+  - Section C (press release): why this outlet fits + what news hook to lead with
 
 Platform compatibility check (CRITICAL — apply to every site before including it):
 - Read each site's name and description carefully
@@ -373,7 +399,9 @@ Platform compatibility check (CRITICAL — apply to every entity before includin
 Relevance guardrails:
 - Do NOT rank an entity high based on category overlap alone — check whether the audience genuinely experiences the stated problem
 - If the entity's description clearly targets a different problem domain or incompatible stack, exclude it
-- matchReason must explain why this specific audience fits this product's problem (max 120 chars)
+- matchReason must be 1–2 sentences tailored to the section type (max 160 chars):
+  - Section D (influencer): why this creator's audience matches + what angle to use in the outreach pitch
+  - Section E (reddit): why this community is relevant + what type of post or discussion angle would land well
 
 Priority entities (marked ⭐PRIORITY): These are admin-verified gold-standard entities for this category. Include them in results unless there is a clear platform or audience mismatch specific to this product. Category alignment alone is sufficient to include them — apply the platform check but give strong benefit of the doubt.
 
@@ -404,7 +432,7 @@ Semantic guardrails:
 - A fund focused on a clearly different domain (e.g. deep tech hardware vs. B2B SaaS) is a poor match even if category tags overlap
 - If a fund exclusively backs a specific platform ecosystem (e.g. WordPress plugin businesses, Shopify app developers) and the product does not belong to that ecosystem, exclude it
 - Deprioritize or exclude funds whose description indicates an incompatible focus or stage
-- matchReason must explain why this fund fits this specific product's problem domain (max 120 chars)
+- matchReason must be 1–2 sentences (max 160 chars): why this fund's focus aligns with the product's problem domain + what to emphasize in the pitch
 
 Priority funds (marked ⭐PRIORITY): These are admin-verified gold-standard funds for this category. Include them in results unless there is a clear focus mismatch specific to this product. Give strong benefit of the doubt.
 

@@ -224,8 +224,11 @@ export default function CurationDetailPage() {
     }
   }
 
-  // Always show all 6 sections when completed (sections with 0 results show "No results")
-  const sectionsToShow = curation?.status === "completed" ? sectionOrder : [];
+  const enabledSections =
+    curation?.enabledSections?.filter((section): section is (typeof sectionOrder)[number] =>
+      sectionOrder.includes(section)
+    ) ?? sectionOrder;
+  const sectionsToShow = curation?.status === "completed" ? enabledSections : [];
 
   return (
     <>
@@ -621,7 +624,11 @@ function ResultRow({
     ? "Visit Subreddit"
     : isFund
     ? "Visit Fund"
-    : "Submit Site";
+    : result.section === "b"
+    ? "Pitch Guest Post"
+    : result.section === "c"
+    ? "Submit Press Release"
+    : "Submit Product";
 
   return (
     <div className={`group p-4 transition-colors sm:p-5 ${isComplete ? "bg-emerald-50/40" : "bg-white hover:bg-slate-50/70"}`}>

@@ -6,6 +6,7 @@ import { redis } from "@/lib/redis";
 import { applyPlanResultMasking } from "@/lib/curation-mask-policy";
 import { inspectWebsiteMetadata } from "@/lib/website-metadata";
 import { resolveEffectivePlanSlug } from "@/lib/plan-access";
+import { getCurationEnabledSectionsSnapshot } from "@/lib/curation-steps-config";
 
 type HireUsLeadCandidate = {
   id: string;
@@ -144,6 +145,7 @@ export async function GET(
 
   const categoryName = derivePrimaryCategoryName(data.results);
   const siteValidation = await inspectWebsiteMetadata(data.productUrl);
+  const enabledSections = await getCurationEnabledSectionsSnapshot(id);
 
   return NextResponse.json({
     id: data.id,
@@ -151,6 +153,7 @@ export async function GET(
     status: data.status,
     countryName: data.country?.name ?? null,
     categoryName,
+    enabledSections,
     keywords: data.keywords,
     problemStatement: data.problemStatement,
     solutionStatement: data.solutionStatement,

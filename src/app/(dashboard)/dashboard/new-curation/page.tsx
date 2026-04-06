@@ -168,13 +168,18 @@ export default function NewCurationPage() {
         return;
       }
 
+      if (typeof result.curationId !== "string" || result.curationId.length === 0) {
+        toast.error("Curation started but no curation ID was returned. Please try again.");
+        return;
+      }
+
       if (result.siteValidation?.warning) {
         toast(result.siteValidation.warning);
       } else {
         toast.success("Curation started! We'll notify you when it's ready.");
       }
 
-      router.push(`/dashboard/curations/${result.curationId}`);
+      router.push(`/onboarding/processing/${result.curationId}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -234,10 +239,10 @@ export default function NewCurationPage() {
             <div className="mt-6 space-y-3 rounded-2xl bg-white/80 p-4">
               <p className="text-sm font-semibold text-slate-900">What improves result quality</p>
               <ul className="space-y-2 text-sm text-slate-600">
-                <li>Specific product URL with clear positioning</li>
-                <li>Clear problem and solution statements</li>
-                <li>Optional keywords as extra hints</li>
-                <li>Country + category targeting selected</li>
+                <li><span className="font-medium text-slate-800">Problem statement</span> — describe who suffers, what pain they feel, and when. The more specific, the better your match.</li>
+                <li><span className="font-medium text-slate-800">Solution statement</span> — explain what your product does, how it works, and what makes it different.</li>
+                <li><span className="font-medium text-slate-800">Country + category</span> — narrows results to channels where your audience actually is.</li>
+                <li><span className="font-medium text-slate-800">Keywords</span> — optional extra hints (e.g. "no-code", "b2b", "api").</li>
               </ul>
             </div>
           </aside>
@@ -400,9 +405,6 @@ export default function NewCurationPage() {
                       ))}
                     </div>
                   )}
-                  <p className="mt-1 text-xs text-slate-500">
-                    We primarily use problem/solution + category/country. Keywords are optional hints.
-                  </p>
                   <p className="mt-1 text-xs text-slate-500">{keywords.length}/10 keywords</p>
                   {keywordError && <p className="mt-1 text-sm font-medium text-destructive">{keywordError}</p>}
                 </div>
@@ -417,9 +419,8 @@ export default function NewCurationPage() {
                       </FormLabel>
                       <FormControl>
                         <Textarea
-                          placeholder="What exact problem are you solving for users?"
-                          className="min-h-[110px] resize-none"
-                          maxLength={1000}
+                          placeholder="Describe Problem your solving"
+                          className="min-h-[130px] resize-y"
                           {...field}
                           value={field.value ?? ""}
                         />
@@ -439,9 +440,8 @@ export default function NewCurationPage() {
                       </FormLabel>
                       <FormControl>
                         <Textarea
-                          placeholder="How does your product solve this problem?"
-                          className="min-h-[110px] resize-none"
-                          maxLength={1000}
+                          placeholder="Describe your solution fully, What it does, how it works, and who it's built for"
+                          className="min-h-[130px] resize-y"
                           {...field}
                           value={field.value ?? ""}
                         />

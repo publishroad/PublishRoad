@@ -5,6 +5,12 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { ActivePaymentProvider } from "@/lib/payments/service";
 import { PaymentMethodPicker } from "@/components/public/PaymentMethodPicker";
+import {
+  DEFAULT_HIRE_US_PRICING_CONFIG,
+  formatUsdFromCents,
+  normalizeHireUsPricingConfig,
+  type HireUsPricingConfig,
+} from "@/lib/hire-us-config-shared";
 
 export type HireUsPackageSlug = "starter" | "complete";
 
@@ -17,64 +23,8 @@ interface HireUsSourceContext {
   stepLabel?: "Step 4" | "Step 5" | "Step 6";
 }
 
-const starterIncludes = [
-  "Submissions to all sites on your curated distribution list",
-  "Full execution report with all submission links",
-  "15-day delivery guarantee",
-];
-
-const completeIncludes = [
-  "Everything in the Starter package",
-  "Guest posts on up to 20 sites from your curation list",
-  "Direct introduction to our press release team",
-  "Press release may be included free or charged separately by tier",
-  "Full execution report with all submissions & published links",
-  "25-day delivery guarantee",
-];
-
-const dashboardFaqItems = [
-  {
-    q: "What's the difference between the two packages?",
-    a: "The Starter ($399) covers directory submissions only. The Complete ($999) includes everything in Starter plus guest posts on up to 20 sites from your list and a direct introduction to our press release team.",
-  },
-  {
-    q: "Which package should I choose?",
-    a: "If you mainly need visibility through directory listings, Starter is the right pick. If you also want SEO-focused guest posts and press release support, choose Complete.",
-  },
-  {
-    q: "How long does it take?",
-    a: "Starter is delivered within 15 days. Complete is delivered within 25 days. Both timelines begin once we receive your brief and payment.",
-  },
-  {
-    q: "How does the press release work?",
-    a: "We introduce you to our press release partners and explain the available tiers. Depending on the distribution scope you choose, the press release may be included at no extra charge or require a separate fee.",
-  },
-];
-
-const packageCards: Array<{
-  slug: HireUsPackageSlug;
-  name: string;
-  price: string;
-  note: string;
-  description: string;
-  includes: string[];
-}> = [
-  {
-    slug: "starter",
-    name: "Starter",
-    price: "$399",
-    note: "One-time",
-    description: "Managed launch submissions for quick traction.",
-    includes: starterIncludes,
-  },
-  {
-    slug: "complete",
-    name: "Complete",
-    price: "$999",
-    note: "One-time",
-    description: "Full done-for-you distribution, outreach, and support.",
-    includes: completeIncludes,
-  },
+const dashboardFaqItemsTemplate = [
+  ...DEFAULT_HIRE_US_PRICING_CONFIG.faq,
 ];
 
 interface HireUsPackageSelectorProps {
@@ -100,9 +50,28 @@ export function HireUsPackageSelector({
 }: HireUsPackageSelectorProps) {
   const router = useRouter();
   const [loading, setLoading] = useState<HireUsPackageSlug | null>(null);
+  const [pricingConfig, setPricingConfig] = useState<HireUsPricingConfig>(DEFAULT_HIRE_US_PRICING_CONFIG);
   const [providerPicker, setProviderPicker] = useState<ActivePaymentProvider[] | null>(null);
   const [pendingPackage, setPendingPackage] = useState<HireUsPackageSlug | null>(null);
   const [inlineError, setInlineError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    fetch("/api/hire-us/config", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((payload) => {
+        if (!isMounted || !payload?.config) return;
+        setPricingConfig(normalizeHireUsPricingConfig(payload.config));
+      })
+      .catch(() => {
+        // Keep defaults on network failure
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!checkoutError) return;
@@ -119,12 +88,42 @@ export function HireUsPackageSelector({
   }, [checkoutError]);
 
   const orderedCards = useMemo(() => {
+    const packageCards: Array<{
+      slug: HireUsPackageSlug;
+      name: string;
+      price: string;
+      note: string;
+      description: string;
+      includes: string[];
+    }> = [
+      {
+        slug: "starter",
+        name: "Starter",
+        price: formatUsdFromCents(pricingConfig.starter.priceCents),
+        note: "One-time",
+        description: "Managed launch submissions for quick traction.",
+        includes: pricingConfig.starter.includes,
+      },
+      {
+        slug: "complete",
+        name: "Complete",
+        price: formatUsdFromCents(pricingConfig.complete.priceCents),
+        note: "One-time",
+        description: "Full done-for-you distribution, outreach, and support.",
+        includes: pricingConfig.complete.includes,
+      },
+    ];
+
     return [...packageCards].sort((a, b) => {
       if (a.slug === preselectedPackage) return -1;
       if (b.slug === preselectedPackage) return 1;
       return 0;
     });
-  }, [preselectedPackage]);
+  }, [preselectedPackage, pricingConfig]);
+
+  const dashboardFaqItems = useMemo(() => {
+    return pricingConfig.faq.length > 0 ? pricingConfig.faq : dashboardFaqItemsTemplate;
+  }, [pricingConfig]);
 
   async function startHireUsCheckout(packageSlug: HireUsPackageSlug, provider?: ActivePaymentProvider) {
     if (loading && !provider) return;

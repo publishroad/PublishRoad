@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { getHireUsPricingConfig } from "@/lib/hire-us-config";
 
 export type HireUsPackageSlug = "starter" | "complete";
 export type HireUsLeadState = "started" | "working" | "completed";
@@ -54,6 +55,21 @@ export const HIRE_US_PACKAGES: Record<HireUsPackageSlug, HireUsPackageDefinition
   },
 };
 
+export async function getHireUsPackageDefinitions(): Promise<Record<HireUsPackageSlug, HireUsPackageDefinition>> {
+  const pricing = await getHireUsPricingConfig();
+
+  return {
+    starter: {
+      ...HIRE_US_PACKAGES.starter,
+      priceCents: pricing.starter.priceCents,
+    },
+    complete: {
+      ...HIRE_US_PACKAGES.complete,
+      priceCents: pricing.complete.priceCents,
+    },
+  };
+}
+
 export function parseHireUsPackageSlug(value: unknown): HireUsPackageSlug | null {
   if (value === "starter" || value === "complete") return value;
   return null;
@@ -61,11 +77,53 @@ export function parseHireUsPackageSlug(value: unknown): HireUsPackageSlug | null
 
 export async function resolveHireUsCheckoutPlanId(packageSlug: HireUsPackageSlug): Promise<string | null> {
   const pkg = HIRE_US_PACKAGES[packageSlug];
-  const plan = await db.planConfig.findFirst({
+  const mappedActivePlan = await db.planConfig.findFirst({
     where: { slug: pkg.mappedPlanSlug, isActive: true },
     select: { id: true },
   });
-  return plan?.id ?? null;
+  if (mappedActivePlan?.id) return mappedActivePlan.id;
+
+  // Fallback to any active paid plan so checkout can proceed even if mapped slugs were renamed.
+  const fallbackActivePlan = await db.planConfig.findFirst({
+    where: {
+      isActive: true,
+      slug: { not: "free" },
+    },
+    select: { id: true },
+    orderBy: { sortOrder: "asc" },
+  });
+  if (fallbackActivePlan?.id) {
+    console.warn(
+      `[hire-us] Missing active mapped plan slug "${pkg.mappedPlanSlug}". Falling back to active plan id "${fallbackActivePlan.id}".`
+    );
+    return fallbackActivePlan.id;
+  }
+
+  // As a last resort, ensure a hidden plan exists for the mapped slug.
+  const packageDefinitions = await getHireUsPackageDefinitions();
+  const packagePrice = packageDefinitions[packageSlug].priceCents;
+
+  const created = await db.planConfig.upsert({
+    where: { slug: pkg.mappedPlanSlug },
+    update: {
+      isActive: true,
+      isVisible: false,
+    },
+    create: {
+      name: pkg.mappedPlanSlug === "pro" ? "Pro" : "Starter",
+      slug: pkg.mappedPlanSlug,
+      priceCents: packagePrice,
+      credits: 0,
+      billingType: "one_time",
+      features: [],
+      isActive: true,
+      isVisible: false,
+      sortOrder: 999,
+    },
+    select: { id: true },
+  });
+
+  return created.id;
 }
 
 function getServiceType(packageSlug: HireUsPackageSlug): string {

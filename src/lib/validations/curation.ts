@@ -24,13 +24,11 @@ export const createCurationSchema = z.object({
   problemStatement: z
     .string()
     .trim()
-    .min(1, "Problem statement is required")
-    .max(1000, "Problem statement must be under 1000 characters"),
+    .min(1, "Problem statement is required"),
   solutionStatement: z
     .string()
     .trim()
-    .min(1, "Solution statement is required")
-    .max(1000, "Solution statement must be under 1000 characters"),
+    .min(1, "Solution statement is required"),
   hireUs: z.boolean().optional(),
   hireUsPackage: z.enum(["starter", "complete"]).optional(),
 });

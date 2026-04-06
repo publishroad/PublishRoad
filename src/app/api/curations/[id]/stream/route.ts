@@ -9,6 +9,34 @@ export const maxDuration = 300;
 
 const POLL_INTERVAL_MS = 2000;
 const DB_STATUS_CHECK_INTERVAL = 5;
+const INITIAL_LOOKUP_RETRIES = 8;
+const INITIAL_LOOKUP_DELAY_MS = 450;
+
+function fallbackProgressEventForStatus(status: "pending" | "processing" | "completed" | "failed") {
+  if (status === "processing") return "fetching_sites";
+  if (status === "pending") return "started";
+  if (status === "completed") return "complete";
+  return "error";
+}
+
+async function lookupCurationWithRetry(id: string) {
+  for (let attempt = 1; attempt <= INITIAL_LOOKUP_RETRIES; attempt += 1) {
+    const curation = await db.curation.findUnique({
+      where: { id },
+      select: { userId: true, status: true },
+    });
+
+    if (curation) {
+      return curation;
+    }
+
+    if (attempt < INITIAL_LOOKUP_RETRIES) {
+      await new Promise((resolve) => setTimeout(resolve, INITIAL_LOOKUP_DELAY_MS));
+    }
+  }
+
+  return null;
+}
 
 export async function GET(
   req: NextRequest,
@@ -23,10 +51,7 @@ export async function GET(
   const userId = session.user.id;
 
   // Ownership check
-  const curation = await db.curation.findUnique({
-    where: { id },
-    select: { userId: true, status: true },
-  });
+  const curation = await lookupCurationWithRetry(id);
 
   if (!curation) return new Response("Not found", { status: 404 });
   if (curation.userId !== userId) return new Response("Forbidden", { status: 403 });
@@ -53,6 +78,11 @@ export async function GET(
       let lastEvent = "";
       let iteration = 0;
 
+      const initialEvent = fallbackProgressEventForStatus(curation.status);
+      const initialData = `data: ${JSON.stringify({ event: initialEvent })}\n\n`;
+      controller.enqueue(encoder.encode(initialData));
+      lastEvent = initialEvent;
+
       const poll = async () => {
         while (isActive) {
           try {
@@ -75,6 +105,15 @@ export async function GET(
                 where: { id },
                 select: { status: true },
               });
+
+              if (current?.status === "pending" || current?.status === "processing") {
+                const fallbackEvent = fallbackProgressEventForStatus(current.status);
+                if (fallbackEvent !== lastEvent) {
+                  lastEvent = fallbackEvent;
+                  const data = `data: ${JSON.stringify({ event: fallbackEvent })}\n\n`;
+                  controller.enqueue(encoder.encode(data));
+                }
+              }
 
               if (current?.status === "completed") {
                 const data = `data: ${JSON.stringify({ event: "complete" })}\n\n`;
