@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { redis } from "@/lib/redis";
 import { invalidateUserProfile } from "@/lib/cache";
-import { finalizeHireUsPurchase, parseHireUsPackageSlug } from "@/lib/hire-us";
+import { attachHireUsCuration, finalizeHireUsPurchase, parseHireUsPackageSlug } from "@/lib/hire-us";
 import { createCheckoutSession, createPortalSession } from "@/lib/stripe";
 import { decryptField } from "@/lib/server-utils";
 import { getPayPalAccessToken, createPayPalOrder } from "@/lib/payments/paypal";
@@ -37,10 +37,6 @@ type GatewayConfigRow = {
   secret_key: string | null;
   webhook_secret: string | null;
   additional_config: unknown;
-};
-
-type StripeConfigRow = PaymentConfigRow & {
-  is_active: boolean;
 };
 
 export async function getPaymentConfigRow(): Promise<PaymentConfigRow | null> {
@@ -233,6 +229,7 @@ export async function runPostPaymentSideEffects(args: {
   userId: string;
   notificationMessage?: string;
   hireUsPackageSlug?: string;
+  hireUsSourceCurationId?: string;
   skipNotification?: boolean;
   skipCacheInvalidation?: boolean;
 }) {
@@ -240,6 +237,13 @@ export async function runPostPaymentSideEffects(args: {
     const packageSlug = parseHireUsPackageSlug(args.hireUsPackageSlug);
     if (packageSlug) {
       await finalizeHireUsPurchase({ userId: args.userId, packageSlug });
+      if (args.hireUsSourceCurationId) {
+        await attachHireUsCuration({
+          userId: args.userId,
+          curationId: args.hireUsSourceCurationId,
+          packageSlug,
+        });
+      }
     }
   }
 

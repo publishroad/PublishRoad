@@ -11,6 +11,9 @@ export default async function AdminCategoriesPage() {
     <>
       <AppHeader title="Categories" />
       <div className="flex-1 p-6 max-w-2xl">
+        <p className="mb-4 text-sm text-gray-500">
+          Live categories appear across the platform. Hidden categories are excluded from user-facing flows.
+        </p>
         <LookupManager type="categories" items={categories.map((c) => ({ id: c.id, name: c.name, slug: c.slug, isActive: c.isActive }))} />
       </div>
     </>

@@ -130,11 +130,10 @@ model Country {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  websites         Website[]
-  websiteCountries WebsiteCountry[]
-  curations        Curation[]
-  influencers      Influencer[]
-  funds            Fund[]
+  websites    Website[]
+  curations   Curation[]
+  influencers Influencer[]
+  funds       Fund[]
 
   @@map("countries")
 }
@@ -204,6 +203,7 @@ model PlanConfig {
   stripePriceId String?     @map("stripe_price_id")
   features      Json        @default("[]") // array of feature strings
   isActive      Boolean     @default(true) @map("is_active")
+  isVisible     Boolean     @default(true) @map("is_visible")
   sortOrder     Int         @default(0) @map("sort_order")
   createdAt     DateTime    @default(now()) @map("created_at")
   updatedAt     DateTime    @updatedAt @map("updated_at")
@@ -298,7 +298,7 @@ model Website {
   description   String?     @db.Text
   submissionUrl String?     @map("submission_url")
   isActive      Boolean     @default(true) @map("is_active")
-  isPinned      Boolean     @default(false) @map("is_pinned")
+  starRating    Int?        @map("star_rating")
   isExcluded    Boolean     @default(false) @map("is_excluded")
   tagSlugs      String[]    @default([]) @map("tag_slugs") // denormalized for fast GIN queries
   createdAt     DateTime    @default(now()) @map("created_at")
@@ -309,11 +309,11 @@ model Website {
   subCategory       SubCategory?      @relation(fields: [subCategoryId], references: [id])
   websiteTags       WebsiteTag[]
   websiteCategories WebsiteCategory[]
-  websiteCountries  WebsiteCountry[]
   curationResults   CurationResult[]
 
   @@index([type, isActive])
   @@index([countryId, isActive])
+  @@index([starRating, isActive])
   @@map("websites")
 }
 
@@ -338,6 +338,8 @@ model Curation {
   productUrl  String         @map("product_url")
   countryId   String?        @map("country_id")
   keywords    String[]       @default([])
+  problemStatement String?   @map("problem_statement") @db.Text
+  solutionStatement String?  @map("solution_statement") @db.Text
   description String?        @db.Text
   status      CurationStatus @default(pending)
   errorMessage String?       @map("error_message")
@@ -439,6 +441,7 @@ model EmailProviderConfig {
 model BetaConfig {
   id          String   @id @default("default")
   enabled     Boolean  @default(false)
+  pricingComparisonRows Json @default("[]") @map("pricing_comparison_rows")
   updatedAt   DateTime @updatedAt @map("updated_at")
   updatedById String?  @map("updated_by_id")
 
@@ -612,6 +615,7 @@ model Influencer {
   profileLink    String             @map("profile_link")
   email          String?
   isActive       Boolean            @default(true) @map("is_active")
+  starRating     Int?               @map("star_rating")
   tagSlugs       String[]           @default([]) @map("tag_slugs")
   categorySlugs  String[]           @default([]) @map("category_slugs")
   createdAt      DateTime           @default(now()) @map("created_at")
@@ -623,6 +627,7 @@ model Influencer {
   curationResults      CurationResult[]
 
   @@index([platform, isActive])
+  @@index([starRating, isActive])
   @@map("influencers")
 }
 
@@ -650,6 +655,7 @@ model RedditChannel {
   description       String?            @db.Text
   postingDifficulty PostingDifficulty? @map("posting_difficulty")
   isActive          Boolean            @default(true) @map("is_active")
+  starRating        Int?               @map("star_rating")
   tagSlugs          String[]           @default([]) @map("tag_slugs")
   categorySlugs     String[]           @default([]) @map("category_slugs")
   createdAt         DateTime           @default(now()) @map("created_at")
@@ -659,6 +665,7 @@ model RedditChannel {
   redditChannelCategories RedditChannelCategory[]
   curationResults         CurationResult[]
 
+  @@index([starRating, isActive])
   @@map("reddit_channels")
 }
 
@@ -687,6 +694,7 @@ model Fund {
   ticketSize      String?          @map("ticket_size")
   countryId       String?          @map("country_id")
   isActive        Boolean          @default(true) @map("is_active")
+  starRating      Int?             @map("star_rating")
   tagSlugs        String[]         @default([]) @map("tag_slugs")
   categorySlugs   String[]         @default([]) @map("category_slugs")
   createdAt       DateTime         @default(now()) @map("created_at")
@@ -697,6 +705,7 @@ model Fund {
   fundCategories  FundCategory[]
   curationResults CurationResult[]
 
+  @@index([starRating, isActive])
   @@map("funds")
 }
 
@@ -724,17 +733,6 @@ model WebsiteCategory {
 
   @@id([websiteId, categoryId])
   @@map("website_categories")
-}
-
-model WebsiteCountry {
-  websiteId String @map("website_id")
-  countryId String @map("country_id")
-
-  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
-  country Country @relation(fields: [countryId], references: [id], onDelete: Cascade)
-
-  @@id([websiteId, countryId])
-  @@map("website_countries")
 }
 
 model InfluencerCategory {

@@ -10,6 +10,13 @@ export type HireUsPackageSlug = "starter" | "complete";
 
 type HireUsSelectorVariant = "onboarding" | "dashboard";
 
+interface HireUsSourceContext {
+  source: string;
+  curationId?: string;
+  sectionKey?: "d" | "e" | "f";
+  stepLabel?: "Step 4" | "Step 5" | "Step 6";
+}
+
 const starterIncludes = [
   "Submissions to all sites on your curated distribution list",
   "Full execution report with all submission links",
@@ -76,6 +83,9 @@ interface HireUsPackageSelectorProps {
   loginCallbackBasePath?: string;
   variant?: HireUsSelectorVariant;
   showBackToDetails?: boolean;
+  dashboardIntroTitle?: string;
+  dashboardIntroSubtitle?: string;
+  sourceContext?: HireUsSourceContext;
 }
 
 export function HireUsPackageSelector({
@@ -84,6 +94,9 @@ export function HireUsPackageSelector({
   loginCallbackBasePath = "/onboarding/hire-us",
   variant = "onboarding",
   showBackToDetails = false,
+  dashboardIntroTitle = "No Hire Us requests yet.",
+  dashboardIntroSubtitle = "Pick a package below to start instantly without leaving this page.",
+  sourceContext,
 }: HireUsPackageSelectorProps) {
   const router = useRouter();
   const [loading, setLoading] = useState<HireUsPackageSlug | null>(null);
@@ -122,7 +135,7 @@ export function HireUsPackageSelector({
       const res = await fetch("/api/hire-us/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ packageSlug, provider }),
+        body: JSON.stringify({ packageSlug, provider, sourceContext }),
       });
 
       const data = await res.json();
@@ -215,8 +228,8 @@ export function HireUsPackageSelector({
           </div>
         ) : (
           <div className="text-center mb-6">
-            <p className="text-sm text-gray-500 mb-2">No Hire Us requests yet.</p>
-            <p className="text-sm text-slate-600">Pick a package below to start instantly without leaving this page.</p>
+            <p className="text-sm text-gray-500 mb-2">{dashboardIntroTitle}</p>
+            <p className="text-sm text-slate-600">{dashboardIntroSubtitle}</p>
           </div>
         )}
 
@@ -228,7 +241,7 @@ export function HireUsPackageSelector({
             return (
               <div
                 key={pkg.slug}
-                className={isOnboarding ? "rounded-[2rem] p-8 bg-white" : "rounded-2xl p-6 bg-white"}
+                className={isOnboarding ? "rounded-[2rem] p-8 bg-white flex h-full flex-col" : "rounded-2xl p-6 bg-white flex h-full flex-col"}
                 style={{
                   border: active ? "2px solid rgba(91,88,246,0.45)" : "1px solid rgba(226,232,240,0.9)",
                   boxShadow: active ? "0 14px 48px rgba(91,88,246,0.18)" : "0 6px 28px rgba(91,88,246,0.08)",
@@ -244,28 +257,30 @@ export function HireUsPackageSelector({
                   {pkg.price}
                 </p>
                 <p className="text-sm text-slate-500 mt-1">{pkg.note}</p>
-                <p className={isOnboarding ? "text-sm text-slate-600 mt-5 leading-6" : "text-sm text-slate-600 mt-4 leading-6"}>
-                  {pkg.description}
-                </p>
+                <div className="flex-1">
+                  <p className={isOnboarding ? "text-sm text-slate-600 mt-5 leading-6" : "text-sm text-slate-600 mt-4 leading-6"}>
+                    {pkg.description}
+                  </p>
 
-                {!isOnboarding && (
-                  <div className="mt-5">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Includes</p>
-                    <div className="mt-3 space-y-2.5">
-                      {pkg.includes.map((item) => (
-                        <div key={item} className="flex items-start gap-3">
-                          <span
-                            className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
-                            style={{ background: "rgba(91,88,246,0.1)", color: "#5B58F6" }}
-                          >
-                            ✓
-                          </span>
-                          <span className="text-sm leading-6 text-slate-700">{item}</span>
-                        </div>
-                      ))}
+                  {!isOnboarding && (
+                    <div className="mt-5">
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Includes</p>
+                      <div className="mt-3 space-y-2.5">
+                        {pkg.includes.map((item) => (
+                          <div key={item} className="flex items-start gap-3">
+                            <span
+                              className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
+                              style={{ background: "rgba(91,88,246,0.1)", color: "#5B58F6" }}
+                            >
+                              ✓
+                            </span>
+                            <span className="text-sm leading-6 text-slate-700">{item}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
 
                 <button
                   type="button"

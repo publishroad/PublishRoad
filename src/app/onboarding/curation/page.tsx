@@ -45,7 +45,8 @@ function OnboardingCurationPageContent() {
       countryId: "",
       categoryId: "",
       keywords: [],
-      description: "",
+      problemStatement: "",
+      solutionStatement: "",
     },
   });
 
@@ -246,7 +247,7 @@ function OnboardingCurationPageContent() {
             {/* Keywords */}
             <div className="space-y-1.5">
               <Label className="text-slate-700 text-sm font-medium">
-                Keywords <span className="text-error">*</span>
+                Keywords <span className="text-slate-400">(optional)</span>
                 <span className="ml-1.5 text-xs font-normal text-slate-400">
                   (up to 10, press Enter or comma to add)
                 </span>
@@ -283,6 +284,9 @@ function OnboardingCurationPageContent() {
                 )}
               </div>
               <p className="text-xs text-slate-400 font-light">
+                We prioritize problem/solution + category/country. Keywords are optional hints.
+              </p>
+              <p className="text-xs text-slate-400 font-light">
                 {keywords.length}/10 keywords added
               </p>
               {errors.keywords && (
@@ -290,19 +294,35 @@ function OnboardingCurationPageContent() {
               )}
             </div>
 
-            {/* Description */}
+            {/* Problem Statement */}
             <div className="space-y-1.5">
               <Label className="text-slate-700 text-sm font-medium">
-                Product Description <span className="text-error">*</span>
+                Problem Statement <span className="text-error">*</span>
               </Label>
               <textarea
                 rows={4}
-                placeholder="Briefly describe your product, who it's for, and what problem it solves..."
+                placeholder="What exact problem are you solving for users?"
                 className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none transition-all"
-                {...register("description")}
+                {...register("problemStatement")}
               />
-              {errors.description && (
-                <p className="text-xs text-error">{errors.description.message}</p>
+              {errors.problemStatement && (
+                <p className="text-xs text-error">{errors.problemStatement.message}</p>
+              )}
+            </div>
+
+            {/* Solution Statement */}
+            <div className="space-y-1.5">
+              <Label className="text-slate-700 text-sm font-medium">
+                Solution Statement <span className="text-error">*</span>
+              </Label>
+              <textarea
+                rows={4}
+                placeholder="How does your product solve this problem?"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none transition-all"
+                {...register("solutionStatement")}
+              />
+              {errors.solutionStatement && (
+                <p className="text-xs text-error">{errors.solutionStatement.message}</p>
               )}
             </div>
 

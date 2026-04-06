@@ -19,6 +19,14 @@ import {
 const schema = z.object({
   packageSlug: z.enum(["starter", "complete"]),
   provider: z.enum(["stripe", "razorpay", "paypal"]).optional(),
+  sourceContext: z
+    .object({
+      source: z.string().min(1).max(80),
+      curationId: z.string().min(1).max(120).optional(),
+      sectionKey: z.enum(["d", "e", "f"]).optional(),
+      stepLabel: z.enum(["Step 4", "Step 5", "Step 6"]).optional(),
+    })
+    .optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -62,12 +70,27 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const sourceContext = parsed.data.sourceContext;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
-  const successPath = `/onboarding/curation?hireUs=1&hireUsPackage=${packageSlug}`;
+  const isDashboardCurationFlow = sourceContext?.source === "dashboard_curation_steps" && !!sourceContext?.curationId;
+  const encodedCurationId = isDashboardCurationFlow && sourceContext?.curationId
+    ? encodeURIComponent(sourceContext.curationId)
+    : null;
+  const successPath = encodedCurationId
+    ? `/dashboard/curations/${encodedCurationId}?hireUs=1&hireUsPackage=${packageSlug}`
+    : `/onboarding/curation?hireUs=1&hireUsPackage=${packageSlug}`;
   const successPathWithPaid = `${successPath}${successPath.includes("?") ? "&" : "?"}paid=1`;
-  const cancelUrl = `${appUrl}/onboarding/hire-us?package=${packageSlug}`;
+  const cancelUrl = encodedCurationId
+    ? `${appUrl}/dashboard/curations/${encodedCurationId}`
+    : `${appUrl}/onboarding/hire-us?package=${packageSlug}`;
 
   const stripeCustomerId = user.stripeCustomerId ? decryptField(user.stripeCustomerId) : null;
+  const sourceMetadata: Record<string, string> = {};
+
+  if (sourceContext?.source) sourceMetadata.hireUsSource = sourceContext.source;
+  if (sourceContext?.curationId) sourceMetadata.hireUsSourceCurationId = sourceContext.curationId;
+  if (sourceContext?.sectionKey) sourceMetadata.hireUsSourceSection = sourceContext.sectionKey;
+  if (sourceContext?.stepLabel) sourceMetadata.hireUsSourceStep = sourceContext.stepLabel;
 
   try {
     const checkoutProvider = parsed.data.provider as ActivePaymentProvider | undefined;
@@ -88,6 +111,7 @@ export async function POST(req: NextRequest) {
       metadata: {
         flow: "hire_us",
         hireUsPackage: packageSlug,
+        ...sourceMetadata,
       },
     });
 

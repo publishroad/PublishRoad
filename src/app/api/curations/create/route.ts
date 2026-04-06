@@ -41,11 +41,13 @@ export async function POST(req: NextRequest) {
     countryId: rawCountryId,
     categoryId,
     keywords,
-    description,
+    problemStatement,
+    solutionStatement,
     hireUs,
     hireUsPackage,
   } = parsed.data;
   const countryId = rawCountryId === "worldwide" ? null : rawCountryId;
+  const combinedDescription = `Problem Statement: ${problemStatement}\n\nSolution Statement: ${solutionStatement}`;
 
   const siteValidation = await inspectWebsiteMetadata(productUrl);
 
@@ -57,7 +59,9 @@ export async function POST(req: NextRequest) {
       countryId,
       categoryId,
       keywords,
-      description: description ?? null,
+      problemStatement,
+      solutionStatement,
+      description: combinedDescription,
     });
 
     if (hireUs && hireUsPackage) {

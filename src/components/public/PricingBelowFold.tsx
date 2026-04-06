@@ -1,20 +1,20 @@
 import Link from "next/link";
+import {
+  DEFAULT_PRICING_COMPARISON_ROWS,
+  PricingComparisonRow,
+} from "@/lib/pricing-comparison";
 
-export const pricingComparisonRows = [
-  { feature: "Curations included", values: ["1", "1", "1 + all sections", "15/month"] },
-  { feature: "Results per section", values: ["Up to 5", "Up to 20", "Up to 20", "Up to 20"] },
-  { feature: "Distribution Sites", values: [true, true, true, true] },
-  { feature: "Guest Post & Backlinks", values: [true, true, true, true] },
-  { feature: "Press Release Sites", values: [true, true, true, true] },
-  { feature: "Social Influencers", values: [false, false, true, true] },
-  { feature: "Reddit Communities", values: [false, true, true, true] },
-  { feature: "Investors & Funds", values: [false, false, true, true] },
-  { feature: "Country targeting", values: [true, true, true, true] },
-  { feature: "AI-powered matching", values: [true, true, true, true] },
-  { feature: "Credits roll over", values: [false, false, false, true] },
-  { feature: "All future features", values: [false, false, false, true] },
-  { feature: "Priority support", values: [false, false, false, true] },
-];
+const PLAN_ORDER = ["free", "starter", "pro", "lifetime"] as const;
+type PlanSlug = (typeof PLAN_ORDER)[number];
+
+const PLAN_LABELS: Record<PlanSlug, string> = {
+  free: "Free",
+  starter: "Starter",
+  pro: "Pro",
+  lifetime: "Lifetime",
+};
+
+export const pricingComparisonRows = DEFAULT_PRICING_COMPARISON_ROWS;
 
 export const pricingFaqItems = [
   {
@@ -39,7 +39,23 @@ export const pricingFaqItems = [
   },
 ];
 
-export function PricingBelowFold() {
+export function PricingBelowFold({
+  comparisonRows = DEFAULT_PRICING_COMPARISON_ROWS,
+  visiblePlanSlugs = PLAN_ORDER,
+}: {
+  comparisonRows?: PricingComparisonRow[];
+  visiblePlanSlugs?: PlanSlug[];
+}) {
+  const visibleIndices = PLAN_ORDER
+    .map((slug, index) => ({ slug, index }))
+    .filter((item) => visiblePlanSlugs.includes(item.slug));
+
+  const gridTemplateColumns = `minmax(170px, 1.2fr) repeat(${visibleIndices.length}, minmax(130px, 1fr))`;
+
+  if (visibleIndices.length === 0) {
+    return null;
+  }
+
   return (
     <>
       <div className="max-w-4xl mx-auto mb-20">
@@ -53,38 +69,41 @@ export function PricingBelowFold() {
           className="bg-white rounded-[2rem] overflow-hidden"
           style={{ boxShadow: "0 4px 32px rgba(91,88,246,0.08)", border: "1px solid rgba(226,232,240,0.8)" }}
         >
-          <div className="grid grid-cols-5 border-b border-slate-100">
-            <div className="col-span-1 p-5">
+          <div className="grid border-b border-slate-100" style={{ gridTemplateColumns }}>
+            <div className="p-5">
               <span className="text-sm font-medium text-slate-400 uppercase tracking-wide">Feature</span>
             </div>
-            {["Free", "Starter", "Pro", "Lifetime"].map((name) => (
+            {visibleIndices.map(({ slug }) => (
               <div
-                key={name}
+                key={slug}
                 className="p-5 text-center"
-                style={name === "Pro" ? { backgroundColor: "rgba(91,88,246,0.04)" } : {}}
+                style={slug === "pro" ? { backgroundColor: "rgba(91,88,246,0.04)" } : {}}
               >
                 <span
                   className="text-sm font-semibold"
-                  style={{ color: name === "Pro" ? "var(--indigo)" : "var(--dark)", fontFamily: "var(--font-heading)" }}
+                  style={{ color: slug === "pro" ? "var(--indigo)" : "var(--dark)", fontFamily: "var(--font-heading)" }}
                 >
-                  {name}
+                  {PLAN_LABELS[slug]}
                 </span>
               </div>
             ))}
           </div>
-          {pricingComparisonRows.map((row, i) => (
+          {comparisonRows.map((row, i) => (
             <div
               key={i}
-              className="grid grid-cols-5 border-b border-slate-50 hover:bg-slate-50/50 transition-colors"
+              className="grid border-b border-slate-50 hover:bg-slate-50/50 transition-colors"
+              style={{ gridTemplateColumns }}
             >
-              <div className="col-span-1 p-5">
+              <div className="p-5">
                 <span className="text-sm text-slate-600 font-light">{row.feature}</span>
               </div>
-              {row.values.map((val, j) => (
+              {visibleIndices.map(({ slug, index }) => {
+                const val = row.values[index];
+                return (
                 <div
-                  key={j}
+                  key={`${slug}-${i}`}
                   className="p-5 text-center"
-                  style={j === 2 ? { backgroundColor: "rgba(91,88,246,0.04)" } : {}}
+                  style={slug === "pro" ? { backgroundColor: "rgba(91,88,246,0.04)" } : {}}
                 >
                   {typeof val === "boolean" ? (
                     val ? (
@@ -100,7 +119,8 @@ export function PricingBelowFold() {
                     <span className="text-sm text-slate-600 font-light">{val}</span>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           ))}
         </div>

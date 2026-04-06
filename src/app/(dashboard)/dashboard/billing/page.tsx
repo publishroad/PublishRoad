@@ -7,10 +7,15 @@ import { AppHeader } from "@/components/dashboard/AppHeader";
 import { CurrentPlanCard } from "@/components/dashboard/billing/CurrentPlanCard";
 import { PaymentHistorySection } from "@/components/dashboard/billing/PaymentHistorySection";
 import { PricingSection } from "@/components/dashboard/billing/PricingSection";
-import { pricingComparisonRows } from "@/components/public/PricingBelowFold";
 import { auth } from "@/lib/auth";
 import { CacheKeys, CacheTTL, getCachedWithLock } from "@/lib/cache";
 import { db } from "@/lib/db";
+import {
+  DEFAULT_PRICING_COMPARISON_ROWS,
+  normalizePricingComparisonRows,
+} from "@/lib/pricing-comparison";
+
+const PLAN_ORDER = ["free", "starter", "pro", "lifetime"] as const;
 
 const fallbackPlans = [
   {
@@ -54,10 +59,24 @@ const fallbackPlans = [
 async function getPlans() {
   return getCachedWithLock(CacheKeys.plans, CacheTTL.PLAN, async () => {
     return db.planConfig.findMany({
-      where: { isActive: true },
+      where: { isActive: true, isVisible: true },
       orderBy: { sortOrder: "asc" },
     });
   });
+}
+
+async function getPricingComparisonRows() {
+  try {
+    const rows = await db.$queryRaw<Array<{ pricing_comparison_rows: unknown }>>`
+      SELECT pricing_comparison_rows
+      FROM beta_config
+      WHERE id = 'default'
+      LIMIT 1
+    `;
+    return normalizePricingComparisonRows(rows[0]?.pricing_comparison_rows ?? []);
+  } catch {
+    return DEFAULT_PRICING_COMPARISON_ROWS;
+  }
 }
 
 type RecentPayment = {
@@ -129,17 +148,23 @@ export default async function BillingPage() {
 
   const userId = session.user.id;
 
-  const [user, recentPayments, dbPlans] = await Promise.all([
+  const [user, recentPayments, dbPlans, comparisonRows] = await Promise.all([
     db.user.findUnique({
       where: { id: userId },
       include: { plan: true },
     }),
     getRecentPayments(userId),
     getPlans(),
+    getPricingComparisonRows(),
   ]);
 
   const hasStripeCustomer = !!user?.stripeCustomerId;
   const plans = dbPlans.length > 0 ? dbPlans : fallbackPlans;
+  const visibleComparisonPlanSlugs = plans
+    .map((plan) => plan.slug)
+    .filter((slug): slug is (typeof PLAN_ORDER)[number] =>
+      PLAN_ORDER.includes(slug as (typeof PLAN_ORDER)[number])
+    );
   const planName = user?.plan?.name ?? "Free";
   const isFreePlan = user?.plan?.slug === "free" || !user?.plan;
   const credits = user?.creditsRemaining === -1 ? "Unlimited" : user?.creditsRemaining ?? 0;
@@ -179,7 +204,8 @@ export default async function BillingPage() {
               features: (plan.features as string[]) ?? [],
             }))}
             currentPlanSlug={user?.plan?.slug ?? "free"}
-            comparisonRows={pricingComparisonRows}
+            comparisonRows={comparisonRows}
+            visiblePlanSlugs={visibleComparisonPlanSlugs}
           />
 
           <PaymentHistorySection payments={recentPayments} />

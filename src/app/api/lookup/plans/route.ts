@@ -7,7 +7,7 @@ export const fetchCache = "force-no-store";
 
 export async function GET() {
   const plans = await db.planConfig.findMany({
-    where: { isActive: true },
+    where: { isActive: true, isVisible: true },
     orderBy: { sortOrder: "asc" },
   });
 

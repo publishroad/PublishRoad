@@ -24,24 +24,6 @@ export const metadata: Metadata = {
   }),
 };
 
-const supportCategories = [
-  {
-    title: "Sales & plan guidance",
-    description: "Need help choosing between Free, Starter, Pro, Lifetime, or the done-for-you service?",
-    bullets: ["Plan comparisons", "Billing questions", "Use-case recommendations"],
-  },
-  {
-    title: "Product & account support",
-    description: "Get help with account access, curations, checkout issues, or launch workflow questions.",
-    bullets: ["Login and access issues", "Curation questions", "Payment follow-up"],
-  },
-  {
-    title: "Partnerships & media",
-    description: "Reach out for integrations, affiliate opportunities, launch partnerships, or media enquiries.",
-    bullets: ["Partnership requests", "Press and media", "Collaboration ideas"],
-  },
-] as const;
-
 const contactFaqs = [
   {
     q: "How quickly do you reply?",
@@ -132,57 +114,6 @@ export default function ContactPage() {
           <p className="text-slate-500 font-light">
             Have a question or feedback? We&apos;d love to hear from you.
           </p>
-        </div>
-      </div>
-
-      <div className="max-w-[1100px] mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <div className="max-w-3xl mx-auto text-center mb-8">
-          <p className="text-slate-500 leading-relaxed">
-            We help founders with plan selection, launch execution, billing, and partnerships. Before you reach out, you can also review our <Link href="/pricing" className="font-medium hover:underline" style={{ color: "var(--indigo)" }}>pricing plans</Link>, explore <Link href="/hire-us" className="font-medium hover:underline" style={{ color: "var(--indigo)" }}>Hire Us</Link>, or browse the <Link href="/faq" className="font-medium hover:underline" style={{ color: "var(--indigo)" }}>FAQ</Link>.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          {supportCategories.map((category) => (
-            <div
-              key={category.title}
-              className="rounded-[1.5rem] bg-white p-6"
-              style={{ boxShadow: "0 4px 24px rgba(91,88,246,0.06)", border: "1px solid rgba(226,232,240,0.8)" }}
-            >
-              <h2 className="text-lg font-semibold mb-2" style={{ fontFamily: "var(--font-heading)", color: "var(--dark)" }}>
-                {category.title}
-              </h2>
-              <p className="text-sm text-slate-500 leading-relaxed mb-4">{category.description}</p>
-              <ul className="space-y-2 text-sm text-slate-600">
-                {category.bullets.map((bullet) => (
-                  <li key={bullet} className="flex items-start gap-2">
-                    <span style={{ color: "var(--indigo)" }}>•</span>
-                    <span>{bullet}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-
-        <div className="rounded-[1.5rem] bg-white p-6 mb-10" style={{ boxShadow: "0 4px 24px rgba(91,88,246,0.06)", border: "1px solid rgba(226,232,240,0.8)" }}>
-          <h2 className="text-xl font-semibold mb-3" style={{ fontFamily: "var(--font-heading)", color: "var(--dark)" }}>
-            What to expect when you contact us
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-slate-600">
-            <div>
-              <p className="font-medium text-slate-900 mb-1">Response time</p>
-              <p>Most messages get a reply within 1 business day.</p>
-            </div>
-            <div>
-              <p className="font-medium text-slate-900 mb-1">Best way to get help</p>
-              <p>Include your product URL, account email, and any error details so we can help faster.</p>
-            </div>
-            <div>
-              <p className="font-medium text-slate-900 mb-1">Who we work with</p>
-              <p>Founders, SaaS teams, indie hackers, agencies, and launch partners.</p>
-            </div>
-          </div>
         </div>
       </div>
 

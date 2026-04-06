@@ -36,6 +36,7 @@ interface CurationCardProps {
   status: "pending" | "processing" | "completed" | "failed";
   createdAt: Date | string;
   progress?: ProgressBySection;
+  hireUsPackageSlug?: "starter" | "complete" | null;
 }
 
 const statusConfig = {
@@ -51,6 +52,7 @@ export function CurationCard({
   status,
   createdAt,
   progress,
+  hireUsPackageSlug,
 }: CurationCardProps) {
   const router = useRouter();
   const [isDeleting, setIsDeleting] = useState(false);
@@ -119,6 +121,7 @@ export function CurationCard({
         progress={safeProgress}
         createdAt={createdAt}
         displayUrl={displayUrl}
+        hireUsPackageSlug={hireUsPackageSlug}
         isDeleting={isDeleting}
         onDelete={(event) => {
           void handleDelete(event);
@@ -144,6 +147,9 @@ export function CurationCard({
               >
                 {displayUrl}
               </p>
+              {hireUsPackageSlug && (
+                <TeamWorkingBadge packageSlug={hireUsPackageSlug} className="mt-1 inline-flex" />
+              )}
               <p className="text-xs text-slate-400 mt-1 font-light">
                 {formatRelativeTime(createdAt)}
               </p>
@@ -197,6 +203,7 @@ function CompletedCurationCard({
   progress,
   createdAt,
   displayUrl,
+  hireUsPackageSlug,
   isDeleting,
   onDelete,
 }: {
@@ -204,6 +211,7 @@ function CompletedCurationCard({
   progress: ProgressBySection;
   createdAt: Date | string;
   displayUrl: string;
+  hireUsPackageSlug?: "starter" | "complete" | null;
   isDeleting: boolean;
   onDelete: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
@@ -229,6 +237,9 @@ function CompletedCurationCard({
           <div className="max-w-2xl">
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#465FFF]">Campaign Progress</p>
             <h3 className="mt-2 break-words text-xl font-semibold tracking-tight text-slate-950 sm:text-2xl">{displayUrl}</h3>
+            {hireUsPackageSlug && (
+              <TeamWorkingBadge packageSlug={hireUsPackageSlug} className="mt-2" />
+            )}
             <p className="mt-2 text-sm leading-6 text-slate-600">{motivationText}</p>
             <p className="mt-2 text-xs text-slate-400">{displayUrl} · {formatRelativeTime(createdAt)}</p>
           </div>
@@ -291,6 +302,30 @@ function CompletedCurationCard({
         )}
       </button>
     </div>
+  );
+}
+
+function TeamWorkingBadge({
+  packageSlug,
+  className = "",
+}: {
+  packageSlug: "starter" | "complete";
+  className?: string;
+}) {
+  return (
+    <span
+      className={`inline-flex items-center gap-2 rounded-full border border-[#dbe4ff] bg-white/90 px-3 py-1 text-xs font-medium text-[#465FFF] ${className}`}
+    >
+      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#EEF2FF]">
+        <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <path
+            d="M10 2.5l2.1 4.3 4.7.7-3.4 3.3.8 4.7L10 13.2 5.8 15.5l.8-4.7L3.2 7.5l4.7-.7L10 2.5z"
+            className="fill-[#465FFF]"
+          />
+        </svg>
+      </span>
+      PublishRoad Team Working ({packageSlug === "complete" ? "Complete" : "Starter"})
+    </span>
   );
 }
 

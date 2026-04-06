@@ -50,7 +50,7 @@ export default async function AdminWebsitesPage({ searchParams }: { searchParams
       : {};
 
   const [websites, total, categories] = await Promise.all([
-    db.website.findMany({ where, orderBy: [{ isActive: "desc" }, { da: "desc" }], skip, take: PAGE_SIZE }),
+    db.website.findMany({ where, orderBy: [{ starRating: "desc" }, { isActive: "desc" }, { da: "desc" }], skip, take: PAGE_SIZE }),
     db.website.count({ where }),
     db.category.findMany({
       where: { isActive: true },
@@ -155,7 +155,7 @@ export default async function AdminWebsitesPage({ searchParams }: { searchParams
                     <td className="px-5 py-4 text-sm font-semibold text-gray-700">{(site.traffic ?? 0).toLocaleString()}</td>
                     <td className="px-5 py-4">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${site.isActive ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"}`}>{site.isActive ? "Active" : "Inactive"}</span>
-                      {site.isPinned && <span className="ml-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-50 text-yellow-700">Pinned</span>}
+                      {site.starRating && <span className="ml-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-50 text-yellow-700">{"★".repeat(site.starRating)}</span>}
                     </td>
                     <td className="px-5 py-4 text-xs text-gray-400">{formatDate(site.createdAt)}</td>
                     <td className="px-5 py-4 text-right">

@@ -13,17 +13,24 @@ export const createCurationSchema = z.object({
     .array(
       z
         .string()
+        .trim()
         .min(1, "Keyword cannot be empty")
         .max(50, "Each keyword must be under 50 characters")
         .regex(/^[a-zA-Z0-9-\s]+$/, "Keywords can only contain letters, numbers, hyphens, and spaces")
     )
-    .min(1, "At least 1 keyword is required")
-    .max(10, "Maximum 10 keywords allowed"),
-  description: z
+    .max(10, "Maximum 10 keywords allowed")
+    .optional()
+    .default([]),
+  problemStatement: z
     .string()
     .trim()
-    .min(1, "Description is required")
-    .max(1000, "Description must be under 1000 characters"),
+    .min(1, "Problem statement is required")
+    .max(1000, "Problem statement must be under 1000 characters"),
+  solutionStatement: z
+    .string()
+    .trim()
+    .min(1, "Solution statement is required")
+    .max(1000, "Solution statement must be under 1000 characters"),
   hireUs: z.boolean().optional(),
   hireUsPackage: z.enum(["starter", "complete"]).optional(),
 });

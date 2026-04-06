@@ -25,6 +25,7 @@ interface RedditChannelFormProps {
     description: string | null;
     postingDifficulty: string | null;
     isActive: boolean;
+    starRating: number | null;
     tagIds: string[];
     categoryIds: string[];
   } | null;
@@ -36,10 +37,12 @@ export function RedditChannelForm({ channel, categories, tags }: RedditChannelFo
   const router = useRouter();
   const [selectedTags, setSelectedTags] = useState<string[]>(channel?.tagIds ?? []);
   const [selectedCategories, setSelectedCategories] = useState<string[]>(channel?.categoryIds ?? []);
+  const [starRating, setStarRating] = useState<number | null>(channel?.starRating ?? null);
 
   useEffect(() => {
     setSelectedTags(channel?.tagIds ?? []);
     setSelectedCategories(channel?.categoryIds ?? []);
+    setStarRating(channel?.starRating ?? null);
   }, [channel]);
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>({
@@ -64,7 +67,7 @@ export function RedditChannelForm({ channel, categories, tags }: RedditChannelFo
   });
 
   async function onSubmit(data: FormData) {
-    const payload = { ...data, tagIds: selectedTags, categoryIds: selectedCategories };
+    const payload = { ...data, starRating, tagIds: selectedTags, categoryIds: selectedCategories };
     const url = channel ? `/api/admin/reddit-channels/${channel.id}` : "/api/admin/reddit-channels";
     const method = channel ? "PUT" : "POST";
 
@@ -148,6 +151,34 @@ export function RedditChannelForm({ channel, categories, tags }: RedditChannelFo
               className="w-full border border-border-gray rounded-lg px-3 py-2 text-sm min-h-[80px] focus:outline-none focus:border-navy"
               placeholder="Brief description of this subreddit..."
             />
+          </div>
+
+          <div className="col-span-2 space-y-1.5">
+            <Label>Star Rating (optional)</Label>
+            <div className="flex items-center gap-1">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  type="button"
+                  onClick={() => setStarRating(starRating === star ? null : star)}
+                  className={`text-2xl leading-none transition-colors ${
+                    starRating !== null && star <= starRating
+                      ? "text-yellow-400"
+                      : "text-gray-300 hover:text-yellow-300"
+                  }`}
+                >
+                  ★
+                </button>
+              ))}
+              {starRating && (
+                <button type="button" onClick={() => setStarRating(null)} className="ml-2 text-xs text-medium-gray hover:text-error">
+                  Clear
+                </button>
+              )}
+            </div>
+            {starRating && starRating >= 4 && (
+              <p className="text-xs text-yellow-600">⭐ Gold standard — this subreddit will always appear in curations for its category</p>
+            )}
           </div>
         </div>
 

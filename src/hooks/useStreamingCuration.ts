@@ -5,6 +5,8 @@ interface StreamingCurationData {
   productUrl: string;
   status: "pending" | "processing" | "completed" | "failed";
   keywords: string[];
+  problemStatement?: string | null;
+  solutionStatement?: string | null;
   description: string | null;
   siteValidation?: {
     reachable: boolean;

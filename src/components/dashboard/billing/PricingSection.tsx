@@ -1,5 +1,6 @@
 import { PricingCard } from "@/components/public/PricingCard";
 import { PlanComparisonTable } from "@/components/dashboard/billing/PlanComparisonTable";
+import { PricingComparisonRow } from "@/lib/pricing-comparison";
 
 interface PlanData {
   id: string;
@@ -14,13 +15,16 @@ interface PlanData {
 interface PricingSectionProps {
   plans: PlanData[];
   currentPlanSlug: string;
-  comparisonRows: Array<{
-    feature: string;
-    values: Array<string | boolean>;
-  }>;
+  comparisonRows: PricingComparisonRow[];
+  visiblePlanSlugs?: Array<"free" | "starter" | "pro" | "lifetime">;
 }
 
-export function PricingSection({ plans, currentPlanSlug, comparisonRows }: PricingSectionProps) {
+export function PricingSection({
+  plans,
+  currentPlanSlug,
+  comparisonRows,
+  visiblePlanSlugs,
+}: PricingSectionProps) {
   return (
     <section id="upgrade-plans" className="scroll-mt-24">
       <div className="text-center max-w-3xl mx-auto mb-8">
@@ -35,7 +39,13 @@ export function PricingSection({ plans, currentPlanSlug, comparisonRows }: Prici
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 max-w-5xl mx-auto mb-12">
+      <div
+        className="grid gap-6 max-w-5xl mx-auto mb-12"
+        style={{
+          gridTemplateColumns: "repeat(auto-fit, minmax(250px, 320px))",
+          justifyContent: "center",
+        }}
+      >
         {plans.map((plan) => (
           <PricingCard
             key={plan.id}
@@ -53,7 +63,7 @@ export function PricingSection({ plans, currentPlanSlug, comparisonRows }: Prici
         ))}
       </div>
 
-      <PlanComparisonTable rows={comparisonRows} />
+      <PlanComparisonTable rows={comparisonRows} visiblePlanSlugs={visiblePlanSlugs} />
     </section>
   );
 }

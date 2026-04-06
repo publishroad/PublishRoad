@@ -32,6 +32,7 @@ export async function GET(req: NextRequest) {
   let successUrl: string;
   let cancelUrl: string;
   let hireUsPackage: string | undefined;
+  let hireUsSourceCurationId: string | undefined;
   let isHireUsFlow = false;
   try {
     const meta = JSON.parse(typeof raw === "string" ? raw : JSON.stringify(raw)) as {
@@ -39,13 +40,14 @@ export async function GET(req: NextRequest) {
       userId: string;
       successUrl?: string;
       cancelUrl?: string;
-      metadata?: { flow?: string; hireUsPackage?: string };
+      metadata?: { flow?: string; hireUsPackage?: string; hireUsSourceCurationId?: string };
     };
     planId = meta.planId;
     userId = meta.userId;
     successUrl = meta.successUrl ?? defaultSuccessUrl;
     cancelUrl = meta.cancelUrl ?? defaultCancelUrl;
     hireUsPackage = meta.metadata?.hireUsPackage;
+    hireUsSourceCurationId = meta.metadata?.hireUsSourceCurationId;
     isHireUsFlow = meta.metadata?.flow === "hire_us";
     if (!planId || !userId) throw new Error("missing fields");
   } catch {
@@ -89,12 +91,14 @@ export async function GET(req: NextRequest) {
           ? undefined
           : "Your plan has been upgraded via PayPal. Credits have been added to your account.",
         hireUsPackageSlug: packageSlug ?? undefined,
+        hireUsSourceCurationId,
         skipNotification: !!packageSlug,
       });
     } else {
       await runPostPaymentSideEffects({
         userId,
         hireUsPackageSlug: packageSlug ?? undefined,
+        hireUsSourceCurationId,
         skipNotification: true,
       });
     }

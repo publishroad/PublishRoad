@@ -119,7 +119,8 @@ export default function NewCurationPage() {
       countryId: undefined,
       categoryId: undefined,
       keywords: [],
-      description: "",
+      problemStatement: "",
+      solutionStatement: "",
     },
   });
 
@@ -234,7 +235,8 @@ export default function NewCurationPage() {
               <p className="text-sm font-semibold text-slate-900">What improves result quality</p>
               <ul className="space-y-2 text-sm text-slate-600">
                 <li>Specific product URL with clear positioning</li>
-                <li>3-7 focused keywords</li>
+                <li>Clear problem and solution statements</li>
+                <li>Optional keywords as extra hints</li>
                 <li>Country + category targeting selected</li>
               </ul>
             </div>
@@ -353,7 +355,7 @@ export default function NewCurationPage() {
 
                 <div>
                   <FormLabel>
-                    Keywords <span className="text-red-500">*</span>
+                    Keywords <span className="text-slate-400">(optional)</span>
                   </FormLabel>
                   <div className="mb-2 flex gap-2">
                     <Input
@@ -398,21 +400,46 @@ export default function NewCurationPage() {
                       ))}
                     </div>
                   )}
+                  <p className="mt-1 text-xs text-slate-500">
+                    We primarily use problem/solution + category/country. Keywords are optional hints.
+                  </p>
                   <p className="mt-1 text-xs text-slate-500">{keywords.length}/10 keywords</p>
                   {keywordError && <p className="mt-1 text-sm font-medium text-destructive">{keywordError}</p>}
                 </div>
 
                 <FormField
                   control={form.control}
-                  name="description"
+                  name="problemStatement"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        Product Description <span className="text-red-500">*</span>
+                        Problem Statement <span className="text-red-500">*</span>
                       </FormLabel>
                       <FormControl>
                         <Textarea
-                          placeholder="Describe your product in 1-3 sentences. What problem does it solve? Who is it for?"
+                          placeholder="What exact problem are you solving for users?"
+                          className="min-h-[110px] resize-none"
+                          maxLength={1000}
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="solutionStatement"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        Solution Statement <span className="text-red-500">*</span>
+                      </FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="How does your product solve this problem?"
                           className="min-h-[110px] resize-none"
                           maxLength={1000}
                           {...field}

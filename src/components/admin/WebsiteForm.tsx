@@ -32,7 +32,7 @@ interface WebsiteFormProps {
     description: string | null;
     countryId: string | null;
     isActive: boolean;
-    isPinned: boolean;
+    starRating: number | null;
     isExcluded: boolean;
   } | null;
   countries: Country[];
@@ -53,6 +53,7 @@ export function WebsiteForm({ website, countries, categories, tags }: WebsiteFor
   const [selectedCategories, setSelectedCategories] = useState<string[]>(website?.categoryIds ?? []);
   const [selectedCountries, setSelectedCountries] = useState<string[]>(website?.countryIds ?? []);
   const [isWorldwideSelected, setIsWorldwideSelected] = useState<boolean>(website ? website.countryIds.length === 0 : true);
+  const [starRating, setStarRating] = useState<number | null>(website?.starRating ?? null);
   const [duplicateDomain, setDuplicateDomain] = useState<string | null>(null);
   const [duplicateConflicts, setDuplicateConflicts] = useState<DuplicateConflict[]>([]);
   const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
@@ -63,6 +64,7 @@ export function WebsiteForm({ website, countries, categories, tags }: WebsiteFor
     setSelectedCategories(website?.categoryIds ?? []);
     setSelectedCountries(website?.countryIds ?? []);
     setIsWorldwideSelected(website ? website.countryIds.length === 0 : true);
+    setStarRating(website?.starRating ?? null);
   }, [website]);
 
   const {
@@ -85,7 +87,6 @@ export function WebsiteForm({ website, countries, categories, tags }: WebsiteFor
           countryIds: website.countryIds,
           categoryIds: website.categoryIds,
           isActive: website.isActive,
-          isPinned: website.isPinned,
           isExcluded: website.isExcluded,
           tagIds: website.tagIds,
         }
@@ -96,7 +97,6 @@ export function WebsiteForm({ website, countries, categories, tags }: WebsiteFor
           spamScore: 0,
           traffic: 0,
           isActive: true,
-          isPinned: false,
           isExcluded: false,
           tagIds: [],
         },
@@ -168,6 +168,7 @@ export function WebsiteForm({ website, countries, categories, tags }: WebsiteFor
 
     const payload = {
       ...data,
+      starRating,
       tagIds: selectedTags,
       categoryIds: selectedCategories,
       countryIds: isWorldwideSelected ? [] : selectedCountries,
@@ -406,11 +407,51 @@ export function WebsiteForm({ website, countries, categories, tags }: WebsiteFor
           </div>
         </div>
 
+        {/* Star Rating */}
+        <div className="space-y-2">
+          <Label>Quality Rating (optional)</Label>
+          <div className="flex items-center gap-1">
+            {[1, 2, 3, 4, 5].map((star) => (
+              <button
+                key={star}
+                type="button"
+                onClick={() => setStarRating(starRating === star ? null : star)}
+                className={`text-2xl leading-none transition-colors ${
+                  starRating !== null && star <= starRating
+                    ? "text-yellow-400 hover:text-yellow-500"
+                    : "text-gray-300 hover:text-yellow-300"
+                }`}
+                title={`${star} star${star > 1 ? "s" : ""}${starRating === star ? " — click to clear" : ""}`}
+              >
+                ★
+              </button>
+            ))}
+            {starRating !== null && (
+              <button
+                type="button"
+                onClick={() => setStarRating(null)}
+                className="ml-2 text-xs text-medium-gray underline hover:text-navy"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          {starRating !== null && starRating >= 4 && (
+            <p className="text-xs text-yellow-600">
+              ⭐ Gold standard — this site will always appear in curations for its category
+            </p>
+          )}
+          {starRating !== null && starRating < 4 && (
+            <p className="text-xs text-medium-gray">
+              Quality signal only — affects scoring but does not guarantee inclusion
+            </p>
+          )}
+        </div>
+
         {/* Flags */}
         <div className="flex gap-6">
           {[
             { name: "isActive", label: "Active" },
-            { name: "isPinned", label: "Pinned (show first)" },
             { name: "isExcluded", label: "Excluded from AI" },
           ].map((flag) => (
             <label key={flag.name} className="flex items-center gap-2 cursor-pointer">

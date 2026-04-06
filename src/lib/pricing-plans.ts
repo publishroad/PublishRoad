@@ -46,7 +46,9 @@ export function dbPlanToDisplay(dbPlan: {
       : dbPlan.credits === 1 ? "1 curation included"
       : `${dbPlan.credits} curations`;
 
-  const features = Array.isArray(dbPlan.features) ? (dbPlan.features as string[]) : [];
+  const features = Array.isArray(dbPlan.features)
+    ? dbPlan.features.filter((feature): feature is string => typeof feature === "string")
+    : [];
 
   return { slug: dbPlan.slug, name: dbPlan.name, price, period, billingNote, credits, features, ...stat };
 }
