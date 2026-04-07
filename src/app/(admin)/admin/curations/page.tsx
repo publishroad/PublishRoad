@@ -16,6 +16,12 @@ const statusStyle: Record<string, string> = {
   pending: "bg-orange-50 text-orange-700",
 };
 
+function completionStyle(percent: number): string {
+  if (percent >= 80) return "bg-green-50 text-green-700";
+  if (percent >= 40) return "bg-amber-50 text-amber-700";
+  return "bg-red-50 text-red-700";
+}
+
 export default async function AdminCurationsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
   const page = parseInt(params.page ?? "1");
@@ -23,7 +29,16 @@ export default async function AdminCurationsPage({ searchParams }: { searchParam
   const where = params.status ? { status: params.status as "pending" | "processing" | "completed" | "failed" } : {};
 
   const [curations, total] = await Promise.all([
-    db.curation.findMany({ where, include: { user: { select: { email: true, name: true } }, _count: { select: { results: true } } }, orderBy: { createdAt: "desc" }, skip, take: PAGE_SIZE }),
+    db.curation.findMany({
+      where,
+      include: {
+        user: { select: { id: true, email: true, name: true } },
+        results: { select: { userStatus: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: PAGE_SIZE,
+    }),
     db.curation.count({ where }),
   ]);
   const totalPages = Math.ceil(total / PAGE_SIZE);
@@ -55,22 +70,39 @@ export default async function AdminCurationsPage({ searchParams }: { searchParam
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Product URL</th>
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Results</th>
+                  <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Completion</th>
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Date</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {curations.length === 0 ? (
-                  <tr><td colSpan={5} className="text-center py-16 text-gray-400 text-sm">No curations found.</td></tr>
+                  <tr><td colSpan={6} className="text-center py-16 text-gray-400 text-sm">No curations found.</td></tr>
                 ) : curations.map((c: CurationRow) => (
                   <tr key={c.id} className="hover:bg-gray-50/60 transition-colors">
-                    <td className="px-5 py-4 text-sm font-medium text-gray-900">{c.user.name ?? c.user.email}</td>
-                    <td className="px-5 py-4 max-w-[200px]">
+                    <td className="px-5 py-4 text-sm font-medium text-gray-900">
+                      <Link href={`/admin/users/${c.user.id}`} className="text-[#465FFF] hover:text-[#3647D6] hover:underline">
+                        {c.user.name ?? c.user.email}
+                      </Link>
+                    </td>
+                    <td className="px-5 py-4 max-w-[220px]">
                       <p className="text-xs text-[#465FFF] truncate">{c.productUrl}</p>
                     </td>
                     <td className="px-5 py-4">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${statusStyle[c.status] ?? "bg-gray-100 text-gray-600"}`}>{c.status}</span>
                     </td>
-                    <td className="px-5 py-4 text-sm text-gray-700">{c._count.results}</td>
+                    <td className="px-5 py-4 text-sm text-gray-700">{c.results.length}</td>
+                    <td className="px-5 py-4 text-sm text-gray-700">
+                      {(() => {
+                        const completed = c.results.filter((r) => r.userStatus === "saved").length;
+                        const totalResults = c.results.length;
+                        const percent = totalResults === 0 ? 0 : Math.round((completed / totalResults) * 100);
+                        return (
+                          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${completionStyle(percent)}`}>
+                            {percent}% ({completed}/{totalResults})
+                          </span>
+                        );
+                      })()}
+                    </td>
                     <td className="px-5 py-4 text-xs text-gray-400">{formatDate(c.createdAt)}</td>
                   </tr>
                 ))}

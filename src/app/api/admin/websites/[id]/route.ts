@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { db } from "@/lib/db";
-import { isMissingRelationError } from "@/lib/db-error-utils";
 import { Prisma } from "@prisma/client";
 import { verifyAdminSession } from "@/lib/admin-auth";
 import { findWebsiteDomainConflicts } from "@/lib/admin/website-domain-duplicates";
@@ -80,21 +79,6 @@ export async function PUT(
       return updatedWebsite;
     });
 
-    // Keep country relation sync outside the main transaction so legacy schemas
-    // without website_countries do not invalidate core website field updates.
-    try {
-      await db.websiteCountry.deleteMany({ where: { websiteId: id } });
-      if (countryIds.length > 0) {
-        await db.websiteCountry.createMany({
-          data: countryIds.map((countryId) => ({ websiteId: id, countryId })),
-        });
-      }
-    } catch (error) {
-      if (!isMissingRelationError(error, "website_countries")) {
-        throw error;
-      }
-    }
-
     return NextResponse.json(website);
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -132,7 +116,7 @@ export async function DELETE(
       if (error.code === "P2003") {
         await db.website.update({
           where: { id },
-          data: { isActive: false, isExcluded: true, isPinned: false },
+          data: { isActive: false, isExcluded: true, starRating: null },
         });
 
         return NextResponse.json({

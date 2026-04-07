@@ -22,6 +22,7 @@ export const fundSchema = z.object({
   ticketSize: z.string().max(255).optional().nullable(),
   countryId: z.string().optional().nullable(),
   isActive: z.boolean().default(true),
+  starRating: z.coerce.number().int().min(1).max(5).nullable().optional().default(null),
   tagIds: z.array(z.string()).default([]),
 });
 

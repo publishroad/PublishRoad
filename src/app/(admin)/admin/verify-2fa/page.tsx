@@ -1,4 +1,6 @@
 "use client";
+
+export const dynamic = "force-dynamic";
 // Static verification form — no real-time rendering needed
 
 import { useState } from "react";

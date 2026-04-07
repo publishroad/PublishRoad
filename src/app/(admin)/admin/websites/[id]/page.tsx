@@ -2,7 +2,6 @@
 export const revalidate = 0;
 
 import { db } from "@/lib/db";
-import { isMissingRelationError } from "@/lib/db-error-utils";
 import { notFound } from "next/navigation";
 import { WebsiteForm } from "@/components/admin/WebsiteForm";
 
@@ -39,7 +38,7 @@ async function getData(id: string) {
         description: string | null;
         countryId: string | null;
         isActive: boolean;
-        isPinned: boolean;
+        starRating: number | null;
         isExcluded: boolean;
         tagIds: string[];
         categoryIds: string[];
@@ -47,49 +46,23 @@ async function getData(id: string) {
       }
     | null = null;
 
-  try {
-    const loadedWebsite = await db.website.findUnique({
-      where: { id },
-      include: {
-        websiteTags: { select: { tagId: true } },
-        websiteCategories: { select: { categoryId: true } },
-        websiteCountries: { select: { countryId: true } },
-      },
-    });
+  const loadedWebsite = await db.website.findUnique({
+    where: { id },
+    include: {
+      websiteTags: { select: { tagId: true } },
+      websiteCategories: { select: { categoryId: true } },
+    },
+  });
 
-    if (!loadedWebsite) {
-      website = null;
-    } else {
-      website = {
-        ...loadedWebsite,
-        tagIds: loadedWebsite.websiteTags.map((t) => t.tagId),
-        categoryIds: loadedWebsite.websiteCategories.map((c) => c.categoryId),
-        countryIds: loadedWebsite.websiteCountries.map((c) => c.countryId),
-      };
-    }
-  } catch (error) {
-    if (!isMissingRelationError(error, "website_countries")) {
-      throw error;
-    }
-
-    const loadedWebsite = await db.website.findUnique({
-      where: { id },
-      include: {
-        websiteTags: { select: { tagId: true } },
-        websiteCategories: { select: { categoryId: true } },
-      },
-    });
-
-    if (!loadedWebsite) {
-      website = null;
-    } else {
-      website = {
-        ...loadedWebsite,
-        tagIds: loadedWebsite.websiteTags.map((t) => t.tagId),
-        categoryIds: loadedWebsite.websiteCategories.map((c) => c.categoryId),
-        countryIds: loadedWebsite.countryId ? [loadedWebsite.countryId] : [],
-      };
-    }
+  if (!loadedWebsite) {
+    website = null;
+  } else {
+    website = {
+      ...loadedWebsite,
+      tagIds: loadedWebsite.websiteTags.map((t) => t.tagId),
+      categoryIds: loadedWebsite.websiteCategories.map((c) => c.categoryId),
+      countryIds: loadedWebsite.countryId ? [loadedWebsite.countryId] : [],
+    };
   }
 
   const [countries, categories, tags] = await Promise.all([

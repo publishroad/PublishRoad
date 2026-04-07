@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { usePathname } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { AppSidebar } from "@/components/dashboard/AppSidebar";
 
 const groups = [
@@ -59,6 +60,15 @@ const groups = [
         icon: (
           <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+        ),
+      },
+      {
+        href: "/admin/notifications",
+        label: "Notifications",
+        icon: (
+          <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
           </svg>
         ),
       },
@@ -185,6 +195,15 @@ const groups = [
           </svg>
         ),
       },
+      {
+        href: "/admin/curation-steps",
+        label: "Curation Steps",
+        icon: (
+          <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V9M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-5 7h6m-6 4h4" />
+          </svg>
+        ),
+      },
     ],
   },
 ];
@@ -208,8 +227,63 @@ function AdminLogout() {
   );
 }
 
+async function fetchAdminUnreadCount(): Promise<number> {
+  const res = await fetch("/api/admin/notifications", { cache: "no-store" });
+  if (!res.ok) return 0;
+  const data = await res.json();
+  return data.unreadCount ?? 0;
+}
+
+async function fetchNewLeadsCount(): Promise<number> {
+  const res = await fetch("/api/admin/leads/summary", { cache: "no-store" });
+  if (!res.ok) return 0;
+  const data = await res.json();
+  return data.newCount ?? 0;
+}
+
 export function AdminSidebar() {
   const pathname = usePathname();
+  const { data: unreadCount = 0 } = useQuery({
+    queryKey: ["admin-notifications", "unread-count"],
+    queryFn: fetchAdminUnreadCount,
+    staleTime: 30 * 1000,
+    refetchInterval: 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+  const { data: newLeadsCount = 0 } = useQuery({
+    queryKey: ["admin-leads", "new-count"],
+    queryFn: fetchNewLeadsCount,
+    staleTime: 30 * 1000,
+    refetchInterval: 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
+  const groupsWithUnread = groups.map((group) => ({
+    ...group,
+    items: group.items.map((item) => {
+      if (item.href === "/admin/notifications") {
+        return {
+          ...item,
+          label:
+            unreadCount > 0
+              ? `Notifications (${unreadCount > 99 ? "99+" : unreadCount})`
+              : "Notifications",
+        };
+      }
+
+      if (item.href === "/admin/leads") {
+        return {
+          ...item,
+          label:
+            newLeadsCount > 0
+              ? `Leads (${newLeadsCount > 99 ? "99+" : newLeadsCount})`
+              : "Leads",
+        };
+      }
+
+      return item;
+    }),
+  }));
 
   const HIDE_SIDEBAR_ON = ["/admin/login", "/admin/verify-2fa", "/admin/setup-2fa"];
 
@@ -218,7 +292,7 @@ export function AdminSidebar() {
   }
   return (
     <AppSidebar
-      groups={groups}
+      groups={groupsWithUnread}
       exactMatch={["/admin/dashboard"]}
       bottomSlot={<AdminLogout />}
     />

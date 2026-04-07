@@ -1,6 +1,3 @@
-// PublishRoad — Prisma Schema
-// Database: PostgreSQL (Supabase)
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,9 +6,554 @@ datasource db {
   provider = "postgresql"
 }
 
-// ─────────────────────────────────────────────
-// ENUMS
-// ─────────────────────────────────────────────
+model Country {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  slug        String       @unique
+  flagEmoji   String?      @map("flag_emoji")
+  isActive    Boolean      @default(true) @map("is_active")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  curations   Curation[]
+  funds       Fund[]
+  influencers Influencer[]
+  websites    Website[]
+
+  @@map("countries")
+}
+
+model Category {
+  id                      String                  @id @default(cuid())
+  name                    String                  @unique
+  slug                    String                  @unique
+  description             String?
+  isActive                Boolean                 @default(true) @map("is_active")
+  createdAt               DateTime                @default(now()) @map("created_at")
+  updatedAt               DateTime                @updatedAt @map("updated_at")
+  blogPosts               BlogPost[]
+  fundCategories          FundCategory[]
+  influencerCategories    InfluencerCategory[]
+  redditChannelCategories RedditChannelCategory[]
+  subCategories           SubCategory[]
+  websiteCategories       WebsiteCategory[]
+  websites                Website[]
+
+  @@map("categories")
+}
+
+model SubCategory {
+  id         String    @id @default(cuid())
+  categoryId String    @map("category_id")
+  name       String
+  slug       String    @unique
+  isActive   Boolean   @default(true) @map("is_active")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  category   Category  @relation(fields: [categoryId], references: [id])
+  websites   Website[]
+
+  @@map("sub_categories")
+}
+
+model Tag {
+  id                String             @id @default(cuid())
+  name              String             @unique
+  slug              String             @unique
+  isActive          Boolean            @default(true) @map("is_active")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  fundTags          FundTag[]
+  influencerTags    InfluencerTag[]
+  redditChannelTags RedditChannelTag[]
+  websiteTags       WebsiteTag[]
+
+  @@map("tags")
+}
+
+model PlanConfig {
+  id            String      @id @default(cuid())
+  name          String
+  slug          String      @unique
+  priceCents    Int         @map("price_cents")
+  credits       Int
+  billingType   BillingType @map("billing_type")
+  stripePriceId String?     @map("stripe_price_id")
+  features      Json        @default("[]")
+  isActive      Boolean     @default(true) @map("is_active")
+  sortOrder     Int         @default(0) @map("sort_order")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+  isVisible     Boolean     @default(true) @map("is_visible")
+  payments      Payment[]
+  users         User[]
+
+  @@map("plan_configs")
+}
+
+model User {
+  id                 String         @id @default(uuid())
+  email              String         @unique
+  name               String?
+  passwordHash       String?        @map("password_hash")
+  authProvider       AuthProvider   @default(email) @map("auth_provider")
+  planId             String?        @map("plan_id")
+  creditsRemaining   Int            @default(1) @map("credits_remaining")
+  stripeCustomerId   String?        @map("stripe_customer_id")
+  emailVerifiedAt    DateTime?      @map("email_verified_at")
+  emailVerifyToken   String?        @map("email_verify_token")
+  resetToken         String?        @map("reset_token")
+  resetTokenExpiry   DateTime?      @map("reset_token_expiry")
+  failedLoginCount   Int            @default(0) @map("failed_login_count")
+  lockedUntil        DateTime?      @map("locked_until")
+  deletedAt          DateTime?      @map("deleted_at")
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+  stripeCustomerHash String?        @map("stripe_customer_hash")
+  creditsResetAt     DateTime?      @map("credits_reset_at")
+  curations          Curation[]
+  notifications      Notification[]
+  payments           Payment[]
+  referralUsed       Referral[]     @relation("ReferredUser")
+  referralsMade      Referral[]     @relation("ReferrerUser")
+  serviceLeads       ServiceLead[]
+  plan               PlanConfig?    @relation(fields: [planId], references: [id])
+
+  @@index([email])
+  @@index([stripeCustomerHash])
+  @@map("users")
+}
+
+model AdminUser {
+  id                   String                 @id @default(uuid())
+  email                String                 @unique
+  name                 String
+  passwordHash         String                 @map("password_hash")
+  totpSecret           String?                @map("totp_secret")
+  totpEnabled          Boolean                @default(false) @map("totp_enabled")
+  backupCodes          Json                   @default("[]") @map("backup_codes")
+  role                 AdminRole              @default(admin)
+  isActive             Boolean                @default(true) @map("is_active")
+  createdAt            DateTime               @default(now()) @map("created_at")
+  updatedAt            DateTime               @updatedAt @map("updated_at")
+  aiConfigs            AiConfig[]
+  auditLogs            AuditLog[]
+  betaConfigs          BetaConfig[]
+  blogPosts            BlogPost[]
+  emailProviderConfigs EmailProviderConfig[]
+  paymentConfigs       PaymentGatewayConfig[]
+
+  @@map("admin_users")
+}
+
+model Website {
+  id                String            @id @default(cuid())
+  name              String
+  url               String            @unique
+  type              WebsiteType
+  da                Int               @default(0)
+  countryId         String?           @map("country_id")
+  categoryId        String?           @map("category_id")
+  subCategoryId     String?           @map("sub_category_id")
+  description       String?
+  submissionUrl     String?           @map("submission_url")
+  isActive          Boolean           @default(true) @map("is_active")
+  isExcluded        Boolean           @default(false) @map("is_excluded")
+  tagSlugs          String[]          @default([]) @map("tag_slugs")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+  pa                Int               @default(0)
+  spamScore         Int               @default(0) @map("spam_score")
+  traffic           Int               @default(0)
+  starRating        Int?              @map("star_rating")
+  curationResults   CurationResult[]
+  websiteCategories WebsiteCategory[]
+  websiteTags       WebsiteTag[]
+  category          Category?         @relation(fields: [categoryId], references: [id])
+  country           Country?          @relation(fields: [countryId], references: [id])
+  subCategory       SubCategory?      @relation(fields: [subCategoryId], references: [id])
+
+  @@index([type, isActive])
+  @@index([countryId, isActive])
+  @@index([starRating, isActive])
+  @@index([starRating, isActive], map: "websites_star_rating_idx")
+  @@map("websites")
+}
+
+model WebsiteTag {
+  websiteId String  @map("website_id")
+  tagId     String  @map("tag_id")
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  website   Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@id([websiteId, tagId])
+  @@map("website_tags")
+}
+
+model Curation {
+  id                String           @id @default(uuid())
+  userId            String           @map("user_id")
+  productUrl        String           @map("product_url")
+  countryId         String?          @map("country_id")
+  keywords          String[]         @default([])
+  description       String?
+  status            CurationStatus   @default(pending)
+  errorMessage      String?          @map("error_message")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+  problemStatement  String?          @map("problem_statement")
+  solutionStatement String?          @map("solution_statement")
+  results           CurationResult[]
+  country           Country?         @relation(fields: [countryId], references: [id])
+  user              User             @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("curations")
+}
+
+model CurationResult {
+  id              String            @id @default(cuid())
+  curationId      String            @map("curation_id")
+  websiteId       String?           @map("website_id")
+  matchScore      Float             @map("match_score")
+  matchReason     String?           @map("match_reason")
+  section         CurationSection
+  rank            Int
+  userStatus      UserResultStatus? @map("user_status")
+  userNotes       String?           @map("user_notes")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  fundId          String?           @map("fund_id")
+  influencerId    String?           @map("influencer_id")
+  redditChannelId String?           @map("reddit_channel_id")
+  curation        Curation          @relation(fields: [curationId], references: [id], onDelete: Cascade)
+  fund            Fund?             @relation(fields: [fundId], references: [id])
+  influencer      Influencer?       @relation(fields: [influencerId], references: [id])
+  redditChannel   RedditChannel?    @relation(fields: [redditChannelId], references: [id])
+  website         Website?          @relation(fields: [websiteId], references: [id])
+
+  @@index([curationId, section, rank])
+  @@map("curation_results")
+}
+
+model Payment {
+  id                    String        @id @default(cuid())
+  userId                String        @map("user_id")
+  planId                String?       @map("plan_id")
+  stripePaymentIntentId String?       @map("stripe_payment_intent_id")
+  stripeSubscriptionId  String?       @map("stripe_subscription_id")
+  stripeInvoiceId       String?       @map("stripe_invoice_id")
+  amountCents           Int           @map("amount_cents")
+  currency              String        @default("usd")
+  status                PaymentStatus @default(pending)
+  createdAt             DateTime      @default(now()) @map("created_at")
+  providerPaymentId     String?       @map("provider_payment_id")
+  paymentType           PaymentType   @default(plan) @map("payment_type")
+  plan                  PlanConfig?   @relation(fields: [planId], references: [id])
+  user                  User          @relation(fields: [userId], references: [id])
+
+  @@map("payments")
+}
+
+model PaymentGatewayConfig {
+  id               String          @id
+  provider         PaymentProvider
+  publicKey        String?         @map("public_key")
+  secretKey        String?         @map("secret_key")
+  webhookSecret    String?         @map("webhook_secret")
+  additionalConfig Json            @default("{}") @map("additional_config")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+  updatedById      String?         @map("updated_by_id")
+  isActive         Boolean         @default(false) @map("is_active")
+  updatedBy        AdminUser?      @relation(fields: [updatedById], references: [id])
+
+  @@map("payment_gateway_config")
+}
+
+model EmailProviderConfig {
+  id               String        @id @default("default")
+  provider         EmailProvider @default(resend)
+  fromAddress      String        @map("from_address")
+  apiKey           String?       @map("api_key")
+  host             String?
+  port             Int?
+  username         String?
+  password         String?
+  useTls           Boolean       @default(true) @map("use_tls")
+  additionalConfig Json          @default("{}") @map("additional_config")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+  updatedById      String?       @map("updated_by_id")
+  updatedBy        AdminUser?    @relation(fields: [updatedById], references: [id])
+
+  @@map("email_provider_config")
+}
+
+model BetaConfig {
+  id                      String     @id @default("default")
+  enabled                 Boolean    @default(false)
+  updatedAt               DateTime   @updatedAt @map("updated_at")
+  updatedById             String?    @map("updated_by_id")
+  pricingComparisonRows   Json       @default("[]") @map("pricing_comparison_rows")
+  curationEnabledSections String[]   @default(["a", "b", "c", "d", "e", "f"]) @map("curation_enabled_sections")
+  updatedBy               AdminUser? @relation(fields: [updatedById], references: [id])
+
+  @@map("beta_config")
+}
+
+model ProcessedStripeEvent {
+  eventId     String   @id @map("event_id")
+  processedAt DateTime @default(now()) @map("processed_at")
+
+  @@map("processed_stripe_events")
+}
+
+model BlogPost {
+  id              String     @id @default(cuid())
+  slug            String     @unique
+  title           String
+  excerpt         String?
+  content         String
+  featuredImage   String?    @map("featured_image")
+  categoryId      String?    @map("category_id")
+  authorId        String     @map("author_id")
+  status          BlogStatus @default(draft)
+  publishDate     DateTime?  @map("publish_date")
+  metaTitle       String?    @map("meta_title")
+  metaDescription String?    @map("meta_description")
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+  author          AdminUser  @relation(fields: [authorId], references: [id])
+  category        Category?  @relation(fields: [categoryId], references: [id])
+
+  @@index([status, publishDate(sort: Desc)])
+  @@map("blog_posts")
+}
+
+model ServiceLead {
+  id          String     @id @default(cuid())
+  userId      String?    @map("user_id")
+  name        String
+  email       String
+  phone       String?
+  websiteUrl  String?    @map("website_url")
+  serviceType String?    @map("service_type")
+  message     String?
+  status      LeadStatus @default(new)
+  notes       String?
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+  user        User?      @relation(fields: [userId], references: [id])
+
+  @@map("service_leads")
+}
+
+model AuditLog {
+  id        String    @id @default(cuid())
+  adminId   String    @map("admin_id")
+  action    String
+  entity    String
+  entityId  String    @map("entity_id")
+  oldData   Json?     @map("old_data")
+  newData   Json?     @map("new_data")
+  ip        String?
+  createdAt DateTime  @default(now()) @map("created_at")
+  admin     AdminUser @relation(fields: [adminId], references: [id])
+
+  @@index([adminId, createdAt(sort: Desc)])
+  @@index([entity, entityId])
+  @@map("audit_logs")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  type      String
+  title     String
+  message   String
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+model Referral {
+  id             String   @id @default(cuid())
+  referrerUserId String   @map("referrer_user_id")
+  referredUserId String?  @map("referred_user_id")
+  code           String   @unique
+  status         String   @default("pending")
+  createdAt      DateTime @default(now()) @map("created_at")
+  referred       User?    @relation("ReferredUser", fields: [referredUserId], references: [id])
+  referrer       User     @relation("ReferrerUser", fields: [referrerUserId], references: [id])
+
+  @@map("referrals")
+}
+
+model ContactSubmission {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  subject   String
+  message   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("contact_submissions")
+}
+
+model AiConfig {
+  id          String     @id @default("default")
+  baseUrl     String     @map("base_url")
+  apiKey      String     @map("api_key")
+  modelName   String     @map("model_name")
+  maxTokens   Int        @default(4096) @map("max_tokens")
+  temperature Float      @default(0.3)
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+  updatedById String?    @map("updated_by_id")
+  updatedBy   AdminUser? @relation(fields: [updatedById], references: [id])
+
+  @@map("ai_config")
+}
+
+model Influencer {
+  id                   String               @id @default(cuid())
+  name                 String
+  platform             InfluencerPlatform
+  followersCount       Int                  @default(0) @map("followers_count")
+  countryId            String?              @map("country_id")
+  description          String?
+  profileLink          String               @map("profile_link")
+  email                String?
+  isActive             Boolean              @default(true) @map("is_active")
+  tagSlugs             String[]             @default([]) @map("tag_slugs")
+  createdAt            DateTime             @default(now()) @map("created_at")
+  updatedAt            DateTime             @updatedAt @map("updated_at")
+  categorySlugs        String[]             @default([]) @map("category_slugs")
+  starRating           Int?                 @map("star_rating")
+  curationResults      CurationResult[]
+  influencerCategories InfluencerCategory[]
+  influencerTags       InfluencerTag[]
+  country              Country?             @relation(fields: [countryId], references: [id])
+
+  @@index([platform, isActive])
+  @@index([starRating, isActive], map: "influencers_star_rating_idx")
+  @@map("influencers")
+}
+
+model InfluencerTag {
+  influencerId String     @map("influencer_id")
+  tagId        String     @map("tag_id")
+  influencer   Influencer @relation(fields: [influencerId], references: [id], onDelete: Cascade)
+  tag          Tag        @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([influencerId, tagId])
+  @@map("influencer_tags")
+}
+
+model RedditChannel {
+  id                      String                  @id @default(cuid())
+  name                    String
+  url                     String                  @unique
+  weeklyVisitors          Int                     @default(0) @map("weekly_visitors")
+  totalMembers            Int                     @default(0) @map("total_members")
+  description             String?
+  postingDifficulty       PostingDifficulty?      @map("posting_difficulty")
+  isActive                Boolean                 @default(true) @map("is_active")
+  tagSlugs                String[]                @default([]) @map("tag_slugs")
+  createdAt               DateTime                @default(now()) @map("created_at")
+  updatedAt               DateTime                @updatedAt @map("updated_at")
+  categorySlugs           String[]                @default([]) @map("category_slugs")
+  starRating              Int?                    @map("star_rating")
+  curationResults         CurationResult[]
+  redditChannelCategories RedditChannelCategory[]
+  redditChannelTags       RedditChannelTag[]
+
+  @@index([starRating, isActive], map: "reddit_channels_star_rating_idx")
+  @@map("reddit_channels")
+}
+
+model RedditChannelTag {
+  redditChannelId String        @map("reddit_channel_id")
+  tagId           String        @map("tag_id")
+  redditChannel   RedditChannel @relation(fields: [redditChannelId], references: [id], onDelete: Cascade)
+  tag             Tag           @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([redditChannelId, tagId])
+  @@map("reddit_channel_tags")
+}
+
+model Fund {
+  id              String           @id @default(cuid())
+  name            String
+  logoUrl         String?          @map("logo_url")
+  websiteUrl      String           @map("website_url")
+  description     String?
+  investmentStage InvestmentStage? @map("investment_stage")
+  ticketSize      String?          @map("ticket_size")
+  countryId       String?          @map("country_id")
+  isActive        Boolean          @default(true) @map("is_active")
+  tagSlugs        String[]         @default([]) @map("tag_slugs")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+  categorySlugs   String[]         @default([]) @map("category_slugs")
+  starRating      Int?             @map("star_rating")
+  curationResults CurationResult[]
+  fundCategories  FundCategory[]
+  fundTags        FundTag[]
+  country         Country?         @relation(fields: [countryId], references: [id])
+
+  @@index([starRating, isActive], map: "funds_star_rating_idx")
+  @@map("funds")
+}
+
+model FundTag {
+  fundId String @map("fund_id")
+  tagId  String @map("tag_id")
+  fund   Fund   @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([fundId, tagId])
+  @@map("fund_tags")
+}
+
+model WebsiteCategory {
+  websiteId  String   @map("website_id")
+  categoryId String   @map("category_id")
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  website    Website  @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@id([websiteId, categoryId])
+  @@map("website_categories")
+}
+
+model InfluencerCategory {
+  influencerId String     @map("influencer_id")
+  categoryId   String     @map("category_id")
+  category     Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  influencer   Influencer @relation(fields: [influencerId], references: [id], onDelete: Cascade)
+
+  @@id([influencerId, categoryId])
+  @@map("influencer_categories")
+}
+
+model RedditChannelCategory {
+  redditChannelId String        @map("reddit_channel_id")
+  categoryId      String        @map("category_id")
+  category        Category      @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  redditChannel   RedditChannel @relation(fields: [redditChannelId], references: [id], onDelete: Cascade)
+
+  @@id([redditChannelId, categoryId])
+  @@map("reddit_channel_categories")
+}
+
+model FundCategory {
+  fundId     String   @map("fund_id")
+  categoryId String   @map("category_id")
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  fund       Fund     @relation(fields: [fundId], references: [id], onDelete: Cascade)
+
+  @@id([fundId, categoryId])
+  @@map("fund_categories")
+}
 
 enum AuthProvider {
   email
@@ -116,659 +658,3 @@ enum InvestmentStage {
   growth
   late_stage
 }
-
-// ─────────────────────────────────────────────
-// LOOKUP TABLES
-// ─────────────────────────────────────────────
-
-model Country {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  slug      String   @unique
-  flagEmoji String?  @map("flag_emoji")
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  websites         Website[]
-  websiteCountries WebsiteCountry[]
-  curations        Curation[]
-  influencers      Influencer[]
-  funds            Fund[]
-
-  @@map("countries")
-}
-
-model Category {
-  id           String   @id @default(cuid())
-  name         String   @unique
-  slug         String   @unique
-  description  String?
-  isActive     Boolean  @default(true) @map("is_active")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-
-  subCategories           SubCategory[]
-  websites                Website[]
-  blogPosts               BlogPost[]
-  websiteCategories       WebsiteCategory[]
-  influencerCategories    InfluencerCategory[]
-  redditChannelCategories RedditChannelCategory[]
-  fundCategories          FundCategory[]
-
-  @@map("categories")
-}
-
-model SubCategory {
-  id         String   @id @default(cuid())
-  categoryId String   @map("category_id")
-  name       String
-  slug       String   @unique
-  isActive   Boolean  @default(true) @map("is_active")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
-
-  category Category  @relation(fields: [categoryId], references: [id])
-  websites Website[]
-
-  @@map("sub_categories")
-}
-
-model Tag {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  slug      String   @unique
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  websiteTags       WebsiteTag[]
-  influencerTags    InfluencerTag[]
-  redditChannelTags RedditChannelTag[]
-  fundTags          FundTag[]
-
-  @@map("tags")
-}
-
-// ─────────────────────────────────────────────
-// PLAN CONFIGS
-// ─────────────────────────────────────────────
-
-model PlanConfig {
-  id            String      @id @default(cuid())
-  name          String
-  slug          String      @unique // free | starter | pro | lifetime
-  priceCents    Int         @map("price_cents")
-  credits       Int         // -1 = unlimited
-  billingType   BillingType @map("billing_type")
-  stripePriceId String?     @map("stripe_price_id")
-  features      Json        @default("[]") // array of feature strings
-  isActive      Boolean     @default(true) @map("is_active")
-  sortOrder     Int         @default(0) @map("sort_order")
-  createdAt     DateTime    @default(now()) @map("created_at")
-  updatedAt     DateTime    @updatedAt @map("updated_at")
-
-  users    User[]
-  payments Payment[]
-
-  @@map("plan_configs")
-}
-
-// ─────────────────────────────────────────────
-// USERS
-// ─────────────────────────────────────────────
-
-model User {
-  id                 String       @id @default(uuid())
-  email              String       @unique
-  name               String?
-  passwordHash       String?      @map("password_hash")
-  authProvider       AuthProvider @default(email) @map("auth_provider")
-  planId             String?      @map("plan_id")
-  creditsRemaining   Int          @default(1) @map("credits_remaining")
-  creditsResetAt     DateTime?    @map("credits_reset_at")
-  stripeCustomerId   String?      @map("stripe_customer_id") // encrypted at app level
-  stripeCustomerHash String?      @map("stripe_customer_hash")
-  emailVerifiedAt    DateTime?    @map("email_verified_at")
-  emailVerifyToken   String?      @map("email_verify_token")
-  resetToken         String?      @map("reset_token")
-  resetTokenExpiry   DateTime?    @map("reset_token_expiry")
-  failedLoginCount   Int          @default(0) @map("failed_login_count")
-  lockedUntil        DateTime?    @map("locked_until")
-  deletedAt          DateTime?    @map("deleted_at")
-  createdAt          DateTime     @default(now()) @map("created_at")
-  updatedAt          DateTime     @updatedAt @map("updated_at")
-
-  plan          PlanConfig?     @relation(fields: [planId], references: [id])
-  curations     Curation[]
-  payments      Payment[]
-  notifications Notification[]
-  referralsMade Referral[]      @relation("ReferrerUser")
-  referralUsed  Referral[]      @relation("ReferredUser")
-  serviceLeads  ServiceLead[]
-
-  @@index([email])
-  @@index([stripeCustomerHash])
-  @@map("users")
-}
-
-// ─────────────────────────────────────────────
-// ADMIN USERS
-// ─────────────────────────────────────────────
-
-model AdminUser {
-  id          String    @id @default(uuid())
-  email       String    @unique
-  name        String
-  passwordHash String   @map("password_hash")
-  totpSecret  String?   @map("totp_secret")
-  totpEnabled Boolean   @default(false) @map("totp_enabled")
-  backupCodes Json      @default("[]") @map("backup_codes") // hashed backup codes
-  role        AdminRole @default(admin)
-  isActive    Boolean   @default(true) @map("is_active")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-
-  auditLogs AuditLog[]
-  blogPosts BlogPost[]
-  aiConfigs AiConfig[]
-  paymentConfigs PaymentGatewayConfig[]
-  emailProviderConfigs EmailProviderConfig[]
-  betaConfigs BetaConfig[]
-
-  @@map("admin_users")
-}
-
-// ─────────────────────────────────────────────
-// WEBSITES DATABASE
-// ─────────────────────────────────────────────
-
-model Website {
-  id            String      @id @default(cuid())
-  name          String
-  url           String      @unique
-  type          WebsiteType
-  da            Int         @default(0) // domain authority 0-100
-  pa            Int         @default(0) // page authority 0-100
-  spamScore     Int         @default(0) @map("spam_score") // spam score 0-100
-  traffic       Int         @default(0) // monthly traffic estimate
-  countryId     String?     @map("country_id")
-  categoryId    String?     @map("category_id")
-  subCategoryId String?     @map("sub_category_id")
-  description   String?     @db.Text
-  submissionUrl String?     @map("submission_url")
-  isActive      Boolean     @default(true) @map("is_active")
-  isPinned      Boolean     @default(false) @map("is_pinned")
-  isExcluded    Boolean     @default(false) @map("is_excluded")
-  tagSlugs      String[]    @default([]) @map("tag_slugs") // denormalized for fast GIN queries
-  createdAt     DateTime    @default(now()) @map("created_at")
-  updatedAt     DateTime    @updatedAt @map("updated_at")
-
-  country           Country?          @relation(fields: [countryId], references: [id])
-  category          Category?         @relation(fields: [categoryId], references: [id])
-  subCategory       SubCategory?      @relation(fields: [subCategoryId], references: [id])
-  websiteTags       WebsiteTag[]
-  websiteCategories WebsiteCategory[]
-  websiteCountries  WebsiteCountry[]
-  curationResults   CurationResult[]
-
-  @@index([type, isActive])
-  @@index([countryId, isActive])
-  @@map("websites")
-}
-
-model WebsiteTag {
-  websiteId String @map("website_id")
-  tagId     String @map("tag_id")
-
-  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
-  tag     Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
-
-  @@id([websiteId, tagId])
-  @@map("website_tags")
-}
-
-// ─────────────────────────────────────────────
-// CURATIONS
-// ─────────────────────────────────────────────
-
-model Curation {
-  id          String         @id @default(uuid())
-  userId      String         @map("user_id")
-  productUrl  String         @map("product_url")
-  countryId   String?        @map("country_id")
-  keywords    String[]       @default([])
-  description String?        @db.Text
-  status      CurationStatus @default(pending)
-  errorMessage String?       @map("error_message")
-  createdAt   DateTime       @default(now()) @map("created_at")
-  updatedAt   DateTime       @updatedAt @map("updated_at")
-
-  user    User             @relation(fields: [userId], references: [id])
-  country Country?         @relation(fields: [countryId], references: [id])
-  results CurationResult[]
-
-  @@index([userId, createdAt(sort: Desc)])
-  @@map("curations")
-}
-
-model CurationResult {
-  id              String            @id @default(cuid())
-  curationId      String            @map("curation_id")
-  websiteId       String?           @map("website_id")         // nullable — only set for sections a/b/c
-  influencerId    String?           @map("influencer_id")      // only set for section d
-  redditChannelId String?           @map("reddit_channel_id")  // only set for section e
-  fundId          String?           @map("fund_id")            // only set for section f
-  matchScore      Float             @map("match_score")
-  matchReason     String?           @db.Text @map("match_reason")
-  section         CurationSection   // a=distribution, b=guest_post, c=press_release, d=social, e=reddit, f=fund
-  rank            Int
-  userStatus      UserResultStatus? @map("user_status")
-  userNotes       String?           @db.Text @map("user_notes")
-  createdAt       DateTime          @default(now()) @map("created_at")
-
-  curation      Curation       @relation(fields: [curationId], references: [id], onDelete: Cascade)
-  website       Website?       @relation(fields: [websiteId], references: [id])
-  influencer    Influencer?    @relation(fields: [influencerId], references: [id])
-  redditChannel RedditChannel? @relation(fields: [redditChannelId], references: [id])
-  fund          Fund?          @relation(fields: [fundId], references: [id])
-
-  @@index([curationId, section, rank])
-  @@map("curation_results")
-}
-
-// ─────────────────────────────────────────────
-// PAYMENTS
-// ─────────────────────────────────────────────
-
-model Payment {
-  id                     String        @id @default(cuid())
-  userId                 String        @map("user_id")
-  planId                 String?       @map("plan_id")
-  providerPaymentId      String?       @map("provider_payment_id")
-  stripePaymentIntentId  String?       @map("stripe_payment_intent_id")
-  stripeSubscriptionId   String?       @map("stripe_subscription_id")
-  stripeInvoiceId        String?       @map("stripe_invoice_id")
-  paymentType            PaymentType   @default(plan) @map("payment_type")
-  amountCents            Int           @map("amount_cents")
-  currency               String        @default("usd")
-  status                 PaymentStatus @default(pending)
-  createdAt              DateTime      @default(now()) @map("created_at")
-
-  user User        @relation(fields: [userId], references: [id])
-  plan PlanConfig? @relation(fields: [planId], references: [id])
-
-  @@map("payments")
-}
-
-model PaymentGatewayConfig {
-  id              String          @id // provider name: "stripe", "paypal", "razorpay"
-  provider        PaymentProvider
-  isActive        Boolean         @default(false) @map("is_active")
-  publicKey       String?         @map("public_key")
-  secretKey       String?         @map("secret_key") // encrypted at app level
-  webhookSecret   String?         @map("webhook_secret") // encrypted at app level
-  additionalConfig Json           @default("{}") @map("additional_config")
-  updatedAt       DateTime        @updatedAt @map("updated_at")
-  updatedById     String?         @map("updated_by_id")
-
-  updatedBy AdminUser? @relation(fields: [updatedById], references: [id])
-
-  @@map("payment_gateway_config")
-}
-
-model EmailProviderConfig {
-  id               String        @id @default("default")
-  provider         EmailProvider @default(resend)
-  fromAddress      String        @map("from_address")
-  apiKey           String?       @map("api_key") // encrypted at app level
-  host             String?
-  port             Int?
-  username         String?
-  password         String?       // encrypted at app level
-  useTls           Boolean       @default(true) @map("use_tls")
-  additionalConfig Json          @default("{}") @map("additional_config")
-  updatedAt        DateTime      @updatedAt @map("updated_at")
-  updatedById      String?       @map("updated_by_id")
-
-  updatedBy AdminUser? @relation(fields: [updatedById], references: [id])
-
-  @@map("email_provider_config")
-}
-
-model BetaConfig {
-  id          String   @id @default("default")
-  enabled     Boolean  @default(false)
-  updatedAt   DateTime @updatedAt @map("updated_at")
-  updatedById String?  @map("updated_by_id")
-
-  updatedBy AdminUser? @relation(fields: [updatedById], references: [id])
-
-  @@map("beta_config")
-}
-
-// Idempotency table for Stripe webhook events
-model ProcessedStripeEvent {
-  eventId     String   @id @map("event_id")
-  processedAt DateTime @default(now()) @map("processed_at")
-
-  @@map("processed_stripe_events")
-}
-
-// ─────────────────────────────────────────────
-// BLOG
-// ─────────────────────────────────────────────
-
-model BlogPost {
-  id              String     @id @default(cuid())
-  slug            String     @unique
-  title           String
-  excerpt         String?    @db.Text
-  content         String     @db.Text
-  featuredImage   String?    @map("featured_image")
-  categoryId      String?    @map("category_id")
-  authorId        String     @map("author_id")
-  status          BlogStatus @default(draft)
-  publishDate     DateTime?  @map("publish_date")
-  metaTitle       String?    @map("meta_title")
-  metaDescription String?    @map("meta_description")
-  createdAt       DateTime   @default(now()) @map("created_at")
-  updatedAt       DateTime   @updatedAt @map("updated_at")
-
-  category Category?  @relation(fields: [categoryId], references: [id])
-  author   AdminUser  @relation(fields: [authorId], references: [id])
-
-  @@index([status, publishDate(sort: Desc)])
-  @@map("blog_posts")
-}
-
-// ─────────────────────────────────────────────
-// SERVICE LEADS
-// ─────────────────────────────────────────────
-
-model ServiceLead {
-  id          String     @id @default(cuid())
-  userId      String?    @map("user_id")
-  name        String
-  email       String
-  phone       String?    // encrypted at app level
-  websiteUrl  String?    @map("website_url")
-  serviceType String?    @map("service_type")
-  message     String?    @db.Text
-  status      LeadStatus @default(new)
-  notes       String?    @db.Text
-  createdAt   DateTime   @default(now()) @map("created_at")
-  updatedAt   DateTime   @updatedAt @map("updated_at")
-
-  user User? @relation(fields: [userId], references: [id])
-
-  @@map("service_leads")
-}
-
-// ─────────────────────────────────────────────
-// AUDIT LOGS
-// ─────────────────────────────────────────────
-
-model AuditLog {
-  id        String   @id @default(cuid())
-  adminId   String   @map("admin_id")
-  action    String   // e.g. "website_created", "user_plan_changed"
-  entity    String   // table name
-  entityId  String   @map("entity_id")
-  oldData   Json?    @map("old_data")
-  newData   Json?    @map("new_data")
-  ip        String?
-  createdAt DateTime @default(now()) @map("created_at")
-
-  admin AdminUser @relation(fields: [adminId], references: [id])
-
-  @@index([adminId, createdAt(sort: Desc)])
-  @@index([entity, entityId])
-  @@map("audit_logs")
-}
-
-// ─────────────────────────────────────────────
-// NOTIFICATIONS
-// ─────────────────────────────────────────────
-
-model Notification {
-  id        String   @id @default(cuid())
-  userId    String   @map("user_id")
-  type      String   // "curation_complete" | "low_credits" | "payment_success" | "payment_failed"
-  title     String
-  message   String   @db.Text
-  isRead    Boolean  @default(false) @map("is_read")
-  createdAt DateTime @default(now()) @map("created_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, isRead, createdAt(sort: Desc)])
-  @@map("notifications")
-}
-
-// ─────────────────────────────────────────────
-// REFERRALS
-// ─────────────────────────────────────────────
-
-model Referral {
-  id             String   @id @default(cuid())
-  referrerUserId String   @map("referrer_user_id")
-  referredUserId String?  @map("referred_user_id")
-  code           String   @unique
-  status         String   @default("pending") // pending | converted | rewarded
-  createdAt      DateTime @default(now()) @map("created_at")
-
-  referrer User  @relation("ReferrerUser", fields: [referrerUserId], references: [id])
-  referred User? @relation("ReferredUser", fields: [referredUserId], references: [id])
-
-  @@map("referrals")
-}
-
-// ─────────────────────────────────────────────
-// CONTACT SUBMISSIONS
-// ─────────────────────────────────────────────
-
-model ContactSubmission {
-  id        String   @id @default(cuid())
-  name      String
-  email     String
-  subject   String
-  message   String   @db.Text
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@map("contact_submissions")
-}
-
-// ─────────────────────────────────────────────
-// AI CONFIG (single row, admin-controlled)
-// ─────────────────────────────────────────────
-
-model AiConfig {
-  id          String    @id @default("default")
-  baseUrl     String    @map("base_url")
-  apiKey      String    @map("api_key") // encrypted at app level
-  modelName   String    @map("model_name")
-  maxTokens   Int       @default(4096) @map("max_tokens")
-  temperature Float     @default(0.3)
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-  updatedById String?   @map("updated_by_id")
-
-  updatedBy AdminUser? @relation(fields: [updatedById], references: [id])
-
-  @@map("ai_config")
-}
-
-// ─────────────────────────────────────────────
-// SOCIAL (INFLUENCERS)
-// ─────────────────────────────────────────────
-
-model Influencer {
-  id             String             @id @default(cuid())
-  name           String
-  platform       InfluencerPlatform
-  followersCount Int                @default(0) @map("followers_count")
-  countryId      String?            @map("country_id")
-  description    String?            @db.Text
-  profileLink    String             @map("profile_link")
-  email          String?
-  isActive       Boolean            @default(true) @map("is_active")
-  tagSlugs       String[]           @default([]) @map("tag_slugs")
-  categorySlugs  String[]           @default([]) @map("category_slugs")
-  createdAt      DateTime           @default(now()) @map("created_at")
-  updatedAt      DateTime           @updatedAt @map("updated_at")
-
-  country              Country?             @relation(fields: [countryId], references: [id])
-  influencerTags       InfluencerTag[]
-  influencerCategories InfluencerCategory[]
-  curationResults      CurationResult[]
-
-  @@index([platform, isActive])
-  @@map("influencers")
-}
-
-model InfluencerTag {
-  influencerId String     @map("influencer_id")
-  tagId        String     @map("tag_id")
-
-  influencer Influencer @relation(fields: [influencerId], references: [id], onDelete: Cascade)
-  tag        Tag        @relation(fields: [tagId], references: [id], onDelete: Cascade)
-
-  @@id([influencerId, tagId])
-  @@map("influencer_tags")
-}
-
-// ─────────────────────────────────────────────
-// REDDIT CHANNELS
-// ─────────────────────────────────────────────
-
-model RedditChannel {
-  id                String             @id @default(cuid())
-  name              String
-  url               String             @unique
-  weeklyVisitors    Int                @default(0) @map("weekly_visitors")
-  totalMembers      Int                @default(0) @map("total_members")
-  description       String?            @db.Text
-  postingDifficulty PostingDifficulty? @map("posting_difficulty")
-  isActive          Boolean            @default(true) @map("is_active")
-  tagSlugs          String[]           @default([]) @map("tag_slugs")
-  categorySlugs     String[]           @default([]) @map("category_slugs")
-  createdAt         DateTime           @default(now()) @map("created_at")
-  updatedAt         DateTime           @updatedAt @map("updated_at")
-
-  redditChannelTags       RedditChannelTag[]
-  redditChannelCategories RedditChannelCategory[]
-  curationResults         CurationResult[]
-
-  @@map("reddit_channels")
-}
-
-model RedditChannelTag {
-  redditChannelId String        @map("reddit_channel_id")
-  tagId           String        @map("tag_id")
-
-  redditChannel RedditChannel @relation(fields: [redditChannelId], references: [id], onDelete: Cascade)
-  tag           Tag           @relation(fields: [tagId], references: [id], onDelete: Cascade)
-
-  @@id([redditChannelId, tagId])
-  @@map("reddit_channel_tags")
-}
-
-// ─────────────────────────────────────────────
-// FUNDS (INVESTORS)
-// ─────────────────────────────────────────────
-
-model Fund {
-  id              String           @id @default(cuid())
-  name            String
-  logoUrl         String?          @map("logo_url")
-  websiteUrl      String           @map("website_url")
-  description     String?          @db.Text
-  investmentStage InvestmentStage? @map("investment_stage")
-  ticketSize      String?          @map("ticket_size")
-  countryId       String?          @map("country_id")
-  isActive        Boolean          @default(true) @map("is_active")
-  tagSlugs        String[]         @default([]) @map("tag_slugs")
-  categorySlugs   String[]         @default([]) @map("category_slugs")
-  createdAt       DateTime         @default(now()) @map("created_at")
-  updatedAt       DateTime         @updatedAt @map("updated_at")
-
-  country         Country?        @relation(fields: [countryId], references: [id])
-  fundTags        FundTag[]
-  fundCategories  FundCategory[]
-  curationResults CurationResult[]
-
-  @@map("funds")
-}
-
-model FundTag {
-  fundId String @map("fund_id")
-  tagId  String @map("tag_id")
-
-  fund Fund @relation(fields: [fundId], references: [id], onDelete: Cascade)
-  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
-
-  @@id([fundId, tagId])
-  @@map("fund_tags")
-}
-
-// ─────────────────────────────────────────────
-// MULTI-CATEGORY JUNCTION TABLES
-// ─────────────────────────────────────────────
-
-model WebsiteCategory {
-  websiteId  String @map("website_id")
-  categoryId String @map("category_id")
-
-  website  Website  @relation(fields: [websiteId], references: [id], onDelete: Cascade)
-  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-
-  @@id([websiteId, categoryId])
-  @@map("website_categories")
-}
-
-model WebsiteCountry {
-  websiteId String @map("website_id")
-  countryId String @map("country_id")
-
-  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
-  country Country @relation(fields: [countryId], references: [id], onDelete: Cascade)
-
-  @@id([websiteId, countryId])
-  @@map("website_countries")
-}
-
-model InfluencerCategory {
-  influencerId String @map("influencer_id")
-  categoryId   String @map("category_id")
-
-  influencer Influencer @relation(fields: [influencerId], references: [id], onDelete: Cascade)
-  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-
-  @@id([influencerId, categoryId])
-  @@map("influencer_categories")
-}
-
-model RedditChannelCategory {
-  redditChannelId String @map("reddit_channel_id")
-  categoryId      String @map("category_id")
-
-  redditChannel RedditChannel @relation(fields: [redditChannelId], references: [id], onDelete: Cascade)
-  category      Category      @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-
-  @@id([redditChannelId, categoryId])
-  @@map("reddit_channel_categories")
-}
-
-model FundCategory {
-  fundId     String @map("fund_id")
-  categoryId String @map("category_id")
-
-  fund     Fund     @relation(fields: [fundId], references: [id], onDelete: Cascade)
-  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-
-  @@id([fundId, categoryId])
-  @@map("fund_categories")
-}
-
-
-

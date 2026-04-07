@@ -19,7 +19,7 @@ export default function OnboardingPlanPage() {
     fetch("/api/lookup/plans", { cache: "no-store" }).then(async (r) => {
       if (r.ok) {
         const data = await r.json();
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           setPlans(data.map(dbPlanToDisplay));
           const map: Record<string, string> = {};
           (data as { id: string; slug: string }[]).forEach((p) => { map[p.slug] = p.id; });
@@ -225,6 +225,12 @@ export default function OnboardingPlanPage() {
           );
         })}
       </div>
+
+      {plans.length === 0 && (
+        <p className="text-center text-sm text-slate-500 mt-8">
+          No plans are currently available.
+        </p>
+      )}
 
       <p className="text-center text-xs text-slate-400 mt-8 font-light">
         No refunds on paid plans. Try free first to verify quality.

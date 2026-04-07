@@ -28,6 +28,7 @@ export async function fulfillStripeCheckoutSession(session: Stripe.Checkout.Sess
 
   const isHireUsFlow = session.metadata?.flow === "hire_us";
   const hireUsPackage = parseHireUsPackageSlug(session.metadata?.hireUsPackage);
+  const hireUsSourceCurationId = session.metadata?.hireUsSourceCurationId;
   const paymentType = isHireUsFlow || !!hireUsPackage ? "hire_us" : "plan";
   const { paymentIntentId, subscriptionId, where } = buildStripePaymentLookup(session);
 
@@ -99,6 +100,7 @@ export async function fulfillStripeCheckoutSession(session: Stripe.Checkout.Sess
     await runPostPaymentSideEffects({
       userId,
       hireUsPackageSlug,
+      hireUsSourceCurationId,
       notificationMessage:
         paymentType === "plan"
           ? "Your plan has been upgraded. Credits have been added to your account."
@@ -109,6 +111,7 @@ export async function fulfillStripeCheckoutSession(session: Stripe.Checkout.Sess
     await runPostPaymentSideEffects({
       userId,
       hireUsPackageSlug,
+      hireUsSourceCurationId,
       skipNotification: true,
     });
   }

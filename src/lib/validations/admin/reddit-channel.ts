@@ -18,6 +18,7 @@ export const redditChannelSchema = z.object({
   description: z.string().max(2000).optional().nullable(),
   postingDifficulty: z.enum(["easy", "medium", "hard"]).optional().nullable(),
   isActive: z.boolean().default(true),
+  starRating: z.coerce.number().int().min(1).max(5).nullable().optional().default(null),
   tagIds: z.array(z.string()).default([]),
 });
 

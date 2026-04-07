@@ -23,7 +23,7 @@ type StoredRazorpayOrderMeta = {
   cancelUrl?: string;
   amountCents?: number;
   currency?: string;
-  metadata?: { flow?: string; hireUsPackage?: string };
+  metadata?: { flow?: string; hireUsPackage?: string; hireUsSourceCurationId?: string };
 };
 
 function parseStoredMeta(raw: unknown): StoredRazorpayOrderMeta | null {
@@ -90,6 +90,7 @@ async function runPostFulfillmentSideEffects(args: {
   orderId: string;
   paymentSource: "checkout_capture" | "webhook";
   hireUsPackage?: string;
+  hireUsSourceCurationId?: string;
 }) {
   const packageSlug = parseHireUsPackageSlug(args.hireUsPackage);
 
@@ -99,6 +100,7 @@ async function runPostFulfillmentSideEffects(args: {
   await runPostPaymentSideEffects({
     userId: args.userId,
     hireUsPackageSlug: packageSlug ?? undefined,
+    hireUsSourceCurationId: args.hireUsSourceCurationId,
     notificationMessage:
       packageSlug
         ? undefined
@@ -191,6 +193,7 @@ export async function fulfillRazorpayOrder(args: {
       orderId: args.orderId,
       paymentSource: args.paymentSource,
       hireUsPackage: meta.metadata?.hireUsPackage,
+      hireUsSourceCurationId: meta.metadata?.hireUsSourceCurationId,
     });
 
     return {

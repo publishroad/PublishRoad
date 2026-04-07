@@ -10,13 +10,38 @@ import { decodeCursor, encodeCursor } from "@/lib/utils";
 
 const PAGE_SIZE = 20;
 
+type HireUsLeadCandidate = {
+  serviceType: string | null;
+  notes: string | null;
+};
+
+function findHireUsPackageForCuration(
+  leads: HireUsLeadCandidate[],
+  curationId: string
+): "starter" | "complete" | null {
+  const lead = leads.find((item) => {
+    if (!item.notes) return false;
+    try {
+      const parsed = JSON.parse(item.notes) as { curationId?: unknown };
+      return parsed.curationId === curationId;
+    } catch {
+      return false;
+    }
+  });
+
+  if (!lead?.serviceType) return null;
+  if (lead.serviceType === "hire_us_complete") return "complete";
+  if (lead.serviceType === "hire_us_starter") return "starter";
+  return null;
+}
+
 export default async function CurationsPage({ searchParams }: { searchParams: Promise<{ cursor?: string }> }) {
   const session = await auth();
   const userId = session!.user.id;
   const params = await searchParams;
   const cursor = params.cursor ? decodeCursor(params.cursor) : null;
 
-  const [curations, user] = await Promise.all([
+  const [curations, user, hireUsLeads] = await Promise.all([
     db.curation.findMany({
       where: { userId, ...(cursor ? { OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { lt: cursor.id } }] } : {}) },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -33,6 +58,18 @@ export default async function CurationsPage({ searchParams }: { searchParams: Pr
     db.user.findUnique({
       where: { id: userId },
       select: { creditsRemaining: true },
+    }),
+    db.serviceLead.findMany({
+      where: {
+        userId,
+        serviceType: { in: ["hire_us_starter", "hire_us_complete"] },
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        serviceType: true,
+        notes: true,
+      },
+      take: 50,
     }),
   ]);
 
@@ -100,6 +137,7 @@ export default async function CurationsPage({ searchParams }: { searchParams: Pr
                     status={c.status as "pending" | "processing" | "completed" | "failed"}
                     createdAt={c.createdAt}
                     progress={progress}
+                    hireUsPackageSlug={findHireUsPackageForCuration(hireUsLeads, c.id)}
                   />
                 );
               })}

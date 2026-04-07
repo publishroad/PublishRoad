@@ -19,6 +19,7 @@ export const influencerSchema = z.object({
     .refine(isValidUrl, "Must be a valid HTTP/HTTPS URL"),
   email: z.string().email("Must be a valid email").optional().nullable().or(z.literal("")),
   isActive: z.boolean().default(true),
+  starRating: z.coerce.number().int().min(1).max(5).nullable().optional().default(null),
   tagIds: z.array(z.string()).default([]),
 });
 

@@ -5,6 +5,8 @@ import { getCachedWithLock, invalidateUserProfile } from "@/lib/cache";
 import { redis } from "@/lib/redis";
 import { applyPlanResultMasking } from "@/lib/curation-mask-policy";
 import { inspectWebsiteMetadata } from "@/lib/website-metadata";
+import { resolveEffectivePlanSlug } from "@/lib/plan-access";
+import { getCurationEnabledSectionsSnapshot } from "@/lib/curation-steps-config";
 
 type HireUsLeadCandidate = {
   id: string;
@@ -133,7 +135,9 @@ export async function GET(
 
   // Paid Hire Us curations should always be visible as full PRO results.
   const planSlug = session.user.planSlug ?? "free";
-  const effectivePlanSlug = hireUsLead ? "pro" : planSlug;
+  const effectivePlanSlug = hireUsLead
+    ? "pro"
+    : await resolveEffectivePlanSlug(planSlug);
   const { results, maskedCount, lockedSections } = applyPlanResultMasking(
     data.results,
     effectivePlanSlug
@@ -141,6 +145,7 @@ export async function GET(
 
   const categoryName = derivePrimaryCategoryName(data.results);
   const siteValidation = await inspectWebsiteMetadata(data.productUrl);
+  const enabledSections = await getCurationEnabledSectionsSnapshot(id);
 
   return NextResponse.json({
     id: data.id,
@@ -148,7 +153,10 @@ export async function GET(
     status: data.status,
     countryName: data.country?.name ?? null,
     categoryName,
+    enabledSections,
     keywords: data.keywords,
+    problemStatement: data.problemStatement,
+    solutionStatement: data.solutionStatement,
     description: data.description,
     siteValidation,
     results,

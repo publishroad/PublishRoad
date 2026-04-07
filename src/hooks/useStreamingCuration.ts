@@ -4,7 +4,10 @@ interface StreamingCurationData {
   id: string;
   productUrl: string;
   status: "pending" | "processing" | "completed" | "failed";
+  enabledSections?: Array<"a" | "b" | "c" | "d" | "e" | "f">;
   keywords: string[];
+  problemStatement?: string | null;
+  solutionStatement?: string | null;
   description: string | null;
   siteValidation?: {
     reachable: boolean;
@@ -116,9 +119,22 @@ export function useStreamingCuration(
   }, [data]);
 
   const fetchCurationData = useCallback(async (): Promise<StreamingCurationData> => {
-    const res = await fetch(`/api/curations/${curationId}`);
-    if (!res.ok) throw new Error("Failed to fetch curation");
-    return (await res.json()) as StreamingCurationData;
+    const maxAttempts = 4;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const res = await fetch(`/api/curations/${curationId}`);
+      if (res.ok) {
+        return (await res.json()) as StreamingCurationData;
+      }
+
+      if (res.status === 404 && attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, 350));
+        continue;
+      }
+
+      throw new Error("Failed to fetch curation");
+    }
+
+    throw new Error("Failed to fetch curation");
   }, [curationId]);
 
   const refresh = useCallback(async () => {
@@ -150,7 +166,7 @@ export function useStreamingCuration(
           initialData.status === "processing" ||
           initialData.status === "pending"
         ) {
-          openStream(initialData);
+          openStream();
         }
 
         setIsLoading(false);
@@ -161,7 +177,7 @@ export function useStreamingCuration(
     };
 
     // Step 2: Open EventSource stream for real-time updates
-    const openStream = (initialData: StreamingCurationData) => {
+    const openStream = () => {
       // Prevent duplicate connections
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
@@ -247,7 +263,7 @@ export function useStreamingCuration(
         if (isUnmountingRef.current) return;
         const currentData = dataRef.current;
         if (currentData && (currentData.status === "processing" || currentData.status === "pending")) {
-          openStream(currentData);
+          openStream();
         }
       }, 2000);
     };

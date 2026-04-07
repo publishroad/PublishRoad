@@ -119,7 +119,8 @@ export default function NewCurationPage() {
       countryId: undefined,
       categoryId: undefined,
       keywords: [],
-      description: "",
+      problemStatement: "",
+      solutionStatement: "",
     },
   });
 
@@ -167,13 +168,18 @@ export default function NewCurationPage() {
         return;
       }
 
+      if (typeof result.curationId !== "string" || result.curationId.length === 0) {
+        toast.error("Curation started but no curation ID was returned. Please try again.");
+        return;
+      }
+
       if (result.siteValidation?.warning) {
         toast(result.siteValidation.warning);
       } else {
         toast.success("Curation started! We'll notify you when it's ready.");
       }
 
-      router.push(`/dashboard/curations/${result.curationId}`);
+      router.push(`/onboarding/processing/${result.curationId}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -233,9 +239,10 @@ export default function NewCurationPage() {
             <div className="mt-6 space-y-3 rounded-2xl bg-white/80 p-4">
               <p className="text-sm font-semibold text-slate-900">What improves result quality</p>
               <ul className="space-y-2 text-sm text-slate-600">
-                <li>Specific product URL with clear positioning</li>
-                <li>3-7 focused keywords</li>
-                <li>Country + category targeting selected</li>
+                <li><span className="font-medium text-slate-800">Problem statement</span> — describe who suffers, what pain they feel, and when. The more specific, the better your match.</li>
+                <li><span className="font-medium text-slate-800">Solution statement</span> — explain what your product does, how it works, and what makes it different.</li>
+                <li><span className="font-medium text-slate-800">Country + category</span> — narrows results to channels where your audience actually is.</li>
+                <li><span className="font-medium text-slate-800">Keywords</span> — optional extra hints (e.g. "no-code", "b2b", "api").</li>
               </ul>
             </div>
           </aside>
@@ -353,7 +360,7 @@ export default function NewCurationPage() {
 
                 <div>
                   <FormLabel>
-                    Keywords <span className="text-red-500">*</span>
+                    Keywords <span className="text-slate-400">(optional)</span>
                   </FormLabel>
                   <div className="mb-2 flex gap-2">
                     <Input
@@ -404,17 +411,37 @@ export default function NewCurationPage() {
 
                 <FormField
                   control={form.control}
-                  name="description"
+                  name="problemStatement"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        Product Description <span className="text-red-500">*</span>
+                        Problem Statement <span className="text-red-500">*</span>
                       </FormLabel>
                       <FormControl>
                         <Textarea
-                          placeholder="Describe your product in 1-3 sentences. What problem does it solve? Who is it for?"
-                          className="min-h-[110px] resize-none"
-                          maxLength={1000}
+                          placeholder="Describe Problem your solving"
+                          className="min-h-[130px] resize-y"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="solutionStatement"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        Solution Statement <span className="text-red-500">*</span>
+                      </FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="Describe your solution fully, What it does, how it works, and who it's built for"
+                          className="min-h-[130px] resize-y"
                           {...field}
                           value={field.value ?? ""}
                         />

@@ -27,6 +27,7 @@ interface InfluencerFormProps {
     profileLink: string;
     email: string | null;
     isActive: boolean;
+    starRating: number | null;
     tagIds: string[];
     categoryIds: string[];
   } | null;
@@ -39,10 +40,12 @@ export function InfluencerForm({ influencer, countries, categories, tags }: Infl
   const router = useRouter();
   const [selectedTags, setSelectedTags] = useState<string[]>(influencer?.tagIds ?? []);
   const [selectedCategories, setSelectedCategories] = useState<string[]>(influencer?.categoryIds ?? []);
+  const [starRating, setStarRating] = useState<number | null>(influencer?.starRating ?? null);
 
   useEffect(() => {
     setSelectedTags(influencer?.tagIds ?? []);
     setSelectedCategories(influencer?.categoryIds ?? []);
+    setStarRating(influencer?.starRating ?? null);
   }, [influencer]);
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>({
@@ -68,7 +71,7 @@ export function InfluencerForm({ influencer, countries, categories, tags }: Infl
   });
 
   async function onSubmit(data: FormData) {
-    const payload = { ...data, tagIds: selectedTags, categoryIds: selectedCategories };
+    const payload = { ...data, starRating, tagIds: selectedTags, categoryIds: selectedCategories };
     const url = influencer ? `/api/admin/social/${influencer.id}` : "/api/admin/social";
     const method = influencer ? "PUT" : "POST";
 
@@ -166,6 +169,34 @@ export function InfluencerForm({ influencer, countries, categories, tags }: Infl
               className="w-full border border-border-gray rounded-lg px-3 py-2 text-sm min-h-[80px] focus:outline-none focus:border-navy"
               placeholder="Brief description of this influencer..."
             />
+          </div>
+
+          <div className="col-span-2 space-y-1.5">
+            <Label>Star Rating (optional)</Label>
+            <div className="flex items-center gap-1">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  type="button"
+                  onClick={() => setStarRating(starRating === star ? null : star)}
+                  className={`text-2xl leading-none transition-colors ${
+                    starRating !== null && star <= starRating
+                      ? "text-yellow-400"
+                      : "text-gray-300 hover:text-yellow-300"
+                  }`}
+                >
+                  ★
+                </button>
+              ))}
+              {starRating && (
+                <button type="button" onClick={() => setStarRating(null)} className="ml-2 text-xs text-medium-gray hover:text-error">
+                  Clear
+                </button>
+              )}
+            </div>
+            {starRating && starRating >= 4 && (
+              <p className="text-xs text-yellow-600">⭐ Gold standard — this influencer will always appear in curations for its category</p>
+            )}
           </div>
         </div>
 

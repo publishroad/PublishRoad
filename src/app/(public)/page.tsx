@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { PRICING_PLANS, dbPlanToDisplay } from "@/lib/pricing-plans";
+import { dbPlanToDisplay } from "@/lib/pricing-plans";
 import { buildTwitterMetadata, getSiteUrl, getSocialImages } from "@/lib/seo";
 import { PublicPricingCard } from "@/components/public/PublicPricingCard";
 import { db } from "@/lib/db";
@@ -75,12 +75,12 @@ const softwareSchema = {
 const getPlans = unstable_cache(
   async () => {
     try {
-      return await db.planConfig.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } });
+      return await db.planConfig.findMany({ where: { isActive: true, isVisible: true }, orderBy: { sortOrder: "asc" } });
     } catch {
       return [];
     }
   },
-  ["public-home-plans"],
+  ["public-home-plans-visible-v2"],
   { revalidate }
 );
 
@@ -408,11 +408,25 @@ export default async function LandingPage() {
           </div>
 
           {/* Pricing cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5" style={{ maxWidth: "1100px", margin: "0 auto" }}>
-            {(dbPlans.length > 0 ? dbPlans.map(dbPlanToDisplay) : PRICING_PLANS).map((plan) => (
+          <div
+            className="grid gap-5"
+            style={{
+              maxWidth: "1100px",
+              margin: "0 auto",
+              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 320px))",
+              justifyContent: "center",
+            }}
+          >
+            {dbPlans.map(dbPlanToDisplay).map((plan) => (
               <PublicPricingCard key={plan.slug} plan={plan} />
             ))}
           </div>
+
+          {dbPlans.length === 0 && (
+            <p className="mt-6 text-center text-sm text-slate-500">
+              Plans are loading or currently unavailable.
+            </p>
+          )}
 
           {/* See full pricing link */}
           <div style={{ textAlign: "center", marginTop: "2.5rem" }}>

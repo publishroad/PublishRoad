@@ -1,4 +1,6 @@
 "use client";
+
+export const dynamic = "force-dynamic";
 // Static 2FA setup form — no real-time rendering needed
 
 import { useEffect, useState } from "react";
@@ -99,7 +101,7 @@ export default function Setup2FAPage() {
 
         {qrCode ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={qrCode} alt="2FA QR Code" className="mx-auto mb-4 w-40 h-40" />
+          <img src={qrCode} alt="2FA QR Code" width={160} height={160} className="mx-auto mb-4 w-40 h-40" />
         ) : (
           <div className="w-40 h-40 bg-gray-100 animate-pulse rounded mx-auto mb-4" />
         )}

@@ -9,6 +9,13 @@ import { useStreamingCuration } from "@/hooks/useStreamingCuration";
 import { AppHeader } from "@/components/dashboard/AppHeader";
 import { ProgressTracker } from "@/components/dashboard/ProgressTracker";
 import { UpsellBanner } from "@/components/dashboard/UpsellBanner";
+import { HireUsPackageSelector } from "@/components/public/HireUsPackageSelector";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 
@@ -80,9 +87,10 @@ const sectionSteps = {
   d: "Step 4",
   e: "Step 5",
   f: "Step 6",
-};
+} as const;
 
 const sectionOrder = ["a", "b", "c", "d", "e", "f"] as const;
+const bookingCtaUrl = "https://tidycal.com/publish-road/curation-discussion";
 
 const platformColors: Record<string, string> = {
   tiktok: "bg-gray-900 text-white",
@@ -119,6 +127,8 @@ export default function CurationDetailPage() {
   const { data: session } = useSession();
   const [showProgress, setShowProgress] = useState(false);
   const [updatingResultId, setUpdatingResultId] = useState<string | null>(null);
+  const [hireUsDialogOpen, setHireUsDialogOpen] = useState(false);
+  const [hireUsSourceSection, setHireUsSourceSection] = useState<"d" | "e" | "f">("d");
 
   const { data: curation, isLoading, mutate, refresh } = useStreamingCuration(id);
 
@@ -214,8 +224,11 @@ export default function CurationDetailPage() {
     }
   }
 
-  // Always show all 6 sections when completed (sections with 0 results show "No results")
-  const sectionsToShow = curation?.status === "completed" ? sectionOrder : [];
+  const enabledSections =
+    curation?.enabledSections?.filter((section): section is (typeof sectionOrder)[number] =>
+      sectionOrder.includes(section)
+    ) ?? sectionOrder;
+  const sectionsToShow = curation?.status === "completed" ? enabledSections : [];
 
   return (
     <>
@@ -252,13 +265,21 @@ export default function CurationDetailPage() {
                       This curation is part of your Hire Us {curation.hireUsLead.packageSlug === "complete" ? "Complete" : "Starter"} package.
                       Our team is handling execution, and you can track actions and updates in your Hire Us tab.
                     </p>
-                    <div className="mt-3">
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
                       <Link
                         href="/dashboard/hire-us"
                         className="inline-flex items-center h-9 px-4 rounded-xl bg-[#465FFF] text-white text-sm font-medium hover:bg-[#3d55e8] transition-colors"
                       >
                         View Team Updates
                       </Link>
+                      <a
+                        href={bookingCtaUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center h-9 px-4 rounded-xl border border-[#465FFF] bg-white text-[#465FFF] text-sm font-medium hover:bg-[#EEF2FF] transition-colors"
+                      >
+                        Book a meeting
+                      </a>
                     </div>
                   </div>
                 )}
@@ -275,22 +296,10 @@ export default function CurationDetailPage() {
                       )}
                       <p className="mt-2 text-sm leading-6 text-slate-600">{motivationText}</p>
 
-                      {(curation.siteValidation?.title || curation.siteValidation?.description || curation.siteValidation?.warning) && (
-                        <div className="mt-4 rounded-2xl border border-[#dbe4ff] bg-white/90 p-4">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#465FFF]">Website Check</p>
-                          <p className="mt-2 break-all text-xs text-slate-500">{curation.siteValidation?.finalUrl ?? curation.productUrl}</p>
-                          {curation.siteValidation?.title && (
-                            <p className="mt-2 text-sm font-semibold text-slate-900">{curation.siteValidation.title}</p>
-                          )}
-                          {curation.siteValidation?.description && (
-                            <p className="mt-1 text-sm leading-6 text-slate-600">{curation.siteValidation.description}</p>
-                          )}
-                          {curation.siteValidation?.warning && (
-                            <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                              {curation.siteValidation.warning}
-                            </p>
-                          )}
-                        </div>
+                      {curation.siteValidation?.warning && (
+                        <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                          {curation.siteValidation.warning}
+                        </p>
                       )}
                     </div>
                     <div className="min-w-[230px] rounded-3xl border border-[#cfd9ff] bg-white/95 p-4 shadow-[0_10px_30px_rgba(70,95,255,0.12)]">
@@ -332,6 +341,32 @@ export default function CurationDetailPage() {
                       );
                     })}
                   </div>
+
+                  {!curation.hireUsLead && (
+                    <div className="mt-5 flex flex-col items-center justify-center gap-2 border-t border-[#dbe4ff] pt-4 text-center">
+                      <p className="text-sm text-slate-600">Need help Completeing the task? let our team Execute this for you.</p>
+                      <div className="flex w-full flex-col items-center justify-center gap-2 sm:w-auto sm:flex-row">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setHireUsSourceSection("d");
+                            setHireUsDialogOpen(true);
+                          }}
+                          className="inline-flex h-11 min-w-[150px] items-center justify-center rounded-full bg-[#465FFF] px-5 text-sm font-semibold text-white transition-colors hover:bg-[#3647D6]"
+                        >
+                          Hire Us
+                        </button>
+                        <a
+                          href={bookingCtaUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex h-11 min-w-[150px] items-center justify-center rounded-full border border-[#465FFF] bg-white px-5 text-sm font-semibold text-[#465FFF] transition-colors hover:bg-[#EEF2FF]"
+                        >
+                          Book a meeting
+                        </a>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {curation.maskedCount > 0 && (
@@ -350,6 +385,32 @@ export default function CurationDetailPage() {
                       onToggleComplete={handleTaskStatusChange}
                     />
                   ))}
+
+                  {!curation.hireUsLead && (
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50/60 px-5 py-4 text-center sm:px-6">
+                      <p className="text-sm text-slate-600">Need help Completeing the task? let our team Execute this for you.</p>
+                      <div className="mt-3 flex w-full flex-col items-center justify-center gap-2 sm:w-auto sm:flex-row">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setHireUsSourceSection("d");
+                            setHireUsDialogOpen(true);
+                          }}
+                          className="inline-flex h-11 min-w-[150px] items-center justify-center rounded-full bg-[#465FFF] px-5 text-sm font-semibold text-white transition-colors hover:bg-[#3647D6]"
+                        >
+                          Hire Us
+                        </button>
+                        <a
+                          href={bookingCtaUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex h-11 min-w-[150px] items-center justify-center rounded-full border border-[#465FFF] bg-white px-5 text-sm font-semibold text-[#465FFF] transition-colors hover:bg-[#EEF2FF]"
+                        >
+                          Book a meeting
+                        </a>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -366,6 +427,28 @@ export default function CurationDetailPage() {
           </>
         )}
       </div>
+
+      <Dialog open={hireUsDialogOpen} onOpenChange={setHireUsDialogOpen}>
+        <DialogContent className="max-h-[90vh] !w-[96vw] !max-w-[96vw] sm:!max-w-[92vw] xl:!max-w-6xl overflow-y-auto rounded-3xl p-0">
+          <DialogHeader className="px-6 pb-0 pt-6 text-center">
+            <DialogTitle className="text-xl text-slate-950">Choose a Hire Us package</DialogTitle>
+          </DialogHeader>
+          <div className="px-4 pb-5 pt-2 sm:px-6 sm:pb-6">
+            <HireUsPackageSelector
+              variant="dashboard"
+              loginCallbackBasePath={`/dashboard/curations/${id}`}
+              dashboardIntroTitle="Done-for-you execution"
+              dashboardIntroSubtitle="Pick a package and we will handle submissions, outreach, and reporting for this curation."
+              sourceContext={{
+                source: "dashboard_curation_steps",
+                curationId: id,
+                sectionKey: hireUsSourceSection,
+                stepLabel: sectionSteps[hireUsSourceSection] as "Step 4" | "Step 5" | "Step 6",
+              }}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
@@ -433,7 +516,6 @@ function CurationSection({
                   style={{ width: `${completionPercent}%` }}
                 />
               </div>
-              <p className="mt-2 text-xs text-slate-500">Keep going. Each completed task moves this step forward.</p>
             </div>
           )}
         </div>
@@ -542,7 +624,11 @@ function ResultRow({
     ? "Visit Subreddit"
     : isFund
     ? "Visit Fund"
-    : "Submit Site";
+    : result.section === "b"
+    ? "Pitch Guest Post"
+    : result.section === "c"
+    ? "Submit Press Release"
+    : "Submit Product";
 
   return (
     <div className={`group p-4 transition-colors sm:p-5 ${isComplete ? "bg-emerald-50/40" : "bg-white hover:bg-slate-50/70"}`}>

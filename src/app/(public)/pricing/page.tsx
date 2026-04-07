@@ -1,14 +1,18 @@
 import { db } from "@/lib/db";
 import { PublicPricingCard } from "@/components/public/PublicPricingCard";
 import { pricingFaqItems } from "@/components/public/PricingBelowFold";
-import { PRICING_PLANS, dbPlanToDisplay } from "@/lib/pricing-plans";
-import Link from "next/link";
+import { dbPlanToDisplay } from "@/lib/pricing-plans";
 import type { Metadata } from "next";
 import { unstable_cache } from "next/cache";
 import dynamic from "next/dynamic";
 import { buildTwitterMetadata, getSiteUrl, getSocialImages } from "@/lib/seo";
+import {
+  DEFAULT_PRICING_COMPARISON_ROWS,
+  normalizePricingComparisonRows,
+} from "@/lib/pricing-comparison";
 
 const APP_URL = getSiteUrl();
+const PLAN_ORDER = ["free", "starter", "pro", "lifetime"] as const;
 
 export const metadata: Metadata = {
   title: "Pricing — Free, Starter, Pro & Lifetime Plans",
@@ -37,7 +41,7 @@ const getPlans = unstable_cache(
   async () => {
     try {
       return db.planConfig.findMany({
-        where: { isActive: true },
+        where: { isActive: true, isVisible: true },
         orderBy: { sortOrder: "asc" },
       });
     } catch (error) {
@@ -45,7 +49,26 @@ const getPlans = unstable_cache(
       return [];
     }
   },
-  ["public-pricing-plans"],
+  ["public-pricing-plans-visible-v2"],
+  { revalidate }
+);
+
+const getPricingComparisonRows = unstable_cache(
+  async () => {
+    try {
+      const rows = await db.$queryRaw<Array<{ pricing_comparison_rows: unknown }>>`
+        SELECT pricing_comparison_rows
+        FROM beta_config
+        WHERE id = 'default'
+        LIMIT 1
+      `;
+      return normalizePricingComparisonRows(rows[0]?.pricing_comparison_rows ?? []);
+    } catch (error) {
+      console.error("Error fetching pricing comparison rows", error);
+      return DEFAULT_PRICING_COMPARISON_ROWS;
+    }
+  },
+  ["public-pricing-comparison-rows-v1"],
   { revalidate }
 );
 
@@ -77,9 +100,17 @@ const DeferredPricingBelowFold = dynamic(
 );
 
 export default async function PricingPage() {
-  const dbPlans = await getPlans();
+  const [dbPlans, comparisonRows] = await Promise.all([
+    getPlans(),
+    getPricingComparisonRows(),
+  ]);
 
   const plans = dbPlans;
+  const visibleComparisonPlanSlugs = plans
+    .map((plan) => plan.slug)
+    .filter((slug): slug is (typeof PLAN_ORDER)[number] =>
+      PLAN_ORDER.includes(slug as (typeof PLAN_ORDER)[number])
+    );
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "var(--background)" }}>
@@ -108,8 +139,14 @@ export default async function PricingPage() {
 
       <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-20">
         {/* ─── Pricing Cards ─── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto mb-20">
-          {(plans.length > 0 ? plans : PRICING_PLANS).map((p) => {
+        <div
+          className="grid gap-6 max-w-5xl mx-auto mb-20"
+          style={{
+            gridTemplateColumns: "repeat(auto-fit, minmax(250px, 320px))",
+            justifyContent: "center",
+          }}
+        >
+          {plans.map((p) => {
             const displayPlan = "priceCents" in p ? dbPlanToDisplay(p) : p;
             const planId = "id" in p ? (p as { id: string }).id : undefined;
             return (
@@ -122,7 +159,16 @@ export default async function PricingPage() {
           })}
         </div>
 
-        <DeferredPricingBelowFold />
+        {plans.length === 0 && (
+          <p className="text-center text-sm text-slate-500 mb-10">
+            No plans are currently visible.
+          </p>
+        )}
+
+        <DeferredPricingBelowFold
+          comparisonRows={comparisonRows}
+          visiblePlanSlugs={visibleComparisonPlanSlugs}
+        />
       </div>
     </div>
   );

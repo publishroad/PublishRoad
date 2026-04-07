@@ -7,6 +7,17 @@ import { attachHireUsCuration } from "@/lib/hire-us";
 import { inspectWebsiteMetadata } from "@/lib/website-metadata";
 
 export const maxDuration = 60;
+const SITE_VALIDATION_MAX_WAIT_MS = 1200;
+
+async function getSiteValidationWithSoftTimeout(productUrl: string) {
+  const validationPromise = inspectWebsiteMetadata(productUrl).catch(() => null);
+
+  const timeoutPromise = new Promise<null>((resolve) => {
+    setTimeout(() => resolve(null), SITE_VALIDATION_MAX_WAIT_MS);
+  });
+
+  return Promise.race([validationPromise, timeoutPromise]);
+}
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -41,13 +52,15 @@ export async function POST(req: NextRequest) {
     countryId: rawCountryId,
     categoryId,
     keywords,
-    description,
+    problemStatement,
+    solutionStatement,
     hireUs,
     hireUsPackage,
   } = parsed.data;
   const countryId = rawCountryId === "worldwide" ? null : rawCountryId;
+  const combinedDescription = `Problem Statement: ${problemStatement}\n\nSolution Statement: ${solutionStatement}`;
 
-  const siteValidation = await inspectWebsiteMetadata(productUrl);
+  const siteValidationPromise = getSiteValidationWithSoftTimeout(productUrl);
 
   // Check credits with SELECT FOR UPDATE (handled in engine)
   try {
@@ -57,7 +70,9 @@ export async function POST(req: NextRequest) {
       countryId,
       categoryId,
       keywords,
-      description: description ?? null,
+      problemStatement,
+      solutionStatement,
+      description: combinedDescription,
     });
 
     if (hireUs && hireUsPackage) {
@@ -69,6 +84,8 @@ export async function POST(req: NextRequest) {
         console.error("Failed to attach hire-us curation to lead", error);
       });
     }
+
+    const siteValidation = await siteValidationPromise;
 
     return NextResponse.json({ curationId: curation.id, siteValidation }, { status: 201 });
   } catch (error: unknown) {

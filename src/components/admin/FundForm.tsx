@@ -28,6 +28,7 @@ interface FundFormProps {
     investmentStage: string | null;
     ticketSize: string | null;
     isActive: boolean;
+    starRating: number | null;
     tagIds: string[];
     categoryIds: string[];
   } | null;
@@ -52,12 +53,14 @@ export function FundForm({ fund, countries, categories, tags }: FundFormProps) {
   const [selectedCategories, setSelectedCategories] = useState<string[]>(fund?.categoryIds ?? []);
   const [logoUrl, setLogoUrl] = useState<string>(fund?.logoUrl ?? "");
   const [uploading, setUploading] = useState(false);
+  const [starRating, setStarRating] = useState<number | null>(fund?.starRating ?? null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setSelectedTags(fund?.tagIds ?? []);
     setSelectedCategories(fund?.categoryIds ?? []);
     setLogoUrl(fund?.logoUrl ?? "");
+    setStarRating(fund?.starRating ?? null);
   }, [fund]);
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>({
@@ -103,7 +106,7 @@ export function FundForm({ fund, countries, categories, tags }: FundFormProps) {
   }
 
   async function onSubmit(data: FormData) {
-    const payload = { ...data, logoUrl: logoUrl || null, tagIds: selectedTags, categoryIds: selectedCategories };
+    const payload = { ...data, logoUrl: logoUrl || null, starRating, tagIds: selectedTags, categoryIds: selectedCategories };
     const url = fund ? `/api/admin/funds/${fund.id}` : "/api/admin/funds";
     const method = fund ? "PUT" : "POST";
 
@@ -234,6 +237,34 @@ export function FundForm({ fund, countries, categories, tags }: FundFormProps) {
               className="w-full border border-border-gray rounded-lg px-3 py-2 text-sm min-h-[80px] focus:outline-none focus:border-navy"
               placeholder="Brief description of this fund..."
             />
+          </div>
+
+          <div className="col-span-2 space-y-1.5">
+            <Label>Star Rating (optional)</Label>
+            <div className="flex items-center gap-1">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  type="button"
+                  onClick={() => setStarRating(starRating === star ? null : star)}
+                  className={`text-2xl leading-none transition-colors ${
+                    starRating !== null && star <= starRating
+                      ? "text-yellow-400"
+                      : "text-gray-300 hover:text-yellow-300"
+                  }`}
+                >
+                  ★
+                </button>
+              ))}
+              {starRating && (
+                <button type="button" onClick={() => setStarRating(null)} className="ml-2 text-xs text-medium-gray hover:text-error">
+                  Clear
+                </button>
+              )}
+            </div>
+            {starRating && starRating >= 4 && (
+              <p className="text-xs text-yellow-600">⭐ Gold standard — this fund will always appear in curations for its category</p>
+            )}
           </div>
         </div>
 

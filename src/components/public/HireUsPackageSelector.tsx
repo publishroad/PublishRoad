@@ -5,69 +5,26 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { ActivePaymentProvider } from "@/lib/payments/service";
 import { PaymentMethodPicker } from "@/components/public/PaymentMethodPicker";
+import {
+  DEFAULT_HIRE_US_PRICING_CONFIG,
+  formatUsdFromCents,
+  normalizeHireUsPricingConfig,
+  type HireUsPricingConfig,
+} from "@/lib/hire-us-config-shared";
 
 export type HireUsPackageSlug = "starter" | "complete";
 
 type HireUsSelectorVariant = "onboarding" | "dashboard";
 
-const starterIncludes = [
-  "Submissions to all sites on your curated distribution list",
-  "Full execution report with all submission links",
-  "15-day delivery guarantee",
-];
+interface HireUsSourceContext {
+  source: string;
+  curationId?: string;
+  sectionKey?: "d" | "e" | "f";
+  stepLabel?: "Step 4" | "Step 5" | "Step 6";
+}
 
-const completeIncludes = [
-  "Everything in the Starter package",
-  "Guest posts on up to 20 sites from your curation list",
-  "Direct introduction to our press release team",
-  "Press release may be included free or charged separately by tier",
-  "Full execution report with all submissions & published links",
-  "25-day delivery guarantee",
-];
-
-const dashboardFaqItems = [
-  {
-    q: "What's the difference between the two packages?",
-    a: "The Starter ($399) covers directory submissions only. The Complete ($999) includes everything in Starter plus guest posts on up to 20 sites from your list and a direct introduction to our press release team.",
-  },
-  {
-    q: "Which package should I choose?",
-    a: "If you mainly need visibility through directory listings, Starter is the right pick. If you also want SEO-focused guest posts and press release support, choose Complete.",
-  },
-  {
-    q: "How long does it take?",
-    a: "Starter is delivered within 15 days. Complete is delivered within 25 days. Both timelines begin once we receive your brief and payment.",
-  },
-  {
-    q: "How does the press release work?",
-    a: "We introduce you to our press release partners and explain the available tiers. Depending on the distribution scope you choose, the press release may be included at no extra charge or require a separate fee.",
-  },
-];
-
-const packageCards: Array<{
-  slug: HireUsPackageSlug;
-  name: string;
-  price: string;
-  note: string;
-  description: string;
-  includes: string[];
-}> = [
-  {
-    slug: "starter",
-    name: "Starter",
-    price: "$399",
-    note: "One-time",
-    description: "Managed launch submissions for quick traction.",
-    includes: starterIncludes,
-  },
-  {
-    slug: "complete",
-    name: "Complete",
-    price: "$999",
-    note: "One-time",
-    description: "Full done-for-you distribution, outreach, and support.",
-    includes: completeIncludes,
-  },
+const dashboardFaqItemsTemplate = [
+  ...DEFAULT_HIRE_US_PRICING_CONFIG.faq,
 ];
 
 interface HireUsPackageSelectorProps {
@@ -76,6 +33,9 @@ interface HireUsPackageSelectorProps {
   loginCallbackBasePath?: string;
   variant?: HireUsSelectorVariant;
   showBackToDetails?: boolean;
+  dashboardIntroTitle?: string;
+  dashboardIntroSubtitle?: string;
+  sourceContext?: HireUsSourceContext;
 }
 
 export function HireUsPackageSelector({
@@ -84,12 +44,34 @@ export function HireUsPackageSelector({
   loginCallbackBasePath = "/onboarding/hire-us",
   variant = "onboarding",
   showBackToDetails = false,
+  dashboardIntroTitle = "No Hire Us requests yet.",
+  dashboardIntroSubtitle = "Pick a package below to start instantly without leaving this page.",
+  sourceContext,
 }: HireUsPackageSelectorProps) {
   const router = useRouter();
   const [loading, setLoading] = useState<HireUsPackageSlug | null>(null);
+  const [pricingConfig, setPricingConfig] = useState<HireUsPricingConfig>(DEFAULT_HIRE_US_PRICING_CONFIG);
   const [providerPicker, setProviderPicker] = useState<ActivePaymentProvider[] | null>(null);
   const [pendingPackage, setPendingPackage] = useState<HireUsPackageSlug | null>(null);
   const [inlineError, setInlineError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    fetch("/api/hire-us/config", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((payload) => {
+        if (!isMounted || !payload?.config) return;
+        setPricingConfig(normalizeHireUsPricingConfig(payload.config));
+      })
+      .catch(() => {
+        // Keep defaults on network failure
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!checkoutError) return;
@@ -106,12 +88,42 @@ export function HireUsPackageSelector({
   }, [checkoutError]);
 
   const orderedCards = useMemo(() => {
+    const packageCards: Array<{
+      slug: HireUsPackageSlug;
+      name: string;
+      price: string;
+      note: string;
+      description: string;
+      includes: string[];
+    }> = [
+      {
+        slug: "starter",
+        name: "Starter",
+        price: formatUsdFromCents(pricingConfig.starter.priceCents),
+        note: "One-time",
+        description: "Managed launch submissions for quick traction.",
+        includes: pricingConfig.starter.includes,
+      },
+      {
+        slug: "complete",
+        name: "Complete",
+        price: formatUsdFromCents(pricingConfig.complete.priceCents),
+        note: "One-time",
+        description: "Full done-for-you distribution, outreach, and support.",
+        includes: pricingConfig.complete.includes,
+      },
+    ];
+
     return [...packageCards].sort((a, b) => {
       if (a.slug === preselectedPackage) return -1;
       if (b.slug === preselectedPackage) return 1;
       return 0;
     });
-  }, [preselectedPackage]);
+  }, [preselectedPackage, pricingConfig]);
+
+  const dashboardFaqItems = useMemo(() => {
+    return pricingConfig.faq.length > 0 ? pricingConfig.faq : dashboardFaqItemsTemplate;
+  }, [pricingConfig]);
 
   async function startHireUsCheckout(packageSlug: HireUsPackageSlug, provider?: ActivePaymentProvider) {
     if (loading && !provider) return;
@@ -122,7 +134,7 @@ export function HireUsPackageSelector({
       const res = await fetch("/api/hire-us/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ packageSlug, provider }),
+        body: JSON.stringify({ packageSlug, provider, sourceContext }),
       });
 
       const data = await res.json();
@@ -215,8 +227,8 @@ export function HireUsPackageSelector({
           </div>
         ) : (
           <div className="text-center mb-6">
-            <p className="text-sm text-gray-500 mb-2">No Hire Us requests yet.</p>
-            <p className="text-sm text-slate-600">Pick a package below to start instantly without leaving this page.</p>
+            <p className="text-sm text-gray-500 mb-2">{dashboardIntroTitle}</p>
+            <p className="text-sm text-slate-600">{dashboardIntroSubtitle}</p>
           </div>
         )}
 
@@ -228,7 +240,7 @@ export function HireUsPackageSelector({
             return (
               <div
                 key={pkg.slug}
-                className={isOnboarding ? "rounded-[2rem] p-8 bg-white" : "rounded-2xl p-6 bg-white"}
+                className={isOnboarding ? "rounded-[2rem] p-8 bg-white flex h-full flex-col" : "rounded-2xl p-6 bg-white flex h-full flex-col"}
                 style={{
                   border: active ? "2px solid rgba(91,88,246,0.45)" : "1px solid rgba(226,232,240,0.9)",
                   boxShadow: active ? "0 14px 48px rgba(91,88,246,0.18)" : "0 6px 28px rgba(91,88,246,0.08)",
@@ -244,28 +256,30 @@ export function HireUsPackageSelector({
                   {pkg.price}
                 </p>
                 <p className="text-sm text-slate-500 mt-1">{pkg.note}</p>
-                <p className={isOnboarding ? "text-sm text-slate-600 mt-5 leading-6" : "text-sm text-slate-600 mt-4 leading-6"}>
-                  {pkg.description}
-                </p>
+                <div className="flex-1">
+                  <p className={isOnboarding ? "text-sm text-slate-600 mt-5 leading-6" : "text-sm text-slate-600 mt-4 leading-6"}>
+                    {pkg.description}
+                  </p>
 
-                {!isOnboarding && (
-                  <div className="mt-5">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Includes</p>
-                    <div className="mt-3 space-y-2.5">
-                      {pkg.includes.map((item) => (
-                        <div key={item} className="flex items-start gap-3">
-                          <span
-                            className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
-                            style={{ background: "rgba(91,88,246,0.1)", color: "#5B58F6" }}
-                          >
-                            ✓
-                          </span>
-                          <span className="text-sm leading-6 text-slate-700">{item}</span>
-                        </div>
-                      ))}
+                  {!isOnboarding && (
+                    <div className="mt-5">
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Includes</p>
+                      <div className="mt-3 space-y-2.5">
+                        {pkg.includes.map((item) => (
+                          <div key={item} className="flex items-start gap-3">
+                            <span
+                              className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
+                              style={{ background: "rgba(91,88,246,0.1)", color: "#5B58F6" }}
+                            >
+                              ✓
+                            </span>
+                            <span className="text-sm leading-6 text-slate-700">{item}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
 
                 <button
                   type="button"

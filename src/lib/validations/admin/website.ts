@@ -28,7 +28,7 @@ export const websiteSchema = z.object({
     .optional()
     .nullable(),
   isActive: z.boolean().default(true),
-  isPinned: z.boolean().default(false),
+  starRating: z.coerce.number().int().min(1).max(5).nullable().optional().default(null),
   isExcluded: z.boolean().default(false),
   tagIds: z.array(z.string()).default([]),
 });

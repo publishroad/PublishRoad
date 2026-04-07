@@ -1,11 +1,9 @@
 import type { NextConfig } from "next";
 
 if (!process.env.NEXTAUTH_SECRET) {
-  throw new Error("NEXTAUTH_SECRET must be defined");
-}
-
-if (process.env.NODE_ENV === "production" && process.env.NEXTAUTH_SECRET.length < 32) {
-  throw new Error("NEXTAUTH_SECRET must be at least 32 characters in production");
+  console.error("[Config] NEXTAUTH_SECRET is not set. Authentication will not work — set it in Vercel environment variables.");
+} else if (process.env.NODE_ENV === "production" && process.env.NEXTAUTH_SECRET.length < 32) {
+  console.error("[Config] NEXTAUTH_SECRET must be at least 32 characters in production.");
 }
 
 if (process.env.NODE_ENV === "production" && !process.env.EMAIL_QUEUE_SECRET) {
