@@ -87,7 +87,7 @@ const sectionSteps = {
   d: "Step 4",
   e: "Step 5",
   f: "Step 6",
-};
+} as const;
 
 const sectionOrder = ["a", "b", "c", "d", "e", "f"] as const;
 const bookingCtaUrl = "https://tidycal.com/publish-road/curation-discussion";

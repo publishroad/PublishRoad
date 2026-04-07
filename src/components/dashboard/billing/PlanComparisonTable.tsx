@@ -12,7 +12,7 @@ const PLAN_LABELS: Record<PlanSlug, string> = {
 
 interface PlanComparisonTableProps {
   rows: PricingComparisonRow[];
-  visiblePlanSlugs?: PlanSlug[];
+  visiblePlanSlugs?: readonly PlanSlug[];
 }
 
 export function PlanComparisonTable({

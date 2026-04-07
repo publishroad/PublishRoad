@@ -44,7 +44,7 @@ export function PricingBelowFold({
   visiblePlanSlugs = PLAN_ORDER,
 }: {
   comparisonRows?: PricingComparisonRow[];
-  visiblePlanSlugs?: PlanSlug[];
+  visiblePlanSlugs?: readonly PlanSlug[];
 }) {
   const visibleIndices = PLAN_ORDER
     .map((slug, index) => ({ slug, index }))

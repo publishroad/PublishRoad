@@ -263,7 +263,7 @@ export function useStreamingCuration(
         if (isUnmountingRef.current) return;
         const currentData = dataRef.current;
         if (currentData && (currentData.status === "processing" || currentData.status === "pending")) {
-          openStream(currentData);
+          openStream();
         }
       }, 2000);
     };

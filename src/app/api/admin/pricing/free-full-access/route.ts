@@ -25,8 +25,8 @@ export async function PUT(req: NextRequest) {
 
   await db.betaConfig.upsert({
     where: { id: "default" },
-    update: { enabled: body.enabled, updatedById: session.id },
-    create: { id: "default", enabled: body.enabled, updatedById: session.id },
+    update: { enabled: body.enabled, updatedById: session.adminId },
+    create: { id: "default", enabled: body.enabled, updatedById: session.adminId },
   });
 
   await redis.del(FREE_PLAN_FULL_ACCESS_KEY);
