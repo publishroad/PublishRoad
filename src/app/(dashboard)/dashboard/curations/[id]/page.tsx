@@ -443,7 +443,7 @@ export default function CurationDetailPage() {
                 source: "dashboard_curation_steps",
                 curationId: id,
                 sectionKey: hireUsSourceSection,
-                stepLabel: sectionSteps[hireUsSourceSection],
+                stepLabel: sectionSteps[hireUsSourceSection] as "Step 4" | "Step 5" | "Step 6",
               }}
             />
           </div>
