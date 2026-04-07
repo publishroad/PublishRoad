@@ -1,4 +1,6 @@
 "use client";
+
+export const dynamic = "force-dynamic";
 // Static login form - no server-side dynamic rendering needed
 
 import { useState } from "react";

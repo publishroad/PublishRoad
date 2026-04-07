@@ -1,4 +1,6 @@
 "use client";
+
+export const dynamic = "force-dynamic";
 // Static 2FA setup form — no real-time rendering needed
 
 import { useEffect, useState } from "react";
