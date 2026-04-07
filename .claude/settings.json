@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls /c/Users/shubi/OneDrive/Desktop/PublishRoad/sentry*.*)",
+      "Bash(ls /c/Users/shubi/OneDrive/Desktop/PublishRoad/src/instrumentation*.*)",
+      "Bash(NEXTAUTH_SECRET=\"\" npm run build)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)"
+    ]
+  }
+}
