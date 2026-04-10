@@ -19,9 +19,10 @@ export async function POST(req: NextRequest) {
   }
 
   const { email, password } = parsed.data;
+  const normalizedEmail = email.trim().toLowerCase();
 
   const admin = await db.adminUser.findUnique({
-    where: { email },
+    where: { email: normalizedEmail, isActive: true },
     select: {
       id: true,
       passwordHash: true,

@@ -1,20 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { db } from "@/lib/db";
-import { verifyAdminSession } from "@/lib/admin-auth";
+import { requireAdmin } from "@/lib/admin-auth";
 import { Prisma } from "@prisma/client";
 import {
   normalizePricingComparisonRows,
   PricingComparisonRow,
 } from "@/lib/pricing-comparison";
 
-async function requireAdmin() {
-  const cookieStore = await cookies();
-  const c = cookieStore.get("admin_session");
-  if (!c) return null;
-  const session = await verifyAdminSession(c.value);
-  return session?.totpVerified ? session : null;
-}
 
 export async function PUT(req: NextRequest) {
   const session = await requireAdmin();

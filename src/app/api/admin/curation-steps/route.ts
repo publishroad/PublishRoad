@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { z } from "zod";
-import { verifyAdminSession } from "@/lib/admin-auth";
+import { requireAdmin } from "@/lib/admin-auth";
 import {
   ALL_CURATION_SECTIONS,
   getGlobalEnabledCurationSections,
@@ -13,13 +12,6 @@ const payloadSchema = z.object({
   enabledSections: z.array(z.enum(ALL_CURATION_SECTIONS)).min(1),
 });
 
-async function requireAdmin() {
-  const cookieStore = await cookies();
-  const c = cookieStore.get("admin_session");
-  if (!c) return null;
-  const session = await verifyAdminSession(c.value);
-  return session?.totpVerified ? session : null;
-}
 
 export async function GET() {
   const session = await requireAdmin();

@@ -4,6 +4,12 @@ import { normalizedEmailSchema, requiredTrimmedString } from "@/lib/validations/
 export const signupSchema = z.object({
   name: requiredTrimmedString("Name", { min: 2, max: 100 }),
   email: normalizedEmailSchema,
+  referralCode: z
+    .string()
+    .trim()
+    .min(3)
+    .max(64)
+    .optional(),
   password: z
     .string()
     .min(8, "Password must be at least 8 characters")

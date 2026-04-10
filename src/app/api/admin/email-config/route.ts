@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { db } from "@/lib/db";
-import { verifyAdminSession } from "@/lib/admin-auth";
+import { requireAdmin } from "@/lib/admin-auth";
 import { encryptField } from "@/lib/server-utils";
 import { emailConfigSchema } from "@/lib/validations/admin/email-config";
 import { isMissingRelationError } from "@/lib/db-error-utils";
@@ -19,14 +18,6 @@ type EmailConfigRow = {
   updated_at: Date;
 };
 
-async function requireAdmin() {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get("admin_session");
-  if (!sessionCookie) return null;
-  const session = await verifyAdminSession(sessionCookie.value);
-  if (!session?.totpVerified) return null;
-  return session;
-}
 
 export async function GET() {
   const session = await requireAdmin();

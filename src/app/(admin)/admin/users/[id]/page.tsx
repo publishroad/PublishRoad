@@ -6,6 +6,12 @@ import { notFound } from "next/navigation";
 import { UserAdminPanel } from "@/components/admin/UserAdminPanel";
 import { formatDate } from "@/lib/utils";
 
+type AffiliateProfileRow = {
+  starterCommissionPct: number;
+  hireUsCommissionPct: number;
+  paypalEmail: string | null;
+};
+
 export default async function AdminUserDetailPage({
   params,
 }: {
@@ -13,7 +19,7 @@ export default async function AdminUserDetailPage({
 }) {
   const { id } = await params;
 
-  const [user, plans, curations] = await Promise.all([
+  const [user, plans, curations, affiliateProfileRows] = await Promise.all([
     db.user.findUnique({
       where: { id },
       select: {
@@ -29,9 +35,24 @@ export default async function AdminUserDetailPage({
     }),
     db.planConfig.findMany({ where: { isActive: true }, orderBy: { priceCents: "asc" } }),
     db.curation.count({ where: { userId: id } }),
+    db.$queryRaw<AffiliateProfileRow[]>`
+      SELECT
+        starter_commission_pct AS "starterCommissionPct",
+        hire_us_commission_pct AS "hireUsCommissionPct",
+        paypal_email AS "paypalEmail"
+      FROM affiliate_profiles
+      WHERE user_id = ${id}
+      LIMIT 1
+    `,
   ]);
 
   if (!user) notFound();
+
+  const affiliateProfile = affiliateProfileRows[0] ?? {
+    starterCommissionPct: 25,
+    hireUsCommissionPct: 15,
+    paypalEmail: null,
+  };
 
   return (
     <div className="flex-1 flex flex-col">
@@ -69,7 +90,7 @@ export default async function AdminUserDetailPage({
           </dl>
         </div>
 
-        <UserAdminPanel user={user} plans={plans} />
+        <UserAdminPanel user={user} plans={plans} affiliateProfile={affiliateProfile} />
       </div>
     </div>
   );

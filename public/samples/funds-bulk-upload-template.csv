@@ -1,0 +1,2 @@
+name,websiteUrl,logoUrl,investmentStage,ticketSize,country_slug,category_slug,tags,description,isActive,starRating
+Sequoia Capital,https://www.sequoiacap.com,,series_a,"$500K-$5M",united-states,saas,"venture,investors",Global VC firm investing from seed to growth,true,5

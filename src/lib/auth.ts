@@ -1,11 +1,13 @@
 import NextAuth, { CredentialsSignin, type DefaultSession } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
+import { cookies } from "next/headers";
 import { db } from "./db";
 import { loginSchema } from "./validations/auth";
 import { applyRefreshToToken, authConfig } from "./auth.config";
 import { evaluateLoginCredentials } from "./login-evaluator";
 import { verifyPassword } from "./server-utils";
+import { claimAffiliateReferralForUser, REFERRAL_CODE_COOKIE } from "@/lib/referrals/claim";
 
 class LoginCredentialsError extends CredentialsSignin {
   code: string;
@@ -72,6 +74,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     ...authConfig.callbacks,
     async signIn({ user, account }) {
       if (account?.provider === "google") {
+        const cookieStore = await cookies();
+        const referralCode = cookieStore.get(REFERRAL_CODE_COOKIE)?.value?.trim().toUpperCase();
+
         const existingUser = await db.user.findFirst({
           where: { email: user.email!, deletedAt: null },
         });
@@ -81,18 +86,39 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             return `/login?error=account_exists&email=${encodeURIComponent(user.email!)}`;
           }
           user.id = existingUser.id;
+
+          if (referralCode) {
+            await claimAffiliateReferralForUser({
+              referredUserId: existingUser.id,
+              referralCode,
+            });
+          }
+
           return true;
         }
 
-        const newUser = await db.user.create({
-          data: {
-            email: user.email!,
-            name: user.name,
-            authProvider: "google",
-            emailVerifiedAt: new Date(),
-            creditsRemaining: 1,
-          },
+        const newUser = await db.$transaction(async (tx) => {
+          const createdUser = await tx.user.create({
+            data: {
+              email: user.email!,
+              name: user.name,
+              authProvider: "google",
+              emailVerifiedAt: new Date(),
+              creditsRemaining: 1,
+            },
+          });
+
+          if (referralCode) {
+            await claimAffiliateReferralForUser({
+              referredUserId: createdUser.id,
+              referralCode,
+              tx,
+            });
+          }
+
+          return createdUser;
         });
+
         user.id = newUser.id;
         return true;
       }

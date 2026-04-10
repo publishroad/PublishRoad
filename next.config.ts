@@ -1,5 +1,29 @@
 import type { NextConfig } from "next";
 
+const r2PublicUrlRaw = process.env.R2_PUBLIC_URL?.trim() ?? "";
+let r2ImageOrigin: string | null = null;
+let r2RemotePattern:
+  | {
+      protocol: "http" | "https";
+      hostname: string;
+      port?: string;
+    }
+  | null = null;
+
+if (r2PublicUrlRaw) {
+  try {
+    const parsed = new URL(r2PublicUrlRaw);
+    r2ImageOrigin = parsed.origin;
+    r2RemotePattern = {
+      protocol: parsed.protocol.replace(":", "") as "http" | "https",
+      hostname: parsed.hostname,
+      ...(parsed.port ? { port: parsed.port } : {}),
+    };
+  } catch {
+    console.warn("[Config] R2_PUBLIC_URL is set but not a valid URL. Uploaded blog images may be blocked by CSP/image config.");
+  }
+}
+
 if (!process.env.NEXTAUTH_SECRET) {
   console.error("[Config] NEXTAUTH_SECRET is not set. Authentication will not work — set it in Vercel environment variables.");
 } else if (process.env.NODE_ENV === "production" && process.env.NEXTAUTH_SECRET.length < 32) {
@@ -27,7 +51,7 @@ const ContentSecurityPolicy = `
   default-src 'self';
   script-src ${scriptSrc};
   frame-src https://js.stripe.com https://checkout.razorpay.com https://*.razorpay.com https://*.razorpay.in https://*.rzp.io;
-  img-src 'self' https://images.publishroad.com https://lh3.googleusercontent.com data: blob:;
+  img-src 'self' https://images.publishroad.com https://lh3.googleusercontent.com ${r2ImageOrigin ?? ""} data: blob:;
   style-src 'self' 'unsafe-inline';
   font-src 'self';
   connect-src 'self' https://api.stripe.com https://api.razorpay.com https://checkout.razorpay.com https://*.razorpay.com https://*.razorpay.in https://*.rzp.io https://vitals.vercel-insights.com https://us.i.posthog.com https://us-assets.i.posthog.com https://eu.i.posthog.com https://eu-assets.i.posthog.com;
@@ -75,6 +99,7 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "lh3.googleusercontent.com",
       },
+      ...(r2RemotePattern ? [r2RemotePattern] : []),
     ],
   },
   async headers() {

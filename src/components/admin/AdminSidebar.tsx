@@ -93,6 +93,38 @@ const groups = [
     ],
   },
   {
+    title: "Referrals",
+    items: [
+      {
+        href: "/admin/referrals",
+        label: "Referrals",
+        icon: (
+          <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 11a3 3 0 100-6 3 3 0 000 6zm8 3a3 3 0 100-6 3 3 0 000 6zM8 13c-2.761 0-5 1.79-5 4v2h8m2 0h8v-2c0-2.21-2.239-4-5-4h-3" />
+          </svg>
+        ),
+      },
+      {
+        href: "/admin/referrals/active",
+        label: "Referral Payments",
+        icon: (
+          <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M5 13l4 4L19 7" />
+          </svg>
+        ),
+      },
+      {
+        href: "/admin/referrals/history",
+        label: "Payment History",
+        icon: (
+          <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        ),
+      },
+    ],
+  },
+  {
     title: "Channels",
     items: [
       {
@@ -293,7 +325,7 @@ export function AdminSidebar() {
   return (
     <AppSidebar
       groups={groupsWithUnread}
-      exactMatch={["/admin/dashboard"]}
+      exactMatch={["/admin/dashboard", "/admin/referrals"]}
       bottomSlot={<AdminLogout />}
     />
   );

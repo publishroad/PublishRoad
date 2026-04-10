@@ -54,15 +54,25 @@ export default async function AdminSocialPage({ searchParams }: { searchParams: 
       <AppHeader
         title={`Social Influencers (${total.toLocaleString()})`}
         rightSlot={
-          <Link
-            href="/admin/social/new"
-            className="h-9 px-4 rounded-xl bg-[#465FFF] text-white text-sm font-medium hover:bg-[#3d55e8] flex items-center gap-1.5 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Add Influencer
-          </Link>
+          <div className="flex gap-2">
+            <a
+              href="/samples/social-bulk-upload-template.csv"
+              download
+              className="h-9 px-4 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-1.5 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 16V4m0 12l-4-4m4 4l4-4M4 20h16" /></svg>
+              Sample Excel
+            </a>
+            <Link
+              href="/admin/social/new"
+              className="h-9 px-4 rounded-xl bg-[#465FFF] text-white text-sm font-medium hover:bg-[#3d55e8] flex items-center gap-1.5 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add Influencer
+            </Link>
+          </div>
         }
       />
       <div className="flex-1 p-6 space-y-4">

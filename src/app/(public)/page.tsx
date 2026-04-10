@@ -409,7 +409,7 @@ export default async function LandingPage() {
 
           {/* Pricing cards */}
           <div
-            className="mx-auto grid max-w-6xl grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4"
+            className="mx-auto grid w-full max-w-6xl justify-center gap-5 [grid-template-columns:repeat(auto-fit,minmax(280px,320px))]"
           >
             {dbPlans.map(dbPlanToDisplay).map((plan) => (
               <PublicPricingCard key={plan.slug} plan={plan} />

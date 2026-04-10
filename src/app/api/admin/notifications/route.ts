@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { z } from "zod";
-import { verifyAdminSession } from "@/lib/admin-auth";
+import { requireAdmin } from "@/lib/admin-auth";
 import {
   listAdminNotifications,
   markAdminNotificationRead,
@@ -17,13 +16,6 @@ const markReadSchema = z
     message: "Provide id or markAll=true",
   });
 
-async function requireAdmin() {
-  const cookieStore = await cookies();
-  const c = cookieStore.get("admin_session");
-  if (!c) return null;
-  const session = await verifyAdminSession(c.value);
-  return session?.totpVerified ? session : null;
-}
 
 function getRequestIp(req: NextRequest): string | null {
   const forwardedFor = req.headers.get("x-forwarded-for");

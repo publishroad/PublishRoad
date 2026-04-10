@@ -54,6 +54,7 @@ function SignupPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl");
+  const referralCode = searchParams.get("ref")?.trim() || undefined;
   const redirectTarget = resolveSignupRedirectTarget(callbackUrl);
   const hireUsPackage = extractHireUsPackageFromCallback(callbackUrl);
   const [isLoading, setIsLoading] = useState(false);
@@ -72,7 +73,7 @@ function SignupPageContent() {
       const response = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, referralCode }),
       });
 
       let result: { error?: string | { code?: string; message?: string } } = {};
@@ -121,6 +122,19 @@ function SignupPageContent() {
     if (inFlightRef.current) return;
     inFlightRef.current = true;
     setIsLoading(true);
+
+    if (referralCode) {
+      try {
+        await fetch("/api/referrals/capture", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ referralCode }),
+        });
+      } catch {
+        // Continue Google auth flow even if capture endpoint is temporarily unavailable.
+      }
+    }
+
     await signIn("google", { callbackUrl: redirectTarget });
   }
 
@@ -166,6 +180,21 @@ function SignupPageContent() {
               <p style={{ fontSize: "0.8rem", opacity: 0.95, lineHeight: 1.4 }}>
                 You&apos;ll get 1 free curation to test our work. Then purchase your package to launch your full service.
               </p>
+            </div>
+          )}
+          {referralCode && (
+            <div
+              style={{
+                background: "#EEF2FF",
+                borderRadius: "0.9rem",
+                padding: "0.75rem 0.9rem",
+                marginBottom: "1rem",
+                color: "#334155",
+                fontSize: "0.82rem",
+                border: "1px solid #dbe2ff",
+              }}
+            >
+              Referral applied: <span style={{ fontWeight: 600 }}>{referralCode}</span>
             </div>
           )}
           <button

@@ -115,6 +115,12 @@ model User {
   payments           Payment[]
   referralUsed       Referral[]     @relation("ReferredUser")
   referralsMade      Referral[]     @relation("ReferrerUser")
+  affiliateProfile   AffiliateProfile?
+  affiliateReferralsMade AffiliateReferral[] @relation("AffiliateReferrer")
+  affiliateReferralSource AffiliateReferral[] @relation("AffiliateReferred")
+  affiliateCommissionsEarned AffiliateCommission[] @relation("AffiliateCommissionEarner")
+  affiliateCommissionsFromReferred AffiliateCommission[] @relation("AffiliateCommissionReferred")
+  affiliatePayoutBatches AffiliatePayoutBatch[]
   serviceLeads       ServiceLead[]
   plan               PlanConfig?    @relation(fields: [planId], references: [id])
 
@@ -247,6 +253,7 @@ model Payment {
   createdAt             DateTime      @default(now()) @map("created_at")
   providerPaymentId     String?       @map("provider_payment_id")
   paymentType           PaymentType   @default(plan) @map("payment_type")
+  affiliateCommissions  AffiliateCommission[]
   plan                  PlanConfig?   @relation(fields: [planId], references: [id])
   user                  User          @relation(fields: [userId], references: [id])
 
@@ -387,6 +394,91 @@ model Referral {
   referrer       User     @relation("ReferrerUser", fields: [referrerUserId], references: [id])
 
   @@map("referrals")
+}
+
+model AffiliateProfile {
+  userId               String   @id @map("user_id")
+  referralCode         String   @unique @map("referral_code")
+  paypalEmail          String?  @map("paypal_email")
+  starterCommissionPct Int      @default(25) @map("starter_commission_pct")
+  hireUsCommissionPct  Int      @default(15) @map("hire_us_commission_pct")
+  isActive             Boolean  @default(false) @map("is_active")
+  isDisabledByAdmin    Boolean  @default(false) @map("is_disabled_by_admin")
+  marketingChannel     String?  @map("marketing_channel")
+  termsAcceptedAt      DateTime? @map("terms_accepted_at")
+  enrolledAt           DateTime? @map("enrolled_at")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("affiliate_profiles")
+}
+
+model AffiliateReferral {
+  id             String   @id
+  referrerUserId String   @map("referrer_user_id")
+  referredUserId String   @unique @map("referred_user_id")
+  referralCode   String   @map("referral_code")
+  createdAt      DateTime @default(now()) @map("created_at")
+  referrer       User     @relation("AffiliateReferrer", fields: [referrerUserId], references: [id], onDelete: Cascade)
+  referred       User     @relation("AffiliateReferred", fields: [referredUserId], references: [id], onDelete: Cascade)
+
+  @@index([referrerUserId])
+  @@index([referralCode])
+  @@map("affiliate_referrals")
+}
+
+model AffiliateCommission {
+  id               String   @id
+  affiliateUserId  String   @map("affiliate_user_id")
+  referredUserId   String   @map("referred_user_id")
+  paymentId        String?  @unique @map("payment_id")
+  payoutBatchId    String?  @map("payout_batch_id")
+  referralCode     String   @map("referral_code")
+  paymentType      PaymentType @map("payment_type")
+  commissionPct    Int      @map("commission_pct")
+  amountCents      Int      @map("amount_cents")
+  status           String   @default("pending")
+  earnedAt         DateTime @map("earned_at")
+  eligibleAt       DateTime @map("eligible_at")
+  paidAt           DateTime? @map("paid_at")
+  payoutMethod     String?  @map("payout_method")
+  payoutReference  String?  @map("payout_reference")
+  adminNote        String?  @map("admin_note")
+  markedByAdminId  String?  @map("marked_by_admin_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  affiliate        User     @relation("AffiliateCommissionEarner", fields: [affiliateUserId], references: [id], onDelete: Cascade)
+  referred         User     @relation("AffiliateCommissionReferred", fields: [referredUserId], references: [id], onDelete: Cascade)
+  payment          Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  payoutBatch      AffiliatePayoutBatch? @relation(fields: [payoutBatchId], references: [id], onDelete: SetNull)
+
+  @@index([affiliateUserId, status])
+  @@index([status, eligibleAt])
+  @@index([paidAt])
+  @@index([payoutBatchId])
+  @@map("affiliate_commissions")
+}
+
+model AffiliatePayoutBatch {
+  id               String   @id
+  affiliateUserId  String   @map("affiliate_user_id")
+  totalAmountCents Int      @map("total_amount_cents")
+  commissionCount  Int      @map("commission_count")
+  payoutMethod     String   @map("payout_method")
+  payoutReference  String?  @map("payout_reference")
+  adminNote        String?  @map("admin_note")
+  paidAt           DateTime @map("paid_at")
+  createdByAdminId String?  @map("created_by_admin_id")
+  status           String   @default("paid")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  affiliate        User     @relation(fields: [affiliateUserId], references: [id], onDelete: Cascade)
+  commissions      AffiliateCommission[]
+
+  @@index([affiliateUserId, paidAt])
+  @@index([status, paidAt])
+  @@map("affiliate_payout_batches")
 }
 
 model ContactSubmission {

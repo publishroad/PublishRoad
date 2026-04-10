@@ -1,9 +1,8 @@
 import { randomUUID } from "crypto";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import path from "path";
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { verifyAdminSession } from "@/lib/admin-auth";
+import { requireAdmin } from "@/lib/admin-auth";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set([
@@ -57,13 +56,6 @@ function createR2Client(config: R2Config) {
   });
 }
 
-async function requireAdmin() {
-  const cookieStore = await cookies();
-  const cookie = cookieStore.get("admin_session");
-  if (!cookie) return null;
-  const session = await verifyAdminSession(cookie.value);
-  return session?.totpVerified ? session : null;
-}
 
 function getSafeExtension(file: File): string | null {
   const extFromName = path.extname(file.name).toLowerCase();

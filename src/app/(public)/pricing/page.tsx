@@ -139,7 +139,7 @@ export default async function PricingPage() {
 
       <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-20">
         {/* ─── Pricing Cards ─── */}
-        <div className="mx-auto mb-20 grid max-w-6xl grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mx-auto mb-20 grid w-full max-w-6xl justify-center gap-6 [grid-template-columns:repeat(auto-fit,minmax(280px,320px))]">
           {plans.map((p) => {
             const displayPlan = "priceCents" in p ? dbPlanToDisplay(p) : p;
             const planId = "id" in p ? (p as { id: string }).id : undefined;

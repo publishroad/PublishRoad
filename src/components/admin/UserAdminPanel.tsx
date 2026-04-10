@@ -9,12 +9,20 @@ import { toast } from "sonner";
 
 interface Plan { id: string; name: string; slug: string; credits: number; }
 interface User { id: string; planId: string | null; creditsRemaining: number; }
+interface AffiliateProfile {
+  starterCommissionPct: number;
+  hireUsCommissionPct: number;
+  paypalEmail: string | null;
+}
 
-export function UserAdminPanel({ user, plans }: { user: User; plans: Plan[] }) {
+export function UserAdminPanel({ user, plans, affiliateProfile }: { user: User; plans: Plan[]; affiliateProfile: AffiliateProfile }) {
   const router = useRouter();
   const [planId, setPlanId] = useState(user.planId ?? "");
   const [credits, setCredits] = useState(user.creditsRemaining);
   const [creditAdjust, setCreditAdjust] = useState(0);
+  const [starterCommissionPct, setStarterCommissionPct] = useState(affiliateProfile.starterCommissionPct);
+  const [hireUsCommissionPct, setHireUsCommissionPct] = useState(affiliateProfile.hireUsCommissionPct);
+  const [referralPaypalEmail, setReferralPaypalEmail] = useState(affiliateProfile.paypalEmail ?? "");
   const [isSaving, setIsSaving] = useState(false);
 
   async function handleSave() {
@@ -22,7 +30,13 @@ export function UserAdminPanel({ user, plans }: { user: User; plans: Plan[] }) {
     const res = await fetch(`/api/admin/users/${user.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ planId: planId || null, creditsRemaining: credits }),
+      body: JSON.stringify({
+        planId: planId || null,
+        creditsRemaining: credits,
+        starterCommissionPct,
+        hireUsCommissionPct,
+        referralPaypalEmail,
+      }),
     });
     setIsSaving(false);
     if (!res.ok) { toast.error("Failed to update"); return; }
@@ -87,6 +101,42 @@ export function UserAdminPanel({ user, plans }: { user: User; plans: Plan[] }) {
         <Button className="bg-navy hover:bg-blue" onClick={handleSave} disabled={isSaving}>
           {isSaving ? "Saving..." : "Save Changes"}
         </Button>
+      </div>
+
+      <div className="bg-white rounded-xl border border-border-gray p-6 space-y-4">
+        <h2 className="font-semibold text-navy">Affiliate Settings</h2>
+        <p className="text-sm text-medium-gray">Defaults are 25% on starter plans and 15% on Hire Us purchases.</p>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label>Starter Commission %</Label>
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              value={starterCommissionPct}
+              onChange={(e) => setStarterCommissionPct(Number(e.target.value))}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Hire Us Commission %</Label>
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              value={hireUsCommissionPct}
+              onChange={(e) => setHireUsCommissionPct(Number(e.target.value))}
+            />
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label>PayPal Email (for payout)</Label>
+          <Input
+            type="email"
+            value={referralPaypalEmail}
+            onChange={(e) => setReferralPaypalEmail(e.target.value)}
+            placeholder="affiliate@paypal.com"
+          />
+        </div>
       </div>
 
       {/* Danger */}

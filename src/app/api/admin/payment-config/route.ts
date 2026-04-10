@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { db } from "@/lib/db";
-import { verifyAdminSession } from "@/lib/admin-auth";
+import { requireAdmin } from "@/lib/admin-auth";
 import { encryptField } from "@/lib/server-utils";
 import { paymentConfigSchema } from "@/lib/validations/admin/payment-config";
 import { isMissingRelationError } from "@/lib/db-error-utils";
@@ -17,14 +16,6 @@ type PaymentConfigRow = {
   updated_at: Date;
 };
 
-async function requireAdmin() {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get("admin_session");
-  if (!sessionCookie) return null;
-  const session = await verifyAdminSession(sessionCookie.value);
-  if (!session?.totpVerified) return null;
-  return session;
-}
 
 // GET — return all configured payment providers
 export async function GET() {

@@ -12,7 +12,18 @@
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({k:d[k] for k in ['status','errorCode','errorMessage','errorStep','errorLink'] if k in d}, indent=2\\)\\)\")",
       "Bash(export DATABASE_URL=$\\(grep \"^DATABASE_URL=\" /c/Users/shubi/OneDrive/Desktop/PublishRoad/.vercel/.env.preview.local)",
       "Bash(export DATABASE_URL=$\\(grep \"^DIRECT_URL=\" /c/Users/shubi/OneDrive/Desktop/PublishRoad/.vercel/.env.preview.local)",
-      "Bash(grep -rL \"force-dynamic\\\\|generateStaticParams\\\\|revalidate\" /c/Users/shubi/OneDrive/Desktop/PublishRoad/src/app/\\\\\\(admin\\\\\\)/admin/*/page.tsx)"
+      "Bash(grep -rL \"force-dynamic\\\\|generateStaticParams\\\\|revalidate\" /c/Users/shubi/OneDrive/Desktop/PublishRoad/src/app/\\\\\\(admin\\\\\\)/admin/*/page.tsx)",
+      "WebSearch",
+      "Bash(find /c/Users/shubi/OneDrive/Desktop/PublishRoad/src -type f \\\\\\( -name \"*.ts\" -o -name \"*.tsx\" \\\\\\) -exec wc -l {} +)",
+      "Bash(find /c/Users/shubi/OneDrive/Desktop/PublishRoad/src/app/api -type f -name \"route.ts\" -exec grep -l \"getAdminSession\\\\|validateAdminAuth\" {} \\\\;)",
+      "Bash(find /c/Users/shubi/OneDrive/Desktop/PublishRoad/src/app/api -type f -name \"route.ts\" -exec grep -L \"getAdminSession\\\\|validateAdminAuth\\\\|getSession\\\\|auth\" {} \\\\;)",
+      "Bash(xargs ls:*)",
+      "Bash(find /c/Users/shubi/OneDrive/Desktop/PublishRoad/src/app/api -type f -name \"route.ts\" -exec grep -l \"TODO\\\\|FIXME\\\\|XXX\\\\|HACK\" {} \\\\;)",
+      "Read(//c/Users/shubi/OneDrive/Desktop/PublishRoad/**)",
+      "Bash(find /c/Users/shubi/OneDrive/Desktop/PublishRoad/src -type f -name \"*.ts\" -exec grep -l \"^\\\\s*interface\\\\s\\\\|^\\\\s*type\\\\s\" {} \\\\;)",
+      "Bash(find /c/Users/shubi/OneDrive/Desktop/PublishRoad/src/components -type f -name \"*.tsx\" -exec wc -l {} +)",
+      "Bash(node -e ':*)",
+      "Bash(node scripts/fix-require-admin.mjs)"
     ]
   }
 }

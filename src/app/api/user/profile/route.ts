@@ -27,6 +27,12 @@ export async function GET(req: NextRequest) {
       plan: {
         select: { name: true, slug: true, billingType: true },
       },
+      affiliateProfile: {
+        select: {
+          isActive: true,
+          isDisabledByAdmin: true,
+        },
+      },
     },
   });
 
