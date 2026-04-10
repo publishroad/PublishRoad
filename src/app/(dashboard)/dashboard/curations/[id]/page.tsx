@@ -746,12 +746,12 @@ function ResultRow({
 
                   {result.matchReason && (
                     <Tooltip>
-                      <TooltipTrigger asChild>
-                        <p
-                          className={`mt-3 max-w-3xl cursor-help text-sm leading-6 line-clamp-2 transition-colors ${isComplete ? "text-slate-500 hover:text-slate-600" : "text-slate-600 hover:text-slate-700"}`}
+                      <TooltipTrigger className="mt-3 block max-w-3xl text-left">
+                        <span
+                          className={`block cursor-help text-sm leading-6 line-clamp-2 transition-colors ${isComplete ? "text-slate-500 hover:text-slate-600" : "text-slate-600 hover:text-slate-700"}`}
                         >
                           {result.matchReason}
-                        </p>
+                        </span>
                       </TooltipTrigger>
                       <TooltipContent className="max-w-md whitespace-normal break-words" side="top">
                         {result.matchReason}
