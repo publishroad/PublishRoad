@@ -4,6 +4,7 @@ import { invalidateUserProfile } from "@/lib/cache";
 import { attachHireUsCuration, finalizeHireUsPurchase, parseHireUsPackageSlug } from "@/lib/hire-us";
 import { createCheckoutSession, createPortalSession } from "@/lib/stripe";
 import { decryptField } from "@/lib/server-utils";
+import { createAffiliateCommissionForPayment } from "@/lib/referrals/commissions";
 import { getPayPalAccessToken, createPayPalOrder } from "@/lib/payments/paypal";
 import { createRazorpayOrder } from "@/lib/payments/razorpay";
 
@@ -174,8 +175,9 @@ export async function applyPlanPaymentAndCredits(args: {
   creditsAmount: number;
   creditStrategy?: "add" | "replace";
   paymentType?: "plan" | "hire_us";
-}): Promise<{ processedAlready: boolean }> {
+}): Promise<{ processedAlready: boolean; paymentId: string | null }> {
   let processedAlready = false;
+  let createdPaymentId: string | null = null;
   const creditStrategy = args.creditStrategy ?? "add";
   const paymentType = args.paymentType ?? "plan";
 
@@ -191,7 +193,7 @@ export async function applyPlanPaymentAndCredits(args: {
       }
     }
 
-    await tx.payment.create({
+    const payment = await tx.payment.create({
       data: {
         userId: args.userId,
         planId: args.planId,
@@ -202,6 +204,7 @@ export async function applyPlanPaymentAndCredits(args: {
         status: "completed",
       },
     });
+    createdPaymentId = payment.id;
 
     if (paymentType === "plan") {
       const user = await tx.user.findUnique({
@@ -222,7 +225,11 @@ export async function applyPlanPaymentAndCredits(args: {
     }
   });
 
-  return { processedAlready };
+  if (createdPaymentId) {
+    await createAffiliateCommissionForPayment(createdPaymentId);
+  }
+
+  return { processedAlready, paymentId: createdPaymentId };
 }
 
 export async function runPostPaymentSideEffects(args: {

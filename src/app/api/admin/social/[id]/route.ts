@@ -1,18 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
-import { verifyAdminSession } from "@/lib/admin-auth";
+import { requireAdmin } from "@/lib/admin-auth";
 import { influencerSchema } from "@/lib/validations/admin/influencer";
 
-async function requireAdmin() {
-  const cookieStore = await cookies();
-  const c = cookieStore.get("admin_session");
-  if (!c) return null;
-  const session = await verifyAdminSession(c.value);
-  if (!session?.totpVerified) return null;
-  return session;
-}
 
 export async function PUT(
   req: NextRequest,

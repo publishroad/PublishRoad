@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { encryptField, hashLookupValue } from "@/lib/server-utils";
 import { parseHireUsPackageSlug } from "@/lib/hire-us";
 import { runPostPaymentSideEffects } from "@/lib/payments/service";
+import { createAffiliateCommissionForPayment } from "@/lib/referrals/commissions";
 
 function buildStripePaymentLookup(session: Stripe.Checkout.Session) {
   const paymentIntentId = typeof session.payment_intent === "string" ? session.payment_intent : null;
@@ -41,6 +42,7 @@ export async function fulfillStripeCheckoutSession(session: Stripe.Checkout.Sess
   }
 
   let createdPayment = false;
+  let createdPaymentId: string | null = null;
 
   await db.$transaction(async (tx) => {
     const existingPayment = where
@@ -54,7 +56,7 @@ export async function fulfillStripeCheckoutSession(session: Stripe.Checkout.Sess
       : null;
 
     if (!existingPayment) {
-      await tx.payment.create({
+      const payment = await tx.payment.create({
         data: {
           userId,
           planId,
@@ -66,6 +68,7 @@ export async function fulfillStripeCheckoutSession(session: Stripe.Checkout.Sess
           status: "completed",
         },
       });
+      createdPaymentId = payment.id;
       createdPayment = true;
     }
 
@@ -93,6 +96,10 @@ export async function fulfillStripeCheckoutSession(session: Stripe.Checkout.Sess
       });
     }
   });
+
+  if (createdPaymentId) {
+    await createAffiliateCommissionForPayment(createdPaymentId);
+  }
 
   const hireUsPackageSlug = isHireUsFlow ? hireUsPackage ?? undefined : undefined;
 

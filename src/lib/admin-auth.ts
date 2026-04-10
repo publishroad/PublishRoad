@@ -1,4 +1,5 @@
 import { SignJWT, jwtVerify } from "jose";
+import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { NEXTAUTH_SECRET_ENCODED } from "@/lib/auth-secret";
 
@@ -49,4 +50,13 @@ export async function getAdminFromCookies(
   cookieValue: string
 ): Promise<AdminSession | null> {
   return verifyAdminSession(cookieValue);
+}
+
+export async function requireAdmin(): Promise<AdminSession | null> {
+  const cookieStore = await cookies();
+  const sessionCookie = cookieStore.get("admin_session");
+  if (!sessionCookie) return null;
+  const session = await verifyAdminSession(sessionCookie.value);
+  if (!session?.totpVerified) return null;
+  return session;
 }

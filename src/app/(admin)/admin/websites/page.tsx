@@ -7,9 +7,23 @@ import Link from "next/link";
 import { formatDate } from "@/lib/utils";
 import { AppHeader } from "@/components/dashboard/AppHeader";
 import { BulkImportModal } from "@/components/admin/BulkImportModal";
+import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
 
-interface SearchParams { q?: string; type?: string; category?: string; page?: string; }
+interface SearchParams { q?: string; type?: string; category?: string; page?: string; sort?: string; order?: string; }
 const PAGE_SIZE = 25;
+
+type SortKey = "website" | "type" | "da" | "pa" | "spam" | "traffic" | "status" | "added";
+
+const SORT_FIELD_BY_KEY: Record<SortKey, keyof Prisma.WebsiteOrderByWithRelationInput> = {
+  website: "name",
+  type: "type",
+  da: "da",
+  pa: "pa",
+  spam: "spamScore",
+  traffic: "traffic",
+  status: "isActive",
+  added: "createdAt",
+};
 
 const typeStyle: Record<string, string> = {
   distribution: "bg-[#EEF2FF] text-[#465FFF]",
@@ -21,6 +35,59 @@ export default async function AdminWebsitesPage({ searchParams }: { searchParams
   const params = await searchParams;
   const page = parseInt(params.page ?? "1");
   const skip = (page - 1) * PAGE_SIZE;
+  const hasValidSort = !!params.sort && Object.prototype.hasOwnProperty.call(SORT_FIELD_BY_KEY, params.sort);
+  const activeSort = hasValidSort ? (params.sort as SortKey) : undefined;
+  const activeOrder: Prisma.SortOrder = params.order === "desc" ? "desc" : "asc";
+
+  const buildQueryString = (overrides: Partial<Record<"q" | "type" | "category" | "page" | "sort" | "order", string | undefined>>) => {
+    const query = new URLSearchParams();
+
+    if (params.q) query.set("q", params.q);
+    if (params.type) query.set("type", params.type);
+    if (params.category) query.set("category", params.category);
+    if (params.page) query.set("page", params.page);
+    if (activeSort) query.set("sort", activeSort);
+    if (activeSort) query.set("order", activeOrder);
+
+    Object.entries(overrides).forEach(([key, value]) => {
+      if (!value) {
+        query.delete(key);
+        return;
+      }
+
+      query.set(key, value);
+    });
+
+    return query.toString();
+  };
+
+  const getNextSortOrder = (key: SortKey): Prisma.SortOrder => {
+    if (activeSort !== key) return "asc";
+    return activeOrder === "asc" ? "desc" : "asc";
+  };
+
+  const getSortHref = (key: SortKey) =>
+    `/admin/websites?${buildQueryString({ sort: key, order: getNextSortOrder(key), page: "1" })}`;
+
+  const renderSortIcon = (key: SortKey) => {
+    if (activeSort !== key) {
+      return <ChevronsUpDown className="h-3.5 w-3.5 text-gray-300" aria-hidden="true" />;
+    }
+
+    if (activeOrder === "asc") {
+      return <ArrowUp className="h-3.5 w-3.5 text-[#465FFF]" aria-hidden="true" />;
+    }
+
+    return <ArrowDown className="h-3.5 w-3.5 text-[#465FFF]" aria-hidden="true" />;
+  };
+
+  const orderBy: Prisma.WebsiteOrderByWithRelationInput[] = activeSort
+    ? [
+        { [SORT_FIELD_BY_KEY[activeSort]]: activeOrder } as Prisma.WebsiteOrderByWithRelationInput,
+        { id: "asc" },
+      ]
+    : [{ starRating: "desc" }, { isActive: "desc" }, { da: "desc" }];
+
   const baseFilters: Prisma.WebsiteWhereInput[] = [
     ...(params.q
       ? [{
@@ -50,7 +117,7 @@ export default async function AdminWebsitesPage({ searchParams }: { searchParams
       : {};
 
   const [websites, total, categories] = await Promise.all([
-    db.website.findMany({ where, orderBy: [{ starRating: "desc" }, { isActive: "desc" }, { da: "desc" }], skip, take: PAGE_SIZE }),
+    db.website.findMany({ where, orderBy, skip, take: PAGE_SIZE }),
     db.website.count({ where }),
     db.category.findMany({
       where: { isActive: true },
@@ -92,6 +159,14 @@ export default async function AdminWebsitesPage({ searchParams }: { searchParams
         rightSlot={
           <div className="flex gap-2">
             <BulkImportModal />
+            <a
+              href="/samples/websites-bulk-upload-template.csv"
+              download
+              className="h-9 px-4 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-1.5 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 16V4m0 12l-4-4m4 4l4-4M4 20h16" /></svg>
+              Sample Excel
+            </a>
             <Link href="/admin/websites/new" className="h-9 px-4 rounded-xl bg-[#465FFF] text-white text-sm font-medium hover:bg-[#3d55e8] flex items-center gap-1.5 transition-colors">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
               Add Website
@@ -117,6 +192,8 @@ export default async function AdminWebsitesPage({ searchParams }: { searchParams
                 </option>
               ))}
             </select>
+            {activeSort && <input type="hidden" name="sort" value={activeSort} />}
+            {activeSort && <input type="hidden" name="order" value={activeOrder} />}
             <button type="submit" className="h-9 px-4 rounded-xl bg-[#465FFF] text-white text-sm font-medium hover:bg-[#3d55e8] transition-colors">Filter</button>
           </form>
         </div>
@@ -126,14 +203,54 @@ export default async function AdminWebsitesPage({ searchParams }: { searchParams
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-100">
-                  <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Website</th>
-                  <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Type</th>
-                  <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">DA</th>
-                  <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">PA</th>
-                  <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Spam</th>
-                  <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Traffic</th>
-                  <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
-                  <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Added</th>
+                  <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    <Link href={getSortHref("website")} className="inline-flex items-center gap-1.5 hover:text-gray-700 transition-colors" aria-label="Sort by website">
+                      Website
+                      {renderSortIcon("website")}
+                    </Link>
+                  </th>
+                  <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    <Link href={getSortHref("type")} className="inline-flex items-center gap-1.5 hover:text-gray-700 transition-colors" aria-label="Sort by type">
+                      Type
+                      {renderSortIcon("type")}
+                    </Link>
+                  </th>
+                  <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    <Link href={getSortHref("da")} className="inline-flex items-center gap-1.5 hover:text-gray-700 transition-colors" aria-label="Sort by DA">
+                      DA
+                      {renderSortIcon("da")}
+                    </Link>
+                  </th>
+                  <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    <Link href={getSortHref("pa")} className="inline-flex items-center gap-1.5 hover:text-gray-700 transition-colors" aria-label="Sort by PA">
+                      PA
+                      {renderSortIcon("pa")}
+                    </Link>
+                  </th>
+                  <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    <Link href={getSortHref("spam")} className="inline-flex items-center gap-1.5 hover:text-gray-700 transition-colors" aria-label="Sort by spam">
+                      Spam
+                      {renderSortIcon("spam")}
+                    </Link>
+                  </th>
+                  <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    <Link href={getSortHref("traffic")} className="inline-flex items-center gap-1.5 hover:text-gray-700 transition-colors" aria-label="Sort by traffic">
+                      Traffic
+                      {renderSortIcon("traffic")}
+                    </Link>
+                  </th>
+                  <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    <Link href={getSortHref("status")} className="inline-flex items-center gap-1.5 hover:text-gray-700 transition-colors" aria-label="Sort by status">
+                      Status
+                      {renderSortIcon("status")}
+                    </Link>
+                  </th>
+                  <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    <Link href={getSortHref("added")} className="inline-flex items-center gap-1.5 hover:text-gray-700 transition-colors" aria-label="Sort by added date">
+                      Added
+                      {renderSortIcon("added")}
+                    </Link>
+                  </th>
                   <th className="px-5 py-3.5" />
                 </tr>
               </thead>
@@ -172,8 +289,8 @@ export default async function AdminWebsitesPage({ searchParams }: { searchParams
           <div className="flex items-center justify-between">
             <p className="text-sm text-gray-400">Page {page} of {totalPages}</p>
             <div className="flex gap-2">
-              {page > 1 && <Link href={`/admin/websites?${new URLSearchParams({ ...(params.q ? { q: params.q } : {}), ...(params.type ? { type: params.type } : {}), ...(params.category ? { category: params.category } : {}), page: String(page - 1) })}`} className="h-9 px-4 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium hover:bg-gray-50 flex items-center transition-colors">Previous</Link>}
-              {page < totalPages && <Link href={`/admin/websites?${new URLSearchParams({ ...(params.q ? { q: params.q } : {}), ...(params.type ? { type: params.type } : {}), ...(params.category ? { category: params.category } : {}), page: String(page + 1) })}`} className="h-9 px-4 rounded-xl bg-[#465FFF] text-white text-sm font-medium flex items-center transition-colors">Next</Link>}
+              {page > 1 && <Link href={`/admin/websites?${buildQueryString({ page: String(page - 1) })}`} className="h-9 px-4 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium hover:bg-gray-50 flex items-center transition-colors">Previous</Link>}
+              {page < totalPages && <Link href={`/admin/websites?${buildQueryString({ page: String(page + 1) })}`} className="h-9 px-4 rounded-xl bg-[#465FFF] text-white text-sm font-medium flex items-center transition-colors">Next</Link>}
             </div>
           </div>
         )}

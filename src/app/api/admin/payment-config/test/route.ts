@@ -1,17 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { verifyAdminSession } from "@/lib/admin-auth";
+import { requireAdmin } from "@/lib/admin-auth";
 import { db } from "@/lib/db";
 import { decryptField } from "@/lib/server-utils";
 
-async function requireAdmin() {
-  const cookieStore = await cookies();
-  const c = cookieStore.get("admin_session");
-  if (!c) return null;
-  const session = await verifyAdminSession(c.value);
-  if (!session?.totpVerified) return null;
-  return session;
-}
 
 export async function POST(req: NextRequest) {
   const session = await requireAdmin();

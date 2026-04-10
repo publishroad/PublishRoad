@@ -176,7 +176,8 @@ export async function POST(request: NextRequest) {
             };
           }
 
-          const { name, email, password } = parsed.data;
+          const { name, email, password, referralCode } = parsed.data;
+          const normalizedReferralCode = referralCode?.trim().toUpperCase() || null;
 
           if (isDisposableEmail(email)) {
             return {
@@ -199,8 +200,8 @@ export async function POST(request: NextRequest) {
           try {
             user = await withDbRetry(() =>
               db.$transaction(
-                async (tx) =>
-                  tx.user.create({
+                async (tx) => {
+                  const createdUser = await tx.user.create({
                     data: {
                       name,
                       email,
@@ -210,7 +211,35 @@ export async function POST(request: NextRequest) {
                       emailVerifyToken: verifyToken,
                     },
                     select: { id: true },
-                  }),
+                  });
+
+                  if (normalizedReferralCode) {
+                    const referrer = await tx.$queryRaw<Array<{ userId: string }>>`
+                      SELECT user_id AS "userId"
+                      FROM affiliate_profiles
+                      WHERE referral_code = ${normalizedReferralCode}
+                        AND is_active = true
+                        AND is_disabled_by_admin = false
+                      LIMIT 1
+                    `;
+
+                    const referrerUserId = referrer[0]?.userId;
+                    if (referrerUserId && referrerUserId !== createdUser.id) {
+                      await tx.$executeRaw`
+                        INSERT INTO affiliate_referrals (
+                          id,
+                          referrer_user_id,
+                          referred_user_id,
+                          referral_code
+                        )
+                        VALUES (${randomBytes(16).toString("hex")}, ${referrerUserId}, ${createdUser.id}, ${normalizedReferralCode})
+                        ON CONFLICT (referred_user_id) DO NOTHING
+                      `;
+                    }
+                  }
+
+                  return createdUser;
+                },
                 {
                   isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
                 }
@@ -257,6 +286,7 @@ export async function POST(request: NextRequest) {
           }
 
           let emailQueued = true;
+
           try {
             await Promise.all([
               enqueueEmailJob("verification", {

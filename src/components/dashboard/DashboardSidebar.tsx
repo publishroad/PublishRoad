@@ -54,6 +54,15 @@ const baseGroups = [
           </svg>
         ),
       },
+      {
+        href: "/dashboard/referrals",
+        label: "Refer & Earn",
+        icon: (
+          <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 20h5V4H2v16h5m10 0v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4m10 0H7m7-12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        ),
+      },
     ],
   },
   {
@@ -96,6 +105,10 @@ type DashboardProfile = {
   creditsRemaining?: number;
   plan?: {
     slug?: string | null;
+  } | null;
+  affiliateProfile?: {
+    isActive?: boolean;
+    isDisabledByAdmin?: boolean;
   } | null;
 };
 
@@ -171,10 +184,11 @@ export function DashboardSidebar({ session }: DashboardSidebarProps) {
   const credits = profile?.creditsRemaining ?? fallbackCredits;
   const planSlug = profile?.plan?.slug ?? fallbackPlanSlug;
   const hasCredits = credits === -1 || credits > 0;
+  const isReferralDisabled = profile?.affiliateProfile?.isDisabledByAdmin === true;
 
   const groups = baseGroups.map((group) => ({
     ...group,
-    items: group.items.map((item) => {
+    items: group.items.filter((item) => !(item.href === "/dashboard/referrals" && isReferralDisabled)).map((item) => {
       if (item.href !== "/dashboard/new-curation") {
         return item;
       }

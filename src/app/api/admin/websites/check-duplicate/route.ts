@@ -1,17 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { z } from "zod";
-import { verifyAdminSession } from "@/lib/admin-auth";
+import { requireAdmin } from "@/lib/admin-auth";
 import { findWebsiteDomainConflicts } from "@/lib/admin/website-domain-duplicates";
 
-async function requireAdmin() {
-  const cookieStore = await cookies();
-  const c = cookieStore.get("admin_session");
-  if (!c) return null;
-  const session = await verifyAdminSession(c.value);
-  if (!session?.totpVerified) return null;
-  return session;
-}
 
 const payloadSchema = z.object({
   url: z.string().min(1),

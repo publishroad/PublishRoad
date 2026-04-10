@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 
 interface CurationResult {
@@ -744,9 +745,18 @@ function ResultRow({
                   </a>
 
                   {result.matchReason && (
-                    <p className={`mt-3 max-w-3xl text-sm leading-6 ${isComplete ? "text-slate-500" : "text-slate-600"}`}>
-                      {result.matchReason}
-                    </p>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <p
+                          className={`mt-3 max-w-3xl cursor-help text-sm leading-6 line-clamp-2 transition-colors ${isComplete ? "text-slate-500 hover:text-slate-600" : "text-slate-600 hover:text-slate-700"}`}
+                        >
+                          {result.matchReason}
+                        </p>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-md whitespace-normal break-words" side="top">
+                        {result.matchReason}
+                      </TooltipContent>
+                    </Tooltip>
                   )}
                 </div>
 
