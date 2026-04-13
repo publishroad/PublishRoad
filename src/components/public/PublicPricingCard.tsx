@@ -49,7 +49,7 @@ export function PublicPricingCard(props: PublicPricingCardProps) {
   };
 
   return (
-    <div style={cardStyle}>
+    <div className="js-scroll-reveal pricing-card-scroll" style={cardStyle}>
       {plan.popular && (
         <div style={{ position: "absolute", top: "-14px", left: "50%", transform: "translateX(-50%)" }}>
           <span style={{ background: "#5B58F6", color: "#fff", fontSize: "0.72rem", fontWeight: 700, padding: "5px 14px", borderRadius: "999px", display: "inline-block" }}>
@@ -104,7 +104,7 @@ export function PublicPricingCard(props: PublicPricingCardProps) {
       {planId ? (
         <InteractivePricingCard {...props} />
       ) : (
-        <Link href={isFree ? "/signup" : `/signup?plan=${plan.slug}`} style={ctaStyle}>
+        <Link className="pricing-scroll-btn" href={isFree ? "/signup" : `/signup?plan=${plan.slug}`} style={ctaStyle}>
           {plan.cta}
         </Link>
       )}

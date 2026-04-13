@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import type { CSSProperties } from "react";
 import { Analytics } from "@vercel/analytics/next";
-import { Inter, Josefin_Sans } from "next/font/google";
+import { Inter, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { GlobalUiEnhancements } from "@/components/GlobalUiEnhancements";
 import { SITE_NAME, buildTwitterMetadata, getSiteUrl, getSocialImages } from "@/lib/seo";
@@ -13,10 +13,10 @@ const inter = Inter({
   display: "swap",
 });
 
-const josefinSans = Josefin_Sans({
+const playfair = Playfair_Display({
   variable: "--font-heading",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: ["400", "600", "700"],
   style: ["normal", "italic"],
   display: "swap",
 });
@@ -120,11 +120,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   const rootStyle = {
-    "--font-heading": josefinSans.style.fontFamily,
+    "--font-heading": playfair.style.fontFamily,
   } as CSSProperties;
 
   return (
-    <html lang="en" className={`${inter.variable} ${josefinSans.variable} h-full antialiased`} style={rootStyle}>
+    <html lang="en" className={`${inter.variable} ${playfair.variable} h-full antialiased`} style={rootStyle}>
       <head>
         <script async src="https://www.googletagmanager.com/gtag/js?id=G-EECRXZ2328" />
         <script

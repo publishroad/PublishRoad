@@ -153,7 +153,7 @@ export function PricingCard({
       )}
       <div
         className={cn(
-          "relative bg-white rounded-[2rem] p-6 flex flex-col transition-all duration-300 hover:shadow-xl",
+          "js-scroll-reveal pricing-card-scroll relative bg-white rounded-[2rem] p-6 flex flex-col transition-all duration-300 hover:shadow-xl",
           isPopular
             ? "ring-2"
             : ""
@@ -242,6 +242,7 @@ export function PricingCard({
 
       {isCurrent ? (
         <span
+          className="pricing-scroll-btn"
           style={{
             display: "block", width: "100%", borderRadius: "999px",
             padding: "10px 20px", textAlign: "center", textDecoration: "none",
@@ -253,6 +254,7 @@ export function PricingCard({
         </span>
       ) : (
         <button
+          className="pricing-scroll-btn"
           type="button"
           onClick={handleCheckout}
           disabled={isSubmitting}

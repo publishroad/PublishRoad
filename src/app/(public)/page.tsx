@@ -84,8 +84,16 @@ const getPlans = unstable_cache(
   { revalidate }
 );
 
+function getPricingGridClasses(planCount: number): string {
+  if (planCount <= 1) return "grid-cols-1 max-w-sm";
+  if (planCount === 2) return "grid-cols-1 sm:grid-cols-2 max-w-3xl";
+  if (planCount === 3) return "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 max-w-5xl";
+  return "grid-cols-1 md:grid-cols-2 lg:grid-cols-4 max-w-6xl";
+}
+
 export default async function LandingPage() {
   const dbPlans = await getPlans();
+  const pricingGridClasses = getPricingGridClasses(dbPlans.length);
   return (
     <div style={{ fontFamily: "var(--font-sans)" }}>
       <script
@@ -409,7 +417,7 @@ export default async function LandingPage() {
 
           {/* Pricing cards */}
           <div
-            className="mx-auto grid w-full max-w-6xl justify-center gap-5 [grid-template-columns:repeat(auto-fit,minmax(280px,320px))]"
+            className={`mx-auto grid w-full gap-5 ${pricingGridClasses}`}
           >
             {dbPlans.map(dbPlanToDisplay).map((plan) => (
               <PublicPricingCard key={plan.slug} plan={plan} />

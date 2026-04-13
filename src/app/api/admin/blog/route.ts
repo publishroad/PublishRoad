@@ -16,6 +16,10 @@ export async function POST(req: NextRequest) {
   }
 
   const d = parsed.data;
+  const resolvedPublishDate = d.status === "published"
+    ? d.publishDate ?? new Date()
+    : d.publishDate ?? null;
+
   const post = await db.blogPost.create({
     data: {
       title: d.title,
@@ -25,7 +29,7 @@ export async function POST(req: NextRequest) {
       featuredImage: d.featuredImage ?? null,
       categoryId: d.categoryId ?? null,
       status: d.status,
-      publishDate: d.publishDate ?? null,
+      publishDate: resolvedPublishDate,
       metaTitle: d.metaTitle ?? null,
       metaDescription: d.metaDescription ?? null,
       authorId: session.adminId,

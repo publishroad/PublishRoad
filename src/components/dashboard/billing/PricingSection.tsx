@@ -19,12 +19,21 @@ interface PricingSectionProps {
   visiblePlanSlugs?: Array<"free" | "starter" | "pro" | "lifetime">;
 }
 
+function getPricingGridClasses(planCount: number): string {
+  if (planCount <= 1) return "grid-cols-1 max-w-sm";
+  if (planCount === 2) return "grid-cols-1 sm:grid-cols-2 max-w-3xl";
+  if (planCount === 3) return "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 max-w-5xl";
+  return "grid-cols-1 md:grid-cols-2 lg:grid-cols-4 max-w-6xl";
+}
+
 export function PricingSection({
   plans,
   currentPlanSlug,
   comparisonRows,
   visiblePlanSlugs,
 }: PricingSectionProps) {
+  const pricingGridClasses = getPricingGridClasses(plans.length);
+
   return (
     <section id="upgrade-plans" className="scroll-mt-24">
       <div className="text-center max-w-3xl mx-auto mb-8">
@@ -39,13 +48,7 @@ export function PricingSection({
         </p>
       </div>
 
-      <div
-        className="grid gap-6 max-w-5xl mx-auto mb-12"
-        style={{
-          gridTemplateColumns: "repeat(auto-fit, minmax(250px, 320px))",
-          justifyContent: "center",
-        }}
-      >
+      <div className={`grid gap-6 mx-auto mb-12 w-full ${pricingGridClasses}`}>
         {plans.map((plan) => (
           <PricingCard
             key={plan.id}

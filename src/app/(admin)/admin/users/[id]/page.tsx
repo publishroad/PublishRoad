@@ -1,6 +1,7 @@
 // Cache user details for 60 seconds — admin changes are infrequent
 export const revalidate = 0;
 
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { notFound } from "next/navigation";
 import { UserAdminPanel } from "@/components/admin/UserAdminPanel";
@@ -12,6 +13,79 @@ type AffiliateProfileRow = {
   paypalEmail: string | null;
 };
 
+type CreatorProfileRow = {
+  isEnabled: boolean;
+  maxInvites: number;
+  usedInvites: number;
+  inviteToken: string;
+  expiresAt: Date | null;
+  disabledReason: string | null;
+};
+
+type CreatorReferralRow = {
+  id: string;
+  acceptedAt: Date;
+  name: string | null;
+  email: string;
+};
+
+function isMissingCreatorTableError(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+    return false;
+  }
+
+  if (error.code !== "P2010") {
+    return false;
+  }
+
+  const message = String(error.message ?? "").toLowerCase();
+  return message.includes("content_creator_profiles") || message.includes("content_creator_referrals") || message.includes("42p01");
+}
+
+async function getCreatorProfileRows(userId: string): Promise<CreatorProfileRow[]> {
+  try {
+    return await db.$queryRaw<CreatorProfileRow[]>`
+      SELECT
+        is_enabled AS "isEnabled",
+        max_invites AS "maxInvites",
+        used_invites AS "usedInvites",
+        invite_token AS "inviteToken",
+        expires_at AS "expiresAt",
+        disabled_reason AS "disabledReason"
+      FROM content_creator_profiles
+      WHERE user_id = ${userId}
+      LIMIT 1
+    `;
+  } catch (error) {
+    if (isMissingCreatorTableError(error)) {
+      return [];
+    }
+    throw error;
+  }
+}
+
+async function getCreatorReferralRows(userId: string): Promise<CreatorReferralRow[]> {
+  try {
+    return await db.$queryRaw<CreatorReferralRow[]>`
+      SELECT
+        ccr.id,
+        ccr.accepted_at AS "acceptedAt",
+        u.name,
+        u.email
+      FROM content_creator_referrals ccr
+      JOIN users u ON u.id = ccr.referred_user_id
+      WHERE ccr.creator_user_id = ${userId}
+      ORDER BY ccr.accepted_at DESC
+      LIMIT 10
+    `;
+  } catch (error) {
+    if (isMissingCreatorTableError(error)) {
+      return [];
+    }
+    throw error;
+  }
+}
+
 export default async function AdminUserDetailPage({
   params,
 }: {
@@ -19,7 +93,7 @@ export default async function AdminUserDetailPage({
 }) {
   const { id } = await params;
 
-  const [user, plans, curations, affiliateProfileRows] = await Promise.all([
+  const [user, plans, curations, affiliateProfileRows, creatorProfileRows, creatorReferralRows] = await Promise.all([
     db.user.findUnique({
       where: { id },
       select: {
@@ -44,6 +118,8 @@ export default async function AdminUserDetailPage({
       WHERE user_id = ${id}
       LIMIT 1
     `,
+    getCreatorProfileRows(id),
+    getCreatorReferralRows(id),
   ]);
 
   if (!user) notFound();
@@ -52,6 +128,15 @@ export default async function AdminUserDetailPage({
     starterCommissionPct: 25,
     hireUsCommissionPct: 15,
     paypalEmail: null,
+  };
+
+  const creatorProfile = creatorProfileRows[0] ?? {
+    isEnabled: false,
+    maxInvites: 0,
+    usedInvites: 0,
+    inviteToken: "",
+    expiresAt: null,
+    disabledReason: null,
   };
 
   return (
@@ -90,7 +175,13 @@ export default async function AdminUserDetailPage({
           </dl>
         </div>
 
-        <UserAdminPanel user={user} plans={plans} affiliateProfile={affiliateProfile} />
+        <UserAdminPanel
+          user={user}
+          plans={plans}
+          affiliateProfile={affiliateProfile}
+          creatorProfile={creatorProfile}
+          creatorReferrals={creatorReferralRows}
+        />
       </div>
     </div>
   );

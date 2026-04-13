@@ -8,6 +8,13 @@ import { applyRefreshToToken, authConfig } from "./auth.config";
 import { evaluateLoginCredentials } from "./login-evaluator";
 import { verifyPassword } from "./server-utils";
 import { claimAffiliateReferralForUser, REFERRAL_CODE_COOKIE } from "@/lib/referrals/claim";
+import {
+  claimCreatorInviteForUser,
+  CREATOR_INVITE_COOKIE,
+  getCreatorInviteStatus,
+  mapInviteStatusToQuery,
+  normalizeInviteToken,
+} from "@/lib/content-creators/invite";
 
 class LoginCredentialsError extends CredentialsSignin {
   code: string;
@@ -76,12 +83,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (account?.provider === "google") {
         const cookieStore = await cookies();
         const referralCode = cookieStore.get(REFERRAL_CODE_COOKIE)?.value?.trim().toUpperCase();
+        const inviteToken = normalizeInviteToken(cookieStore.get(CREATOR_INVITE_COOKIE)?.value);
 
         const existingUser = await db.user.findFirst({
           where: { email: user.email!, deletedAt: null },
         });
 
         if (existingUser) {
+          if (inviteToken) {
+            return `/signup?inviteError=invite_new_signup_only`;
+          }
+
           if (existingUser.authProvider === "email") {
             return `/login?error=account_exists&email=${encodeURIComponent(user.email!)}`;
           }
@@ -97,27 +109,55 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return true;
         }
 
-        const newUser = await db.$transaction(async (tx) => {
-          const createdUser = await tx.user.create({
-            data: {
-              email: user.email!,
-              name: user.name,
-              authProvider: "google",
-              emailVerifiedAt: new Date(),
-              creditsRemaining: 1,
-            },
-          });
-
-          if (referralCode) {
-            await claimAffiliateReferralForUser({
-              referredUserId: createdUser.id,
-              referralCode,
-              tx,
-            });
+        if (inviteToken) {
+          const inviteStatus = await getCreatorInviteStatus(inviteToken);
+          if (inviteStatus.status !== "valid") {
+            return `/signup?inviteError=${mapInviteStatusToQuery(inviteStatus.status)}`;
           }
+        }
 
-          return createdUser;
-        });
+        let newUser: { id: string };
+
+        try {
+          newUser = await db.$transaction(async (tx) => {
+            const createdUser = await tx.user.create({
+              data: {
+                email: user.email!,
+                name: user.name,
+                authProvider: "google",
+                emailVerifiedAt: new Date(),
+                creditsRemaining: 1,
+              },
+            });
+
+            if (referralCode) {
+              await claimAffiliateReferralForUser({
+                referredUserId: createdUser.id,
+                referralCode,
+                tx,
+              });
+            }
+
+            if (inviteToken) {
+              const inviteClaimResult = await claimCreatorInviteForUser({
+                referredUserId: createdUser.id,
+                inviteToken,
+                tx,
+              });
+
+              if (!inviteClaimResult.claimed) {
+                throw new Error(`INVITE_${mapInviteStatusToQuery(inviteClaimResult.status)}`);
+              }
+            }
+
+            return createdUser;
+          });
+        } catch (error) {
+          if (error instanceof Error && error.message.startsWith("INVITE_")) {
+            return `/signup?inviteError=${error.message.replace("INVITE_", "")}`;
+          }
+          throw error;
+        }
 
         user.id = newUser.id;
         return true;

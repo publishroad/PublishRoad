@@ -63,6 +63,15 @@ const baseGroups = [
           </svg>
         ),
       },
+      {
+        href: "/dashboard/creator",
+        label: "Creator Access",
+        icon: (
+          <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422A12.083 12.083 0 0112 20.055a12.083 12.083 0 01-6.16-9.477L12 14z" />
+          </svg>
+        ),
+      },
     ],
   },
   {

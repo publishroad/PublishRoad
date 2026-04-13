@@ -42,19 +42,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }
 
+  const cookieStore = await cookies();
+
   // Check if TOTP is required
   if (admin.totpEnabled) {
-    // ✅ Return flag to redirect to 2FA verification page
-    return NextResponse.json({ 
-      requireTotp: true,
-      adminId: admin.id,
+    // Set a partial session (totpVerified: false) so verify-2fa can read the adminId.
+    // requireAdmin() blocks all protected routes until totpVerified is upgraded to true.
+    const partialToken = await createAdminSession(admin.id, false);
+    cookieStore.set("admin_session", partialToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 10, // 10 minutes — only long enough to complete 2FA
     });
+    return NextResponse.json({ requireTotp: true });
   }
 
-  // 2FA disabled — always grant full access
+  // 2FA disabled — grant full access immediately
   const sessionToken = await createAdminSession(admin.id, true);
 
-  const cookieStore = await cookies();
   cookieStore.set("admin_session", sessionToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",

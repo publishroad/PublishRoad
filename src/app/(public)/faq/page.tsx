@@ -84,7 +84,7 @@ export default function FaqPage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
       />
       {/* Header */}
-      <div className="bg-mesh relative overflow-hidden py-20">
+      <div className="bg-mesh relative overflow-hidden pt-16 pb-6">
         <div className="absolute inset-0 bg-dot-grid opacity-30 pointer-events-none" />
         <div className="relative text-center px-4">
           <p className="text-sm font-medium uppercase tracking-widest mb-3" style={{ color: "var(--indigo)" }}>
@@ -102,7 +102,7 @@ export default function FaqPage() {
         </div>
       </div>
 
-      <div className="max-w-[720px] mx-auto px-4 sm:px-6 py-16">
+      <div className="max-w-[720px] mx-auto px-4 sm:px-6 pt-8 pb-12">
         <div className="space-y-4">
           {faqs.map((faq, i) => (
             <div

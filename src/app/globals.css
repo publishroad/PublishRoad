@@ -341,6 +341,59 @@
   }
 }
 
+/* Pricing scroll reveal effects */
+.js-scroll-reveal {
+  opacity: 0;
+  transform: translate3d(0, 24px, 0) scale(0.985);
+  transition: opacity 520ms ease, transform 520ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.js-scroll-reveal.is-visible {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+}
+
+.pricing-card-scroll {
+  will-change: transform, opacity;
+}
+
+.pricing-card-scroll .pricing-scroll-btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.pricing-card-scroll .pricing-scroll-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-140%);
+  background: linear-gradient(110deg, transparent 0%, rgba(255, 255, 255, 0.35) 45%, transparent 100%);
+  pointer-events: none;
+}
+
+.pricing-card-scroll.is-visible .pricing-scroll-btn::after {
+  animation: pricing-button-shine 1050ms ease 160ms 1;
+}
+
+@keyframes pricing-button-shine {
+  to {
+    transform: translateX(140%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .js-scroll-reveal,
+  .js-scroll-reveal.is-visible {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .pricing-card-scroll.is-visible .pricing-scroll-btn::after {
+    animation: none;
+  }
+}
+
 .ProseMirror p,
 .ProseMirror h1,
 .ProseMirror h2,

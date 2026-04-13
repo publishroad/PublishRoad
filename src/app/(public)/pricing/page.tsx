@@ -99,6 +99,13 @@ const DeferredPricingBelowFold = dynamic(
   }
 );
 
+function getPricingGridClasses(planCount: number): string {
+  if (planCount <= 1) return "grid-cols-1 max-w-sm";
+  if (planCount === 2) return "grid-cols-1 sm:grid-cols-2 max-w-3xl";
+  if (planCount === 3) return "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 max-w-5xl";
+  return "grid-cols-1 md:grid-cols-2 lg:grid-cols-4 max-w-6xl";
+}
+
 export default async function PricingPage() {
   const [dbPlans, comparisonRows] = await Promise.all([
     getPlans(),
@@ -106,6 +113,7 @@ export default async function PricingPage() {
   ]);
 
   const plans = dbPlans;
+  const pricingGridClasses = getPricingGridClasses(plans.length);
   const visibleComparisonPlanSlugs = plans
     .map((plan) => plan.slug)
     .filter((slug): slug is (typeof PLAN_ORDER)[number] =>
@@ -119,7 +127,7 @@ export default async function PricingPage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(pricingFaqSchema) }}
       />
       {/* ─── Header ─── */}
-      <div className="bg-mesh relative overflow-hidden py-24">
+      <div className="bg-mesh relative overflow-hidden pt-20 pb-10">
         <div className="absolute inset-0 bg-dot-grid opacity-30 pointer-events-none" />
         <div className="relative max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <p className="text-sm font-medium uppercase tracking-widest mb-3" style={{ color: "var(--indigo)" }}>
@@ -137,9 +145,9 @@ export default async function PricingPage() {
         </div>
       </div>
 
-      <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-20">
+      <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-20">
         {/* ─── Pricing Cards ─── */}
-        <div className="mx-auto mb-20 grid w-full max-w-6xl justify-center gap-6 [grid-template-columns:repeat(auto-fit,minmax(280px,320px))]">
+        <div className={`mx-auto mb-20 grid w-full gap-6 ${pricingGridClasses}`}>
           {plans.map((p) => {
             const displayPlan = "priceCents" in p ? dbPlanToDisplay(p) : p;
             const planId = "id" in p ? (p as { id: string }).id : undefined;
