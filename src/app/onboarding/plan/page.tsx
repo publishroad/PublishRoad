@@ -7,6 +7,13 @@ import { PRICING_PLANS, dbPlanToDisplay, type PlanDisplay } from "@/lib/pricing-
 import type { ActivePaymentProvider } from "@/lib/payments/service";
 import { PaymentMethodPicker } from "@/components/public/PaymentMethodPicker";
 
+function getPricingGridClasses(planCount: number): string {
+  if (planCount <= 1) return "grid-cols-1 max-w-sm";
+  if (planCount === 2) return "grid-cols-1 sm:grid-cols-2 max-w-3xl";
+  if (planCount === 3) return "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 max-w-5xl";
+  return "grid-cols-1 md:grid-cols-2 lg:grid-cols-4 max-w-6xl";
+}
+
 export default function OnboardingPlanPage() {
   const router = useRouter();
   const [plans, setPlans] = useState<PlanDisplay[]>(PRICING_PLANS);
@@ -14,6 +21,7 @@ export default function OnboardingPlanPage() {
   const [loading, setLoading] = useState<string | null>(null);
   const [providerPicker, setProviderPicker] = useState<ActivePaymentProvider[] | null>(null);
   const [pendingPlanId, setPendingPlanId] = useState<string | null>(null);
+  const pricingGridClasses = getPricingGridClasses(plans.length);
 
   useEffect(() => {
     fetch("/api/lookup/plans", { cache: "no-store" }).then(async (r) => {
@@ -116,7 +124,7 @@ export default function OnboardingPlanPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
+      <div className={`grid gap-6 mx-auto w-full ${pricingGridClasses}`}>
         {plans.map((plan) => {
           const isFree = plan.slug === "free";
           const isLifetime = plan.slug === "lifetime";
@@ -154,7 +162,7 @@ export default function OnboardingPlanPage() {
           };
 
           return (
-            <div key={plan.slug} style={cardStyle}>
+            <div key={plan.slug} className="js-scroll-reveal pricing-card-scroll" style={cardStyle}>
               {/* Badge */}
               {plan.popular && (
                 <div style={{ position: "absolute", top: "-14px", left: "50%", transform: "translateX(-50%)" }}>
@@ -214,6 +222,7 @@ export default function OnboardingPlanPage() {
 
               {/* CTA */}
               <button
+                className="pricing-scroll-btn"
                 type="button"
                 onClick={() => selectPlan(plan.slug)}
                 disabled={!!loading}

@@ -1,15 +1,26 @@
 "use client";
 
+import { usePathname } from "next/navigation";
+import { NotificationHeaderAction } from "@/components/dashboard/NotificationHeaderAction";
+
 interface AppHeaderProps {
   title: string;
   rightSlot?: React.ReactNode;
 }
 
 export function AppHeader({ title, rightSlot }: AppHeaderProps) {
+  const pathname = usePathname();
+  const notificationsHref = pathname?.startsWith("/admin")
+    ? "/admin/notifications"
+    : "/dashboard/notifications";
+
   return (
     <header className="sticky top-0 z-40 h-[70px] bg-white border-b border-gray-200 flex items-center justify-between px-6">
       <h1 className="text-base font-semibold text-gray-900">{title}</h1>
-      {rightSlot && <div className="flex items-center gap-3">{rightSlot}</div>}
+      <div className="flex items-center gap-3">
+        <NotificationHeaderAction href={notificationsHref} />
+        {rightSlot}
+      </div>
     </header>
   );
 }

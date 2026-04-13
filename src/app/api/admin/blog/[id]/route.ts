@@ -21,11 +21,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     select: { slug: true },
   });
 
+  const resolvedPublishDate = parsed.data.status === "published"
+    ? parsed.data.publishDate ?? new Date()
+    : parsed.data.publishDate ?? null;
+
   const post = await db.blogPost.update({
     where: { id },
     data: {
       ...parsed.data,
-      publishDate: parsed.data.publishDate ? new Date(parsed.data.publishDate) : null,
+      publishDate: resolvedPublishDate,
     },
   });
 

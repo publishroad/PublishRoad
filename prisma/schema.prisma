@@ -110,6 +110,7 @@ model User {
   updatedAt          DateTime       @updatedAt @map("updated_at")
   stripeCustomerHash String?        @map("stripe_customer_hash")
   creditsResetAt     DateTime?      @map("credits_reset_at")
+  referredByCreatorId String?       @map("referred_by_creator_id")
   curations          Curation[]
   notifications      Notification[]
   payments           Payment[]
@@ -121,6 +122,8 @@ model User {
   affiliateCommissionsEarned AffiliateCommission[] @relation("AffiliateCommissionEarner")
   affiliateCommissionsFromReferred AffiliateCommission[] @relation("AffiliateCommissionReferred")
   affiliatePayoutBatches AffiliatePayoutBatch[]
+  contentCreatorProfile ContentCreatorProfile? @relation("ContentCreatorUser")
+  contentCreatorReferral ContentCreatorReferral? @relation("ReferredUserFromCreator")
   serviceLeads       ServiceLead[]
   plan               PlanConfig?    @relation(fields: [planId], references: [id])
 
@@ -490,6 +493,40 @@ model ContactSubmission {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("contact_submissions")
+}
+
+model ContentCreatorProfile {
+  userId         String   @id @map("user_id")
+  isEnabled      Boolean  @default(false) @map("is_enabled")
+  maxInvites     Int      @default(0) @map("max_invites")
+  usedInvites    Int      @default(0) @map("used_invites")
+  inviteToken    String   @unique @map("invite_token")
+  expiresAt      DateTime? @map("expires_at")
+  disabledAt     DateTime? @map("disabled_at")
+  disabledReason String?  @map("disabled_reason")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  user           User     @relation("ContentCreatorUser", fields: [userId], references: [id], onDelete: Cascade)
+  referrals      ContentCreatorReferral[] @relation("CreatorInviteReferrals")
+
+  @@index([isEnabled])
+  @@index([isEnabled, usedInvites, maxInvites])
+  @@map("content_creator_profiles")
+}
+
+model ContentCreatorReferral {
+  id             String   @id @default(cuid())
+  creatorUserId  String   @map("creator_user_id")
+  referredUserId String   @unique @map("referred_user_id")
+  inviteToken    String   @map("invite_token")
+  acceptedAt     DateTime @default(now()) @map("accepted_at")
+  creator        ContentCreatorProfile @relation("CreatorInviteReferrals", fields: [creatorUserId], references: [userId], onDelete: Cascade)
+  referredUser   User     @relation("ReferredUserFromCreator", fields: [referredUserId], references: [id], onDelete: Cascade)
+
+  @@unique([creatorUserId, referredUserId])
+  @@index([creatorUserId, acceptedAt])
+  @@index([inviteToken])
+  @@map("content_creator_referrals")
 }
 
 model AiConfig {

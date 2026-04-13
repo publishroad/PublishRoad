@@ -94,7 +94,7 @@ export function ContactForm() {
   }
 
   return (
-    <div className="max-w-[560px] mx-auto px-4 sm:px-6 py-16">
+    <div className="max-w-[560px] mx-auto px-4 sm:px-6 pt-8 pb-12">
       <div
         className="bg-white rounded-[2rem] p-8"
         style={{ boxShadow: "0 8px 40px rgba(91,88,246,0.08)", border: "1px solid rgba(226,232,240,0.8)" }}

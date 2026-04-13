@@ -10,6 +10,12 @@ export const signupSchema = z.object({
     .min(3)
     .max(64)
     .optional(),
+  inviteToken: z
+    .string()
+    .trim()
+    .min(12)
+    .max(128)
+    .optional(),
   password: z
     .string()
     .min(8, "Password must be at least 8 characters")

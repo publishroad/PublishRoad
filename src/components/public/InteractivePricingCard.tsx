@@ -24,6 +24,31 @@ export function InteractivePricingCard({
   const isFree = plan.slug === "free";
   const isLifetime = plan.slug === "lifetime";
 
+  const PLAN_RANK: Record<string, number> = {
+    free: 0,
+    starter: 1,
+    pro: 2,
+    lifetime: 3,
+  };
+
+  const currentRank = currentPlanSlug ? PLAN_RANK[currentPlanSlug] : undefined;
+  const nextRank = PLAN_RANK[plan.slug];
+  const isDowngrade =
+    typeof currentRank === "number" &&
+    typeof nextRank === "number" &&
+    nextRank < currentRank;
+
+  const prettyPlanName =
+    currentPlanSlug === "free"
+      ? "Free"
+      : currentPlanSlug === "starter"
+      ? "Starter"
+      : currentPlanSlug === "pro"
+      ? "Pro"
+      : currentPlanSlug === "lifetime"
+      ? "Lifetime"
+      : currentPlanSlug ?? "current plan";
+
   const ctaLabel = isCurrent ? "Current Plan" : isSubmitting ? "Loading..." : plan.cta;
 
   async function resolveIsAuthenticated() {
@@ -46,6 +71,15 @@ export function InteractivePricingCard({
   async function handleCheckout() {
     if (isCurrent || isSubmitting || !planId) return;
 
+    if (isDowngrade) {
+      const confirmed = window.confirm(
+        `You are about to downgrade from ${prettyPlanName} to ${plan.name}. This can reduce your access and credits. Continue?`
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
     const authed = await resolveIsAuthenticated();
 
     if (!authed) {
@@ -54,7 +88,20 @@ export function InteractivePricingCard({
     }
 
     if (isFree) {
-      window.location.href = "/dashboard";
+      try {
+        const res = await fetch("/api/payments/downgrade", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ targetPlanSlug: "free" }),
+        });
+        const payload = await res.json().catch(() => null);
+        if (!res.ok) {
+          throw new Error(payload?.error ?? "Failed to apply downgrade");
+        }
+        window.location.href = "/dashboard/billing";
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Failed to apply downgrade");
+      }
       return;
     }
 
@@ -132,7 +179,7 @@ export function InteractivePricingCard({
           }}
         />
       )}
-      <button type="button" onClick={() => void handleCheckout()} disabled={isCurrent || isSubmitting} style={ctaStyle}>
+      <button className="pricing-scroll-btn" type="button" onClick={() => void handleCheckout()} disabled={isCurrent || isSubmitting} style={ctaStyle}>
         {ctaLabel}
       </button>
     </>

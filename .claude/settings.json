@@ -23,7 +23,8 @@
       "Bash(find /c/Users/shubi/OneDrive/Desktop/PublishRoad/src -type f -name \"*.ts\" -exec grep -l \"^\\\\s*interface\\\\s\\\\|^\\\\s*type\\\\s\" {} \\\\;)",
       "Bash(find /c/Users/shubi/OneDrive/Desktop/PublishRoad/src/components -type f -name \"*.tsx\" -exec wc -l {} +)",
       "Bash(node -e ':*)",
-      "Bash(node scripts/fix-require-admin.mjs)"
+      "Bash(node scripts/fix-require-admin.mjs)",
+      "Bash(echo \"EXIT:$?\")"
     ]
   }
 }

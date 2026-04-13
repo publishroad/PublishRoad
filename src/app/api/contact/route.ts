@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
         }
 
         await enqueueEmailJob("support_contact", {
-          to: "support@publishroad.com",
+          to: "contact@publishroad.com",
           subject: `New contact form: ${subject}`,
           text: `From: ${name} <${email}>\n\n${message}`,
         });

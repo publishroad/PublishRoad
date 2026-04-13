@@ -15,6 +15,12 @@ import {
   tryAcquireBackpressure,
 } from "@/lib/rate-limit";
 import { runIdempotentJson } from "@/lib/idempotency";
+import {
+  claimCreatorInviteForUser,
+  CREATOR_INVITE_COOKIE,
+  mapInviteStatusToQuery,
+  normalizeInviteToken,
+} from "@/lib/content-creators/invite";
 
 const SIGNUP_MAX_INFLIGHT = Number(process.env.SIGNUP_MAX_INFLIGHT ?? 100);
 const SIGNUP_CONFLICT_WAIT_MS = Number(process.env.SIGNUP_CONFLICT_WAIT_MS ?? 2500);
@@ -178,6 +184,9 @@ export async function POST(request: NextRequest) {
 
           const { name, email, password, referralCode } = parsed.data;
           const normalizedReferralCode = referralCode?.trim().toUpperCase() || null;
+          const normalizedInviteToken = normalizeInviteToken(
+            parsed.data.inviteToken || request.cookies.get(CREATOR_INVITE_COOKIE)?.value
+          );
 
           if (isDisposableEmail(email)) {
             return {
@@ -238,6 +247,18 @@ export async function POST(request: NextRequest) {
                     }
                   }
 
+                  if (normalizedInviteToken) {
+                    const inviteClaimResult = await claimCreatorInviteForUser({
+                      referredUserId: createdUser.id,
+                      inviteToken: normalizedInviteToken,
+                      tx,
+                    });
+
+                    if (!inviteClaimResult.claimed) {
+                      throw new Error(`INVITE_${mapInviteStatusToQuery(inviteClaimResult.status)}`);
+                    }
+                  }
+
                   return createdUser;
                 },
                 {
@@ -246,6 +267,30 @@ export async function POST(request: NextRequest) {
               )
             );
           } catch (dbError) {
+            if (dbError instanceof Error && dbError.message.startsWith("INVITE_")) {
+              return {
+                status: 422,
+                body: {
+                  success: false,
+                  error: {
+                    code: "INVITE_INVALID",
+                    message:
+                      dbError.message.replace("INVITE_", "") === "invite_limit"
+                        ? "This creator invite has reached its limit."
+                        : dbError.message.replace("INVITE_", "") === "invite_expired"
+                        ? "This creator invite has expired."
+                        : dbError.message.replace("INVITE_", "") === "invite_disabled"
+                        ? "This creator invite is disabled."
+                        : dbError.message.replace("INVITE_", "") === "invite_already_claimed"
+                        ? "This account already has a creator referral assigned."
+                        : dbError.message.replace("INVITE_", "") === "invite_unavailable"
+                        ? "Invite-based Pro access is temporarily unavailable."
+                        : "Invalid creator invite link.",
+                  },
+                },
+              };
+            }
+
             if (isConflictLikeDbError(dbError)) {
               return {
                 status: 409,

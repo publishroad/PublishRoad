@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { hashPassword } from "@/lib/server-utils";
 import { resetPasswordSchema } from "@/lib/validations/auth";
+import {
+  buildRateLimitIdentifiers,
+  checkRateLimitForIdentifiers,
+  passwordResetLimiter,
+} from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
@@ -15,6 +20,16 @@ export async function POST(request: NextRequest) {
   }
 
   const { token, password } = parsed.data;
+
+  const identifiers = buildRateLimitIdentifiers(request, { scope: "reset-password" });
+  identifiers.push(`reset-password:token:${token}`);
+  const { success } = await checkRateLimitForIdentifiers(passwordResetLimiter, identifiers);
+  if (!success) {
+    return NextResponse.json(
+      { error: "Too many attempts. Please request a new reset link." },
+      { status: 429 }
+    );
+  }
 
   const user = await db.user.findFirst({
     where: {

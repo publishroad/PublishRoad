@@ -12,27 +12,6 @@ type BlogPageProps = {
   searchParams?: Promise<{ page?: string | string[] }>;
 };
 
-const topicHubs = [
-  {
-    title: "Launch distribution strategy",
-    description: "Understand where to submit your product, how to prioritize channels, and how to turn outreach into traction.",
-    href: "/pricing",
-    cta: "Compare plans",
-  },
-  {
-    title: "Done-for-you launch support",
-    description: "If you want execution help, see how our team can handle submissions, guest posts, and launch logistics for you.",
-    href: "/hire-us",
-    cta: "Explore Hire Us",
-  },
-  {
-    title: "Launch FAQs and workflows",
-    description: "Review common questions about curations, credits, billing, and how the platform fits different launch stages.",
-    href: "/faq",
-    cta: "Read the FAQ",
-  },
-] as const;
-
 function normalizePageNumber(value?: string | string[]): number {
   const rawValue = Array.isArray(value) ? value[0] : value;
   const parsed = Number(rawValue ?? "1");
@@ -86,8 +65,14 @@ async function getPosts(page = 1) {
   try {
     const [posts, total] = await Promise.all([
       db.blogPost.findMany({
-        where: { status: "published", publishDate: { lte: new Date() } },
-        orderBy: { publishDate: "desc" },
+        where: {
+          status: "published",
+          OR: [
+            { publishDate: { lte: new Date() } },
+            { publishDate: null },
+          ],
+        },
+        orderBy: [{ publishDate: "desc" }, { createdAt: "desc" }],
         skip,
         take: pageSize,
         select: {
@@ -97,11 +82,18 @@ async function getPosts(page = 1) {
           excerpt: true,
           featuredImage: true,
           publishDate: true,
+          createdAt: true,
           author: { select: { name: true } },
         },
       }),
       db.blogPost.count({
-        where: { status: "published", publishDate: { lte: new Date() } },
+        where: {
+          status: "published",
+          OR: [
+            { publishDate: { lte: new Date() } },
+            { publishDate: null },
+          ],
+        },
       }),
     ]);
 
@@ -170,24 +162,6 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
       </div>
 
       <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
-          {topicHubs.map((hub) => (
-            <div
-              key={hub.title}
-              className="rounded-[1.5rem] bg-white p-6"
-              style={{ boxShadow: "0 4px 24px rgba(91,88,246,0.06)", border: "1px solid rgba(226,232,240,0.8)" }}
-            >
-              <h2 className="text-xl font-semibold mb-2" style={{ fontFamily: "var(--font-heading)", color: "var(--dark)" }}>
-                {hub.title}
-              </h2>
-              <p className="text-sm text-slate-500 leading-relaxed mb-4">{hub.description}</p>
-              <Link href={hub.href} className="text-sm font-medium hover:underline" style={{ color: "var(--indigo)" }}>
-                {hub.cta} →
-              </Link>
-            </div>
-          ))}
-        </div>
-
         <div className="flex items-center justify-between gap-4 mb-6">
           <div>
             <h2 className="text-2xl font-semibold" style={{ fontFamily: "var(--font-heading)", color: "var(--dark)" }}>
@@ -249,7 +223,7 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
                   <div className="flex items-center justify-between text-xs text-slate-400 font-light">
                     <span>{post.author.name}</span>
                     <span>
-                      {post.publishDate ? formatDate(post.publishDate) : ""}
+                      {formatDate(post.publishDate ?? post.createdAt)}
                     </span>
                   </div>
                 </div>

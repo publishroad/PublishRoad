@@ -99,7 +99,7 @@ export default function ContactPage() {
       />
 
       {/* Header */}
-      <div className="bg-mesh relative overflow-hidden py-20">
+      <div className="bg-mesh relative overflow-hidden pt-16 pb-6">
         <div className="absolute inset-0 bg-dot-grid opacity-30 pointer-events-none" />
         <div className="relative text-center px-4">
           <p className="text-sm font-medium uppercase tracking-widest mb-3" style={{ color: "var(--indigo)" }}>

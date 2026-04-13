@@ -22,6 +22,16 @@ import { signupSchema, type SignupInput } from "@/lib/validations/auth";
 const ONBOARDING_PLAN_PATH = "/onboarding/plan";
 const HIRE_US_ONBOARDING_PATH = "/onboarding/hire-us";
 
+const INVITE_ERROR_MESSAGES: Record<string, string> = {
+  invite_invalid: "This invite link is invalid.",
+  invite_disabled: "This invite link has been disabled.",
+  invite_expired: "This invite link has expired.",
+  invite_limit: "This invite link has reached its usage limit.",
+  invite_new_signup_only: "This invite works for new signups only.",
+  invite_already_claimed: "This account already has a creator invite assigned.",
+  invite_unavailable: "Invite-based Pro access is temporarily unavailable.",
+};
+
 function extractHireUsPackageFromCallback(callbackUrl: string | null): "starter" | "complete" | null {
   if (!callbackUrl) return null;
   try {
@@ -55,6 +65,10 @@ function SignupPageContent() {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl");
   const referralCode = searchParams.get("ref")?.trim() || undefined;
+  const inviteToken = searchParams.get("inviteToken")?.trim() || undefined;
+  const inviteFlag = searchParams.get("invite") === "1";
+  const inviteErrorKey = searchParams.get("inviteError")?.trim() || "";
+  const inviteErrorMessage = inviteErrorKey ? INVITE_ERROR_MESSAGES[inviteErrorKey] ?? "This invite link is not available." : null;
   const redirectTarget = resolveSignupRedirectTarget(callbackUrl);
   const hireUsPackage = extractHireUsPackageFromCallback(callbackUrl);
   const [isLoading, setIsLoading] = useState(false);
@@ -73,7 +87,7 @@ function SignupPageContent() {
       const response = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...data, referralCode }),
+        body: JSON.stringify({ ...data, referralCode, inviteToken }),
       });
 
       let result: { error?: string | { code?: string; message?: string } } = {};
@@ -195,6 +209,36 @@ function SignupPageContent() {
               }}
             >
               Referral applied: <span style={{ fontWeight: 600 }}>{referralCode}</span>
+            </div>
+          )}
+          {inviteFlag && !inviteErrorMessage && (
+            <div
+              style={{
+                background: "#ECFDF3",
+                borderRadius: "0.9rem",
+                padding: "0.75rem 0.9rem",
+                marginBottom: "1rem",
+                color: "#065F46",
+                fontSize: "0.82rem",
+                border: "1px solid #A7F3D0",
+              }}
+            >
+              Creator invite detected. You will receive free Pro access after successful signup.
+            </div>
+          )}
+          {inviteErrorMessage && (
+            <div
+              style={{
+                background: "#FEF2F2",
+                borderRadius: "0.9rem",
+                padding: "0.75rem 0.9rem",
+                marginBottom: "1rem",
+                color: "#B91C1C",
+                fontSize: "0.82rem",
+                border: "1px solid #FECACA",
+              }}
+            >
+              {inviteErrorMessage}
             </div>
           )}
           <button
