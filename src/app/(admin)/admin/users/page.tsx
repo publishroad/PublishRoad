@@ -19,7 +19,20 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
   };
 
   const [users, total] = await Promise.all([
-    db.user.findMany({ where, include: { plan: { select: { name: true, slug: true } } }, orderBy: { createdAt: "desc" }, skip, take: PAGE_SIZE }),
+    db.user.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        creditsRemaining: true,
+        createdAt: true,
+        plan: { select: { name: true, slug: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: PAGE_SIZE,
+    }),
     db.user.count({ where }),
   ]);
   const totalPages = Math.ceil(total / PAGE_SIZE);
