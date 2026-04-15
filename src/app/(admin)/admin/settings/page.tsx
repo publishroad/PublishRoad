@@ -6,8 +6,10 @@ import { isMissingRelationError } from "@/lib/db-error-utils";
 import { AIConfigForm } from "@/components/admin/AIConfigForm";
 import { PaymentConfigForm } from "@/components/admin/PaymentConfigForm";
 import { EmailConfigForm } from "@/components/admin/EmailConfigForm";
+import { SiteNoticeEditor } from "@/components/admin/SiteNoticeEditor";
 import { AppHeader } from "@/components/dashboard/AppHeader";
 import { formatDate } from "@/lib/utils";
+import { getSiteNoticeConfig } from "@/lib/site-notice-config";
 
 type EmailConfigRow = {
   provider: "resend" | "smtp" | "sendgrid" | "ses";
@@ -39,7 +41,7 @@ async function fetchWithMissingRelationFallback<T>(
 }
 
 export default async function AdminSettingsPage() {
-  const [aiConfig, paymentConfigResult, emailRowsResult] = await Promise.all([
+  const [aiConfig, paymentConfigResult, emailRowsResult, siteNoticeConfig] = await Promise.all([
     db.aiConfig.findUnique({ where: { id: "default" } }),
     fetchWithMissingRelationFallback("payment_gateway_config", [], async () =>
       db.$queryRaw<Array<{
@@ -63,6 +65,7 @@ export default async function AdminSettingsPage() {
           LIMIT 1
       `
     ),
+    getSiteNoticeConfig(),
   ]);
 
   const paymentMigrationMissing = paymentConfigResult.migrationMissing;
@@ -158,6 +161,11 @@ export default async function AdminSettingsPage() {
             hasExistingApiKey={!!emailConfig?.api_key}
             hasExistingPassword={!!emailConfig?.password}
           />
+        </section>
+
+        <section id="site-notice-settings" className="scroll-mt-20">
+          <p className="text-sm text-gray-400 mb-6">Configure the top important notice bar shown on public pages.</p>
+          <SiteNoticeEditor initialConfig={siteNoticeConfig} />
         </section>
       </div>
     </>

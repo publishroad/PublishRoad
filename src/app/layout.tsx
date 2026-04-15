@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import type { CSSProperties } from "react";
 import { Analytics } from "@vercel/analytics/next";
-import { Inter, Playfair_Display } from "next/font/google";
+import { Inter, Playfair_Display, Ubuntu } from "next/font/google";
 import "./globals.css";
 import { GlobalUiEnhancements } from "@/components/GlobalUiEnhancements";
 import { SITE_NAME, buildTwitterMetadata, getSiteUrl, getSocialImages } from "@/lib/seo";
@@ -18,6 +18,13 @@ const playfair = Playfair_Display({
   subsets: ["latin"],
   weight: ["400", "600", "700"],
   style: ["normal", "italic"],
+  display: "swap",
+});
+
+const ubuntu = Ubuntu({
+  variable: "--font-ubuntu",
+  subsets: ["latin"],
+  weight: ["400", "500", "700"],
   display: "swap",
 });
 
@@ -124,7 +131,7 @@ export default function RootLayout({
   } as CSSProperties;
 
   return (
-    <html lang="en" className={`${inter.variable} ${playfair.variable} h-full antialiased`} style={rootStyle}>
+    <html lang="en" className={`${inter.variable} ${playfair.variable} ${ubuntu.variable} h-full antialiased`} style={rootStyle}>
       <head>
         <script async src="https://www.googletagmanager.com/gtag/js?id=G-EECRXZ2328" />
         <script

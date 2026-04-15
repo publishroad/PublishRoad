@@ -143,6 +143,9 @@
     font-family: var(--font-heading), var(--font-sans), serif;
     line-height: 1.2;
   }
+  h2, h3, h4, h5 {
+    font-family: var(--font-ubuntu), var(--font-sans), sans-serif !important;
+  }
   h1 {
     font-size: 3rem;
     font-weight: 700;

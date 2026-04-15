@@ -269,52 +269,6 @@ export default function NewCurationPage() {
                 <div className="grid gap-4 md:grid-cols-2">
                   <FormField
                     control={form.control}
-                    name="countryId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>
-                          Target Country <span className="text-red-500">*</span>
-                        </FormLabel>
-                        {(() => {
-                          const selectedCountry = countries.find((country) => country.id === field.value);
-                          const countryLabel = selectedCountry
-                            ? `${selectedCountry.flagEmoji ? `${selectedCountry.flagEmoji} ` : ""}${selectedCountry.name}`
-                            : "Select country";
-
-                          return (
-                        <Select
-                          onValueChange={(value) => {
-                            field.onChange(value === SELECT_COUNTRY_VALUE ? undefined : value);
-                          }}
-                          value={field.value ?? SELECT_COUNTRY_VALUE}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <span
-                                className={field.value ? "line-clamp-1 text-slate-900" : "line-clamp-1 text-muted-foreground"}
-                              >
-                                {countryLabel}
-                              </span>
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value={SELECT_COUNTRY_VALUE}>Select country</SelectItem>
-                            {countries.map((country) => (
-                              <SelectItem key={country.id} value={country.id}>
-                                {country.flagEmoji} {country.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                          );
-                        })()}
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
                     name="categoryId"
                     render={({ field }) => (
                       <FormItem>
@@ -346,6 +300,52 @@ export default function NewCurationPage() {
                             {categories.map((category) => (
                               <SelectItem key={category.id} value={category.id}>
                                 {category.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                          );
+                        })()}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="countryId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>
+                          Press Release Country <span className="text-red-500">*</span>
+                        </FormLabel>
+                        {(() => {
+                          const selectedCountry = countries.find((country) => country.id === field.value);
+                          const countryLabel = selectedCountry
+                            ? `${selectedCountry.flagEmoji ? `${selectedCountry.flagEmoji} ` : ""}${selectedCountry.name}`
+                            : "Select country";
+
+                          return (
+                        <Select
+                          onValueChange={(value) => {
+                            field.onChange(value === SELECT_COUNTRY_VALUE ? undefined : value);
+                          }}
+                          value={field.value ?? SELECT_COUNTRY_VALUE}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <span
+                                className={field.value ? "line-clamp-1 text-slate-900" : "line-clamp-1 text-muted-foreground"}
+                              >
+                                {countryLabel}
+                              </span>
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value={SELECT_COUNTRY_VALUE}>Select country</SelectItem>
+                            {countries.map((country) => (
+                              <SelectItem key={country.id} value={country.id}>
+                                {country.flagEmoji} {country.name}
                               </SelectItem>
                             ))}
                           </SelectContent>

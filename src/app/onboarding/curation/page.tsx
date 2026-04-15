@@ -202,27 +202,6 @@ function OnboardingCurationPageContent() {
               )}
             </div>
 
-            {/* Country */}
-            <div className="space-y-1.5">
-              <Label className="text-slate-700 text-sm font-medium">
-                Target Country <span className="text-error">*</span>
-              </Label>
-              <select
-                className="w-full h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
-                {...register("countryId")}
-              >
-                <option value="">Select country</option>
-                {countries.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.flagEmoji} {c.name}
-                  </option>
-                ))}
-              </select>
-              {errors.countryId && (
-                <p className="text-xs text-error">{errors.countryId.message}</p>
-              )}
-            </div>
-
             {/* Category */}
             <div className="space-y-1.5">
               <Label className="text-slate-700 text-sm font-medium">
@@ -241,6 +220,27 @@ function OnboardingCurationPageContent() {
               </select>
               {errors.categoryId && (
                 <p className="text-xs text-error">{errors.categoryId.message}</p>
+              )}
+            </div>
+
+            {/* Country */}
+            <div className="space-y-1.5">
+              <Label className="text-slate-700 text-sm font-medium">
+                Press Release Country <span className="text-error">*</span>
+              </Label>
+              <select
+                className="w-full h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+                {...register("countryId")}
+              >
+                <option value="">Select country</option>
+                {countries.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.flagEmoji} {c.name}
+                  </option>
+                ))}
+              </select>
+              {errors.countryId && (
+                <p className="text-xs text-error">{errors.countryId.message}</p>
               )}
             </div>
 
