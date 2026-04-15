@@ -142,6 +142,7 @@ export default function CurationDetailPage() {
   }, [curation?.status]);
 
   const planSlug = session?.user?.planSlug ?? "free";
+  const userWatermarkEmail = session?.user?.email ?? "";
 
   const sectionResults = {
     a: curation?.results.filter((r) => r.section === "a") ?? [],
@@ -222,6 +223,14 @@ export default function CurationDetailPage() {
       toast.error(message);
     } finally {
       setUpdatingResultId(null);
+    }
+  }
+
+  function handleProtectedContextMenu(e: React.MouseEvent<HTMLDivElement>) {
+    const target = e.target as HTMLElement;
+    const isInteractive = target.closest("a, button, input, textarea, select, [role='button']");
+    if (!isInteractive) {
+      e.preventDefault();
     }
   }
 
@@ -374,7 +383,13 @@ export default function CurationDetailPage() {
                   <UpsellBanner maskedCount={curation.maskedCount} planSlug={planSlug} />
                 )}
 
-                <div id="curation-list" className="scroll-mt-24 space-y-4">
+                <div
+                  id="curation-list"
+                  className="scroll-mt-24 space-y-4 relative"
+                  style={{ userSelect: "none" }}
+                  onContextMenu={handleProtectedContextMenu}
+                >
+                  <WatermarkOverlay email={userWatermarkEmail} />
                   {sectionsToShow.map((section) => (
                     <CurationSection
                       key={section}
@@ -451,6 +466,27 @@ export default function CurationDetailPage() {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+function WatermarkOverlay({ email }: { email: string }) {
+  if (!email) return null;
+  const svgContent = `<svg xmlns='http://www.w3.org/2000/svg' width='340' height='180'><text x='50%' y='50%' text-anchor='middle' dominant-baseline='middle' font-family='system-ui, sans-serif' font-size='13' font-weight='500' fill='%23465FFF' transform='rotate(-30, 170, 90)'>${encodeURIComponent(email)}</text></svg>`;
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        position: "absolute",
+        inset: 0,
+        pointerEvents: "none",
+        userSelect: "none",
+        backgroundImage: `url("data:image/svg+xml,${svgContent}")`,
+        backgroundRepeat: "repeat",
+        backgroundSize: "340px 180px",
+        opacity: 0.045,
+        zIndex: 10,
+      }}
+    />
   );
 }
 
