@@ -408,12 +408,13 @@ export async function processCuration(
   await assertCurationStillExists(curationId);
   await setProgress(curationId, "fetching_sites");
 
-  // Fetch country name + all active categories in parallel (categories needed for keyword expansion)
+  // Fetch country name + categories. Fail-open so a temporary metadata issue
+  // does not abort the entire curation run.
   const [country, availableCategories] = await Promise.all([
     countryId
-      ? db.country.findUnique({ where: { id: countryId }, select: { name: true } })
+      ? db.country.findUnique({ where: { id: countryId }, select: { name: true } }).catch(() => null)
       : Promise.resolve(null),
-    db.category.findMany({ where: { isActive: true }, select: { id: true, slug: true, name: true } }),
+    db.category.findMany({ where: { isActive: true }, select: { id: true, slug: true, name: true } }).catch(() => []),
   ]);
 
   // ── 3a: AI keyword expansion + category inference ────────────────────────
@@ -427,15 +428,34 @@ export async function processCuration(
     availableCategories,
   });
 
-  // Use inferred category if user didn't explicitly pick one
+  // Use inferred category if user didn't explicitly pick one.
+  // If metadata is stale or the selected category was deactivated after form
+  // submission, continue with a broad fallback instead of hard-failing.
   const effectiveCategoryId = categoryId ?? inferredCategoryId;
-  if (!effectiveCategoryId) {
-    throw new Error("CATEGORY_REQUIRED_FOR_CURATION");
-  }
 
-  const category = effectiveCategoryId
+  let category = effectiveCategoryId
     ? (availableCategories.find((c) => c.id === effectiveCategoryId) ?? null)
     : null;
+
+  if (!category && effectiveCategoryId) {
+    category = await db.category
+      .findUnique({ where: { id: effectiveCategoryId }, select: { id: true, slug: true, name: true } })
+      .catch(() => null);
+  }
+
+  if (!effectiveCategoryId) {
+    console.warn("[Curation] No category available after expansion; continuing without category hard filter", {
+      curationId,
+      providedCategoryId: categoryId ?? null,
+    });
+  }
+
+  if (effectiveCategoryId && !category) {
+    console.warn("[Curation] Selected category metadata not found; continuing with legacy category-id filtering only", {
+      curationId,
+      effectiveCategoryId,
+    });
+  }
 
   const categorySlugs = category ? [category.slug] : [];
   // Use expanded keywords (includes originals + AI-derived synonyms) for all DB queries
@@ -449,15 +469,77 @@ export async function processCuration(
   // Extract meaningful words from product description for description-overlap scoring
   const productDescWords = extractDescWords(description ?? "");
 
+  const categoryIdToSlug = new Map(availableCategories.map((entry) => [entry.id, entry.slug]));
+
+  const websiteCategoriesSupportProbe = await db.$queryRaw<Array<{ exists: boolean }>>`
+    SELECT to_regclass('public.website_categories') IS NOT NULL AS "exists"
+  `.catch(() => [{ exists: false }]);
+  const hasWebsiteCategoriesTable = Boolean(websiteCategoriesSupportProbe[0]?.exists);
+
+  const websiteCountriesSupportProbe = await db.$queryRaw<Array<{ exists: boolean }>>`
+    SELECT to_regclass('public.website_countries') IS NOT NULL AS "exists"
+  `.catch(() => [{ exists: false }]);
+  const hasWebsiteCountriesTable = Boolean(websiteCountriesSupportProbe[0]?.exists);
+
+  if (!hasWebsiteCategoriesTable) {
+    console.warn("[Curation] website_categories table not available; falling back to legacy primary category matching");
+  }
+
+  if (!hasWebsiteCountriesTable) {
+    console.warn("[Curation] website_countries table not available; falling back to legacy country matching");
+  }
+
+  const websiteSelect: Prisma.WebsiteSelect = {
+    id: true,
+    name: true,
+    url: true,
+    da: true,
+    pa: true,
+    spamScore: true,
+    traffic: true,
+    type: true,
+    description: true,
+    tagSlugs: true,
+    categoryId: true,
+    countryId: true,
+    starRating: true,
+    ...(hasWebsiteCategoriesTable ? { websiteCategories: { select: { category: { select: { slug: true } } } } } : {}),
+    ...(hasWebsiteCountriesTable ? { websiteCountries: { select: { countryId: true } } } : {}),
+  };
+
+  const normalizeWebsiteRows = <T extends {
+    websiteCountries?: Array<{ countryId: string }>;
+    websiteCategories?: Array<{ category: { slug: string | null } }>;
+  }>(
+    rows: T[]
+  ): Array<
+    Omit<T, "websiteCountries" | "websiteCategories"> & {
+      websiteCountries: Array<{ countryId: string }>;
+      websiteCategories: Array<{ category: { slug: string | null } }>;
+    }
+  > => {
+    return rows.map((row) => ({
+      ...row,
+      websiteCountries: Array.isArray(row.websiteCountries) ? row.websiteCountries : [],
+      websiteCategories: Array.isArray(row.websiteCategories) ? row.websiteCategories : [],
+    }));
+  };
+
   // Build website base conditions as an AND array to avoid key conflicts
   const websiteBaseConditions: Prisma.WebsiteWhereInput[] = [
     { isActive: true },
     { isExcluded: false },
     // Match via join table so multi-category sites are included (not just primary categoryId)
-    ...(effectiveCategoryId ? [{ websiteCategories: { some: { categoryId: effectiveCategoryId } } } as Prisma.WebsiteWhereInput] : []),
+    ...(effectiveCategoryId
+      ? [
+          (hasWebsiteCategoriesTable
+            ? { websiteCategories: { some: { categoryId: effectiveCategoryId } } }
+            : { categoryId: effectiveCategoryId }) as Prisma.WebsiteWhereInput,
+        ]
+      : []),
   ];
 
-  const [rawWebsites, rawInfluencers, rawReddit, rawFunds] = await Promise.all([
+  const [rawWebsiteRows, rawInfluencers, rawReddit, rawFunds] = await Promise.all([
     db.website.findMany({
       where: {
         AND: [
@@ -475,23 +557,7 @@ export async function processCuration(
       },
       orderBy: [{ starRating: "desc" }, { da: "desc" }],
       take: 150,
-      select: {
-        id: true,
-        name: true,
-        url: true,
-        da: true,
-        pa: true,
-        spamScore: true,
-        traffic: true,
-        type: true,
-        description: true,
-        tagSlugs: true,
-        categoryId: true,
-        countryId: true,
-        starRating: true,
-        websiteCategories: { select: { category: { select: { slug: true } } } },
-        websiteCountries: { select: { countryId: true } },
-      },
+      select: websiteSelect,
     }),
 
     db.influencer.findMany({
@@ -568,61 +634,35 @@ export async function processCuration(
     }),
   ]);
 
+  const rawWebsites = normalizeWebsiteRows(rawWebsiteRows as Array<{ websiteCountries?: Array<{ countryId: string }> }>);
+
   // Fallback: if too few website results, drop keywords but keep country + category hard filters
   let candidateSites = rawWebsites;
   if (candidateSites.length < 10) {
-    candidateSites = await db.website.findMany({
+    candidateSites = normalizeWebsiteRows(await db.website.findMany({
       where: { AND: websiteBaseConditions },
       orderBy: [{ starRating: "desc" }, { da: "desc" }],
       take: 150,
-      select: {
-        id: true,
-        name: true,
-        url: true,
-        da: true,
-        pa: true,
-        spamScore: true,
-        traffic: true,
-        type: true,
-        description: true,
-        tagSlugs: true,
-        categoryId: true,
-        countryId: true,
-        starRating: true,
-        websiteCategories: { select: { category: { select: { slug: true } } } },
-        websiteCountries: { select: { countryId: true } },
-      },
-    });
+      select: websiteSelect,
+    }) as Array<{ websiteCountries?: Array<{ countryId: string }> }>);
   }
   // Last resort: if still empty, keep the selected category hard filter and
   // relax country only. Never widen website results outside the chosen category.
   if (candidateSites.length === 0) {
-    candidateSites = await db.website.findMany({
+    candidateSites = normalizeWebsiteRows(await db.website.findMany({
       where: {
         isActive: true,
         isExcluded: false,
-        ...(effectiveCategoryId ? { websiteCategories: { some: { categoryId: effectiveCategoryId } } } : {}),
+        ...(effectiveCategoryId
+          ? (hasWebsiteCategoriesTable
+              ? { websiteCategories: { some: { categoryId: effectiveCategoryId } } }
+              : { categoryId: effectiveCategoryId })
+          : {}),
       },
       orderBy: [{ starRating: "desc" }, { da: "desc" }],
       take: 150,
-      select: {
-        id: true,
-        name: true,
-        url: true,
-        da: true,
-        pa: true,
-        spamScore: true,
-        traffic: true,
-        type: true,
-        description: true,
-        tagSlugs: true,
-        categoryId: true,
-        countryId: true,
-        starRating: true,
-        websiteCategories: { select: { category: { select: { slug: true } } } },
-        websiteCountries: { select: { countryId: true } },
-      },
-    });
+      select: websiteSelect,
+    }) as Array<{ websiteCountries?: Array<{ countryId: string }> }>);
   }
 
   // Fallback 1: drop keywords, keep country + category
@@ -708,31 +748,17 @@ export async function processCuration(
   // into the candidate pool, bypassing keyword soft filters. These sites are
   // always evaluated by the AI unless there is a clear platform mismatch.
   if (effectiveCategoryId) {
-    const prioritySites = await db.website.findMany({
+    const prioritySites = normalizeWebsiteRows(await db.website.findMany({
       where: {
         isActive: true,
         isExcluded: false,
         starRating: { gte: 3 },
-        websiteCategories: { some: { categoryId: effectiveCategoryId } },
+        ...(hasWebsiteCategoriesTable
+          ? { websiteCategories: { some: { categoryId: effectiveCategoryId } } }
+          : { categoryId: effectiveCategoryId }),
       },
-      select: {
-        id: true,
-        name: true,
-        url: true,
-        da: true,
-        pa: true,
-        spamScore: true,
-        traffic: true,
-        type: true,
-        description: true,
-        tagSlugs: true,
-        categoryId: true,
-        countryId: true,
-        starRating: true,
-        websiteCategories: { select: { category: { select: { slug: true } } } },
-        websiteCountries: { select: { countryId: true } },
-      },
-    });
+      select: websiteSelect,
+    }) as Array<{ websiteCountries?: Array<{ countryId: string }> }>);
     const existingIds = new Set(candidateSites.map((s) => s.id));
     for (const site of prioritySites) {
       if (!existingIds.has(site.id)) {
@@ -758,39 +784,31 @@ export async function processCuration(
 
     const missingCount = 20 - currentCount;
     const pressReleaseCountryMode = getPressReleaseCountryMode(countryId);
-    const typedBackfill = await db.website.findMany({
+    const typedBackfill = normalizeWebsiteRows(await db.website.findMany({
       where: {
         isActive: true,
         isExcluded: false,
         type: websiteType,
         ...(websiteType === "press_release" && pressReleaseCountryMode === "specific_country" && countryId
-          ? { OR: [{ countryId }, { websiteCountries: { some: { countryId } } }] }
+          ? {
+              OR: hasWebsiteCountriesTable
+                ? [{ countryId }, { websiteCountries: { some: { countryId } } }]
+                : [{ countryId }],
+            }
           : {}),
         ...(websiteType === "press_release" && pressReleaseCountryMode === "worldwide"
           ? { countryId: null }
           : {}),
-        ...(effectiveCategoryId ? { websiteCategories: { some: { categoryId: effectiveCategoryId } } } : {}),
+        ...(effectiveCategoryId
+          ? (hasWebsiteCategoriesTable
+              ? { websiteCategories: { some: { categoryId: effectiveCategoryId } } }
+              : { categoryId: effectiveCategoryId })
+          : {}),
       },
       orderBy: [{ starRating: "desc" }, { da: "desc" }],
       take: missingCount + 20,
-      select: {
-        id: true,
-        name: true,
-        url: true,
-        da: true,
-        pa: true,
-        spamScore: true,
-        traffic: true,
-        type: true,
-        description: true,
-        tagSlugs: true,
-        categoryId: true,
-        countryId: true,
-        starRating: true,
-        websiteCategories: { select: { category: { select: { slug: true } } } },
-        websiteCountries: { select: { countryId: true } },
-      },
-    });
+      select: websiteSelect,
+    }) as Array<{ websiteCountries?: Array<{ countryId: string }> }>);
 
     for (const site of typedBackfill) {
       if (existingWebsiteIds.has(site.id)) {
@@ -852,9 +870,14 @@ export async function processCuration(
   // Website scoring for A/B/C is country-agnostic by design. Country filtering
   // is applied only in Section C eligibility rules.
   const scoredSites = candidateSites.map((w) => {
-      const entityCatSlugs = w.websiteCategories
+      const relationCategorySlugs = w.websiteCategories
         .map((wc) => wc.category.slug)
         .filter((slug): slug is string => Boolean(slug));
+      const entityCatSlugs = relationCategorySlugs.length > 0
+        ? relationCategorySlugs
+        : w.categoryId
+          ? [categoryIdToSlug.get(w.categoryId)].filter((slug): slug is string => Boolean(slug))
+          : [];
       const { finalScore, breakdown } = computeEntityScore(
         {
           tagSlugs: w.tagSlugs,
