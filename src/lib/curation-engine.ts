@@ -74,6 +74,8 @@ type WebsiteSectionResult = {
   rank: number;
 };
 
+type PressReleaseCountryMode = "specific_country" | "worldwide";
+
 const WEBSITE_SECTION_DB_TYPES = ["distribution", "guest_post", "press_release"] as const;
 
 function countResultsBySection<T extends { section: string }>(results: T[]) {
@@ -81,6 +83,23 @@ function countResultsBySection<T extends { section: string }>(results: T[]) {
     acc[result.section] = (acc[result.section] ?? 0) + 1;
     return acc;
   }, {});
+}
+
+function getPressReleaseCountryMode(countryId: string | null | undefined): PressReleaseCountryMode {
+  return countryId ? "specific_country" : "worldwide";
+}
+
+function isStrictPressReleaseEligible(
+  site: { countryId?: string | null; websiteCountries: Array<{ countryId: string }> },
+  countryId: string | null | undefined,
+  mode: PressReleaseCountryMode
+): boolean {
+  if (mode === "specific_country") {
+    if (!countryId) return false;
+    return site.countryId === countryId || site.websiteCountries.some((wc) => wc.countryId === countryId);
+  }
+
+  return site.countryId == null;
 }
 
 function getWebsiteStarTier(starRating?: number | null): 0 | 3 | 4 | 5 {
@@ -434,7 +453,6 @@ export async function processCuration(
   const websiteBaseConditions: Prisma.WebsiteWhereInput[] = [
     { isActive: true },
     { isExcluded: false },
-    ...(countryId ? [{ OR: [{ countryId }, { countryId: null }, { websiteCountries: { some: { countryId } } }] } as Prisma.WebsiteWhereInput] : []),
     // Match via join table so multi-category sites are included (not just primary categoryId)
     ...(effectiveCategoryId ? [{ websiteCategories: { some: { categoryId: effectiveCategoryId } } } as Prisma.WebsiteWhereInput] : []),
   ];
@@ -739,12 +757,18 @@ export async function processCuration(
     }
 
     const missingCount = 20 - currentCount;
+    const pressReleaseCountryMode = getPressReleaseCountryMode(countryId);
     const typedBackfill = await db.website.findMany({
       where: {
         isActive: true,
         isExcluded: false,
         type: websiteType,
-        ...(countryId ? { OR: [{ countryId }, { countryId: null }, { websiteCountries: { some: { countryId } } }] } : {}),
+        ...(websiteType === "press_release" && pressReleaseCountryMode === "specific_country" && countryId
+          ? { OR: [{ countryId }, { websiteCountries: { some: { countryId } } }] }
+          : {}),
+        ...(websiteType === "press_release" && pressReleaseCountryMode === "worldwide"
+          ? { countryId: null }
+          : {}),
         ...(effectiveCategoryId ? { websiteCategories: { some: { categoryId: effectiveCategoryId } } } : {}),
       },
       orderBy: [{ starRating: "desc" }, { da: "desc" }],
@@ -825,10 +849,9 @@ export async function processCuration(
   }
 
   // ─── Step 3c: Pre-score + sort candidates ─────────────────────────────────
-  // Each entity is scored using five independent rules (category, keyword, country,
-  // description, star boost) and sorted with country-priority grouping.
-  const scoredSites = sortWithCountryPriority(
-    candidateSites.map((w) => {
+  // Website scoring for A/B/C is country-agnostic by design. Country filtering
+  // is applied only in Section C eligibility rules.
+  const scoredSites = candidateSites.map((w) => {
       const entityCatSlugs = w.websiteCategories
         .map((wc) => wc.category.slug)
         .filter((slug): slug is string => Boolean(slug));
@@ -836,27 +859,20 @@ export async function processCuration(
         {
           tagSlugs: w.tagSlugs,
           categorySlugs: entityCatSlugs,
-          countryId:
-            countryId && w.websiteCountries.some((wc) => wc.countryId === countryId)
-              ? countryId
-              : w.countryId,
+          countryId: w.countryId,
           starRating: w.starRating,
         },
         userCategorySlug,
         keywordsLower,
-        countryId,
+        null,
         productDescWords
       );
-      const hasCountryRelationMatch = !!countryId && w.websiteCountries.some((wc) => wc.countryId === countryId);
       return {
         ...w,
         _score: finalScore,
         _breakdown: breakdown,
-        _cntryMatch: hasCountryRelationMatch || scoreCountryMatch(w.countryId, countryId) > 0,
       };
-    }),
-    countryId
-  );
+    });
 
   const scoredInfluencers = sortWithCountryPriority(
     candidateInfluencers.map((inf) => {
@@ -902,7 +918,7 @@ export async function processCuration(
 
   // Strip internal scoring flags and cap pool size for AI (websites only)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const finalSites = scoredSites.slice(0, 80).map(({ _score, _breakdown, _cntryMatch, ...rest }) => rest);
+  const finalSites = scoredSites.slice(0, 80).map(({ _score, _breakdown, ...rest }) => rest);
 
   // ─── Step 4: AI matching ───────────────────────────────────────────────────
   await setProgress(curationId, "calling_ai");
@@ -982,15 +998,29 @@ export async function processCuration(
   };
   const normalizeType = (value: string) => value.toLowerCase().trim();
   const usedWebsiteIds = new Set<string>();
+  const pressReleaseCountryMode = getPressReleaseCountryMode(countryId);
 
   const buildWebsiteSectionResults = (section: "a" | "b" | "c") => {
     const aliases = new Set(sectionTypeAliases[section].map(normalizeType));
-    const typedPool = scoredSites.filter(
-      (site) => aliases.has(normalizeType(site.type)) && !usedWebsiteIds.has(site.id)
-    );
-    const pool = typedPool.length > 0
-      ? typedPool
-      : scoredSites.filter((site) => !usedWebsiteIds.has(site.id));
+    const typedPool = scoredSites.filter((site) => {
+      if (!aliases.has(normalizeType(site.type)) || usedWebsiteIds.has(site.id)) return false;
+      if (section !== "c") return true;
+      return isStrictPressReleaseEligible(site, countryId, pressReleaseCountryMode);
+    });
+
+    const pool = (() => {
+      if (typedPool.length > 0 || section === "c") {
+        // Section C never widens outside strict press_release eligibility.
+        return typedPool;
+      }
+
+      // A/B may fallback, but avoid consuming press_release inventory reserved for C.
+      return scoredSites.filter(
+        (site) =>
+          !usedWebsiteIds.has(site.id) &&
+          normalizeType(site.type) !== "press_release"
+      );
+    })();
 
     return buildTieredWebsiteResults({
       section,
@@ -1008,6 +1038,14 @@ export async function processCuration(
     ...buildWebsiteSectionResults("b"),
     ...buildWebsiteSectionResults("c"),
   ];
+
+  const pressReleaseCount = websiteResults.filter((r) => r.section === "c").length;
+  console.info("[Curation] Press release strict country filter", {
+    curationId,
+    mode: pressReleaseCountryMode,
+    countryId: countryId ?? null,
+    results: pressReleaseCount,
+  });
 
   const influencerDescriptionById = new Map(
     scoredInfluencers.map((inf) => [inf.id, inf.description?.trim() || ""])

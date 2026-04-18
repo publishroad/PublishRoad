@@ -22,6 +22,8 @@ interface Category {
   slug: string;
 }
 
+const WORLDWIDE_COUNTRY_VALUE = "worldwide";
+
 function OnboardingCurationPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -233,6 +235,7 @@ function OnboardingCurationPageContent() {
                 {...register("countryId")}
               >
                 <option value="">Select country</option>
+                <option value={WORLDWIDE_COUNTRY_VALUE}>Worldwide</option>
                 {countries.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.flagEmoji} {c.name}

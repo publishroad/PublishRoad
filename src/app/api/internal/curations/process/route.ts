@@ -1,9 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Receiver } from "@upstash/qstash";
 import { processCuration } from "@/lib/curation-engine";
+import { db } from "@/lib/db";
+import { invalidateUserProfile } from "@/lib/cache";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
+
+async function markCurationFailedAndRefund(
+  curationId: string,
+  userId: string,
+  errorMessage: string
+) {
+  const markedFailed = await db.curation.updateMany({
+    where: {
+      id: curationId,
+      status: { in: ["pending", "processing"] },
+    },
+    data: {
+      status: "failed",
+      errorMessage: errorMessage.slice(0, 1000),
+    },
+  }).catch(() => ({ count: 0 }));
+
+  if (markedFailed.count === 0) {
+    return;
+  }
+
+  await db.user.update({
+    where: { id: userId },
+    data: { creditsRemaining: { increment: 1 } },
+  }).catch(() => {});
+
+  await invalidateUserProfile(userId).catch(() => {});
+}
 
 /**
  * POST /api/internal/curations/process
@@ -89,18 +119,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
-  await processCuration(
-    curationId,
-    userId,
-    productUrl,
-    keywords ?? [],
-    problemStatement ?? "",
-    solutionStatement ?? "",
-    description ?? null,
-    countryId ?? null,
-    categoryId ?? null,
-    (enabledSectionsSnapshot as ("a" | "b" | "c" | "d" | "e" | "f")[]) ?? ["a", "b", "c", "d", "e", "f"]
-  );
+  try {
+    await processCuration(
+      curationId,
+      userId,
+      productUrl,
+      keywords ?? [],
+      problemStatement ?? "",
+      solutionStatement ?? "",
+      description ?? null,
+      countryId ?? null,
+      categoryId ?? null,
+      (enabledSectionsSnapshot as ("a" | "b" | "c" | "d" | "e" | "f")[]) ?? ["a", "b", "c", "d", "e", "f"]
+    );
 
-  return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown curation processing error";
+    console.error(`[CurationQueue] Processing failed for ${curationId}:`, error);
+
+    await markCurationFailedAndRefund(curationId, userId, errorMessage);
+
+    // Return 200 to stop QStash retries after we have already marked failed and refunded.
+    return NextResponse.json({ success: false, failed: true });
+  }
 }

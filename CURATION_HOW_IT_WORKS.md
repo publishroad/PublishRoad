@@ -57,7 +57,6 @@ Website types are mapped as:
 `websiteBaseConditions`:
 - `isActive = true`
 - `isExcluded = false`
-- country constraint if selected: `(countryId = selected OR countryId IS NULL)`
 - strict category membership via join table: `websiteCategories.some(categoryId = effectiveCategoryId)`
 
 Note:
@@ -77,6 +76,10 @@ Ordered by:
 
 Limit:
 - `take: 150`
+
+Important:
+- Sections A (`distribution`) and B (`guest_post`) do not use country as a filter or score signal.
+- Their ranking is driven by category fit, keywords, description overlap, star rating, and AI score.
 
 ### 4.3 Website fallbacks
 
@@ -100,9 +103,20 @@ Engine then independently backfills each website type:
 - `guest_post`
 - `press_release`
 
-For each type, if count `< 20`, it queries more rows of that type in same category (country-aware), ordered by `starRating DESC, da DESC`, and appends until type count reaches 20 or inventory is exhausted.
+For each type, if count `< 20`, it queries more rows of that type in same category, ordered by `starRating DESC, da DESC`, and appends until type count reaches 20 or inventory is exhausted.
+
+Country is applied in this step only for `press_release` type (Section C).
 
 This means each section can only reach 20 if the DB actually has 20+ rows for that type in the selected category (after filters).
+
+### 4.6 Strict country behavior for Section C (`press_release`)
+
+Section C applies strict country eligibility before ranking:
+- If user selects a specific country, Section C keeps only press release sites matching that country (primary `countryId = selected` OR `websiteCountries` relation match).
+- In this specific-country mode, Section C excludes Worldwide (`countryId IS NULL`) and excludes other countries.
+- If user selects `Worldwide`, Section C keeps only press release sites with `countryId IS NULL`.
+
+No widening fallback is used for Section C. So if only 2 eligible press-release sites exist, Section C returns exactly 2.
 
 ## 5) Ranking Logic for A/B/C (5-star -> 4-star -> 3-star -> rest)
 
