@@ -7,6 +7,7 @@ interface PlanData {
   name: string;
   slug: string;
   priceCents: number;
+  compareAtPriceCents?: number | null;
   billingType: "free" | "one_time" | "monthly" | "lifetime";
   credits: number;
   features: string[];
@@ -56,6 +57,7 @@ export function PricingSection({
             name={plan.name}
             slug={plan.slug}
             priceCents={plan.priceCents}
+            compareAtPriceCents={plan.compareAtPriceCents}
             billingType={plan.billingType}
             credits={plan.credits}
             features={plan.features}

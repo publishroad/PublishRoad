@@ -28,7 +28,9 @@ function linesToFeatures(lines: string): string[] {
 export function HireUsPricingEditor({ initialConfig }: { initialConfig: HireUsPricingConfig }) {
   const router = useRouter();
   const [starterPriceCents, setStarterPriceCents] = useState(initialConfig.starter.priceCents);
+  const [starterCompareAtPriceCents, setStarterCompareAtPriceCents] = useState<number | null>(initialConfig.starter.compareAtPriceCents);
   const [completePriceCents, setCompletePriceCents] = useState(initialConfig.complete.priceCents);
+  const [completeCompareAtPriceCents, setCompleteCompareAtPriceCents] = useState<number | null>(initialConfig.complete.compareAtPriceCents);
   const [starterFeatures, setStarterFeatures] = useState(featuresToLines(initialConfig.starter.includes));
   const [completeFeatures, setCompleteFeatures] = useState(featuresToLines(initialConfig.complete.includes));
   const [faq, setFaq] = useState<HireUsFaqItem[]>(initialConfig.faq);
@@ -56,10 +58,12 @@ export function HireUsPricingEditor({ initialConfig }: { initialConfig: HireUsPr
     const config = normalizeHireUsPricingConfig({
       starter: {
         priceCents: starterPriceCents,
+        compareAtPriceCents: starterCompareAtPriceCents,
         includes: linesToFeatures(starterFeatures),
       },
       complete: {
         priceCents: completePriceCents,
+        compareAtPriceCents: completeCompareAtPriceCents,
         includes: linesToFeatures(completeFeatures),
       },
       faq,
@@ -102,7 +106,22 @@ export function HireUsPricingEditor({ initialConfig }: { initialConfig: HireUsPr
               value={starterPriceCents}
               onChange={(e) => setStarterPriceCents(Number(e.target.value || 0))}
             />
-            <p className="text-xs text-medium-gray">Display price: {formatUsdFromCents(starterPriceCents)}</p>
+            <p className="text-xs text-medium-gray">Offer price: {formatUsdFromCents(starterPriceCents)}</p>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Actual/List Price (cents, optional)</Label>
+            <Input
+              type="number"
+              value={starterCompareAtPriceCents ?? ""}
+              onChange={(e) => {
+                const raw = e.target.value;
+                setStarterCompareAtPriceCents(raw === "" ? null : Number(raw));
+              }}
+              placeholder="Leave blank to disable"
+            />
+            <p className="text-xs text-medium-gray">
+              Actual/List price: {starterCompareAtPriceCents == null ? "Not set" : formatUsdFromCents(starterCompareAtPriceCents)}
+            </p>
           </div>
           <div className="space-y-1.5">
             <Label>Features (one per line)</Label>
@@ -124,7 +143,22 @@ export function HireUsPricingEditor({ initialConfig }: { initialConfig: HireUsPr
               value={completePriceCents}
               onChange={(e) => setCompletePriceCents(Number(e.target.value || 0))}
             />
-            <p className="text-xs text-medium-gray">Display price: {formatUsdFromCents(completePriceCents)}</p>
+            <p className="text-xs text-medium-gray">Offer price: {formatUsdFromCents(completePriceCents)}</p>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Actual/List Price (cents, optional)</Label>
+            <Input
+              type="number"
+              value={completeCompareAtPriceCents ?? ""}
+              onChange={(e) => {
+                const raw = e.target.value;
+                setCompleteCompareAtPriceCents(raw === "" ? null : Number(raw));
+              }}
+              placeholder="Leave blank to disable"
+            />
+            <p className="text-xs text-medium-gray">
+              Actual/List price: {completeCompareAtPriceCents == null ? "Not set" : formatUsdFromCents(completeCompareAtPriceCents)}
+            </p>
           </div>
           <div className="space-y-1.5">
             <Label>Features (one per line)</Label>

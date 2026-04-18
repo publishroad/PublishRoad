@@ -51,6 +51,7 @@ async function getData(id: string) {
     include: {
       websiteTags: { select: { tagId: true } },
       websiteCategories: { select: { categoryId: true } },
+      websiteCountries: { select: { countryId: true } },
     },
   });
 
@@ -61,7 +62,11 @@ async function getData(id: string) {
       ...loadedWebsite,
       tagIds: loadedWebsite.websiteTags.map((t) => t.tagId),
       categoryIds: loadedWebsite.websiteCategories.map((c) => c.categoryId),
-      countryIds: loadedWebsite.countryId ? [loadedWebsite.countryId] : [],
+      countryIds: loadedWebsite.websiteCountries.length > 0
+        ? loadedWebsite.websiteCountries.map((c) => c.countryId)
+        : loadedWebsite.countryId
+          ? [loadedWebsite.countryId]
+          : [],
     };
   }
 

@@ -70,8 +70,21 @@ export function PublicPricingCard(props: PublicPricingCardProps) {
       </p>
 
       <div style={{ display: "flex", alignItems: "baseline", gap: "4px", marginBottom: "4px" }}>
+        {plan.actualPrice && (
+          <span
+            style={{
+              fontSize: "1rem",
+              color: plan.popular ? "#94a3b8" : "#94a3b8",
+              textDecoration: "line-through",
+              marginRight: "6px",
+            }}
+          >
+            {plan.actualPrice}
+            {plan.period}
+          </span>
+        )}
         <span style={{ fontFamily: "var(--font-heading)", fontSize: "2.25rem", fontWeight: 700, color: plan.popular ? "#ffffff" : "#020617", lineHeight: 1 }}>
-          {plan.price}
+          {plan.offerPrice}
         </span>
         {plan.period && (
           <span style={{ fontSize: "0.875rem", color: "#94a3b8", fontWeight: 300 }}>
@@ -79,6 +92,12 @@ export function PublicPricingCard(props: PublicPricingCardProps) {
           </span>
         )}
       </div>
+
+      {plan.savingsLabel && (
+        <p style={{ fontSize: "0.75rem", color: plan.popular ? "#a5b4fc" : "#5B58F6", fontWeight: 600, marginBottom: "0.35rem" }}>
+          {plan.savingsLabel}
+        </p>
+      )}
 
       <p style={{ fontSize: "0.75rem", color: plan.popular ? "#64748b" : "#94a3b8", fontWeight: 300, marginBottom: "0.75rem" }}>
         {plan.billingNote}

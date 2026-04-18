@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { getCachedWithLock, invalidateUserProfile } from "@/lib/cache";
-import { redis } from "@/lib/redis";
+import { invalidateUserProfile } from "@/lib/cache";
 import { applyPlanResultMasking } from "@/lib/curation-mask-policy";
 import { inspectWebsiteMetadata } from "@/lib/website-metadata";
 import { resolveEffectivePlanSlug } from "@/lib/plan-access";
@@ -59,51 +58,40 @@ export async function GET(
   const { id } = await params;
   const userId = session.user.id;
 
-  const cacheKey = `curation:${id}:data`;
-
-  const data = await getCachedWithLock(
-    cacheKey,
-    // No TTL for completed curations — immutable
-    null,
-    async () => {
-      const curation = await db.curation.findUnique({
-        where: { id },
+  const data = await db.curation.findUnique({
+    where: { id },
+    include: {
+      country: {
+        select: { name: true },
+      },
+      results: {
+        orderBy: [{ section: "asc" }, { rank: "asc" }],
         include: {
-          country: {
-            select: { name: true },
-          },
-          results: {
-            orderBy: [{ section: "asc" }, { rank: "asc" }],
-            include: {
-              website: {
-                select: {
-                  name: true,
-                  url: true,
-                  da: true,
-                  pa: true,
-                  spamScore: true,
-                  traffic: true,
-                  type: true,
-                  category: { select: { name: true } },
-                },
-              },
-              influencer: {
-                select: { name: true, platform: true, followersCount: true, profileLink: true },
-              },
-              redditChannel: {
-                select: { name: true, url: true, totalMembers: true, weeklyVisitors: true, postingDifficulty: true },
-              },
-              fund: {
-                select: { name: true, websiteUrl: true, investmentStage: true, ticketSize: true, logoUrl: true },
-              },
+          website: {
+            select: {
+              name: true,
+              url: true,
+              da: true,
+              pa: true,
+              spamScore: true,
+              traffic: true,
+              type: true,
+              category: { select: { name: true } },
             },
           },
+          influencer: {
+            select: { name: true, platform: true, followersCount: true, profileLink: true },
+          },
+          redditChannel: {
+            select: { name: true, url: true, totalMembers: true, weeklyVisitors: true, postingDifficulty: true },
+          },
+          fund: {
+            select: { name: true, websiteUrl: true, investmentStage: true, ticketSize: true, logoUrl: true },
+          },
         },
-      });
-
-      return curation;
-    }
-  );
+      },
+    },
+  });
 
   if (!data) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -226,11 +214,6 @@ export async function DELETE(
   if (refundedCredit) {
     await invalidateUserProfile(userId).catch(() => {});
   }
-
-
-  // Best-effort cache invalidation for curation detail/progress cache.
-  await redis.del(`curation:${id}:data`);
-  await redis.del(`curation:${id}:progress`);
 
   return NextResponse.json({ success: true, refundedCredit });
 }

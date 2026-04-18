@@ -2,6 +2,9 @@ export interface PlanDisplay {
   slug: string;
   name: string;
   price: string;
+  offerPrice: string;
+  actualPrice: string | null;
+  savingsLabel: string | null;
   period: string;
   billingNote: string;
   credits: string;
@@ -25,6 +28,7 @@ export function dbPlanToDisplay(dbPlan: {
   slug: string;
   name: string;
   priceCents: number;
+  compareAtPriceCents: number | null;
   credits: number;
   billingType: string;
   features: unknown;
@@ -32,6 +36,18 @@ export function dbPlanToDisplay(dbPlan: {
   const stat = PLAN_STATIC[dbPlan.slug] ?? { popular: false, badge: null, cta: `Get ${dbPlan.name}` };
 
   const price = dbPlan.priceCents === 0 ? "$0" : `$${Math.floor(dbPlan.priceCents / 100)}`;
+  const compareAtPrice =
+    dbPlan.compareAtPriceCents != null && dbPlan.compareAtPriceCents > dbPlan.priceCents
+      ? `$${Math.floor(dbPlan.compareAtPriceCents / 100)}`
+      : null;
+
+  const savingsLabel =
+    dbPlan.compareAtPriceCents != null &&
+    dbPlan.compareAtPriceCents > 0 &&
+    dbPlan.compareAtPriceCents > dbPlan.priceCents
+      ? `Save ${Math.round(((dbPlan.compareAtPriceCents - dbPlan.priceCents) / dbPlan.compareAtPriceCents) * 100)}%`
+      : null;
+
   const period = dbPlan.billingType === "monthly" ? "/mo" : "";
   const billingNote =
     dbPlan.priceCents === 0 ? "Forever free" :
@@ -50,7 +66,19 @@ export function dbPlanToDisplay(dbPlan: {
     ? dbPlan.features.filter((feature): feature is string => typeof feature === "string")
     : [];
 
-  return { slug: dbPlan.slug, name: dbPlan.name, price, period, billingNote, credits, features, ...stat };
+  return {
+    slug: dbPlan.slug,
+    name: dbPlan.name,
+    price,
+    offerPrice: price,
+    actualPrice: compareAtPrice,
+    savingsLabel,
+    period,
+    billingNote,
+    credits,
+    features,
+    ...stat,
+  };
 }
 
 // Fallback display plans — used ONLY when the DB is unreachable.
@@ -59,6 +87,9 @@ export const PRICING_PLANS: PlanDisplay[] = [
     slug: "free",
     name: "Free",
     price: "$0",
+    offerPrice: "$0",
+    actualPrice: null,
+    savingsLabel: null,
     period: "",
     billingNote: "Forever free",
     credits: "1 curation included",
@@ -76,6 +107,9 @@ export const PRICING_PLANS: PlanDisplay[] = [
     slug: "starter",
     name: "Starter",
     price: "$9",
+    offerPrice: "$9",
+    actualPrice: null,
+    savingsLabel: null,
     period: "",
     billingNote: "One-time payment",
     credits: "1 curation included",
@@ -92,6 +126,9 @@ export const PRICING_PLANS: PlanDisplay[] = [
     slug: "pro",
     name: "Pro",
     price: "$39",
+    offerPrice: "$39",
+    actualPrice: null,
+    savingsLabel: null,
     period: "",
     billingNote: "One-time payment",
     credits: "1 full curation",
@@ -109,6 +146,9 @@ export const PRICING_PLANS: PlanDisplay[] = [
     slug: "lifetime",
     name: "Lifetime",
     price: "$599",
+    offerPrice: "$599",
+    actualPrice: null,
+    savingsLabel: null,
     period: "",
     billingNote: "One-time, forever",
     credits: "15 curations/month",

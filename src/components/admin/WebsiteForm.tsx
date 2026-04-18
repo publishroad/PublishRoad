@@ -301,7 +301,15 @@ export function WebsiteForm({ website, countries, categories, tags }: WebsiteFor
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => setIsWorldwideSelected((prev) => !prev)}
+                onClick={() =>
+                  setIsWorldwideSelected((prev) => {
+                    const next = !prev;
+                    if (next) {
+                      setSelectedCountries([]);
+                    }
+                    return next;
+                  })
+                }
                 className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
                   isWorldwideSelected
                     ? "bg-navy text-white border-navy"
@@ -314,13 +322,14 @@ export function WebsiteForm({ website, countries, categories, tags }: WebsiteFor
                 <button
                   key={c.id}
                   type="button"
-                  onClick={() =>
+                  onClick={() => {
+                    setIsWorldwideSelected(false);
                     setSelectedCountries((prev) =>
                       prev.includes(c.id)
                         ? prev.filter((id) => id !== c.id)
                         : [...prev, c.id]
-                    )
-                  }
+                    );
+                  }}
                   className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
                     selectedCountries.includes(c.id)
                       ? "bg-navy text-white border-navy"

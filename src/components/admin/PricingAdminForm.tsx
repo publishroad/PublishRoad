@@ -13,6 +13,7 @@ interface Plan {
   name: string;
   slug: string;
   priceCents: number;
+  compareAtPriceCents: number | null;
   credits: number;
   billingType: string;
   stripePriceId: string | null;
@@ -187,6 +188,24 @@ export function PricingAdminForm({
                   </p>
                 </div>
                 <div className="space-y-1.5">
+                  <Label>Actual/List Price (cents)</Label>
+                  <Input
+                    type="number"
+                    value={form.compareAtPriceCents ?? ""}
+                    onChange={(e) => {
+                      const raw = e.target.value.trim();
+                      setForm((f) => ({
+                        ...f,
+                        compareAtPriceCents: raw === "" ? null : Number(raw),
+                      }));
+                    }}
+                    placeholder="Optional"
+                  />
+                  <p className="text-xs text-medium-gray">
+                    = {form.compareAtPriceCents == null ? "Not set" : formatCurrency(form.compareAtPriceCents, "USD")}
+                  </p>
+                </div>
+                <div className="space-y-1.5">
                   <Label>Credits (-1 = unlimited)</Label>
                   <Input
                     type="number"
@@ -270,6 +289,9 @@ export function PricingAdminForm({
                   </span>
                 </div>
                 <div className="flex gap-4 mt-1 text-sm text-medium-gray">
+                  {plan.compareAtPriceCents != null && plan.compareAtPriceCents > plan.priceCents && (
+                    <span className="line-through text-gray-400">{formatCurrency(plan.compareAtPriceCents, "USD")}</span>
+                  )}
                   <span>{formatCurrency(plan.priceCents, "USD")}</span>
                   <span>{plan.credits === -1 ? "Unlimited credits" : `${plan.credits} credits`}</span>
                   <span className="capitalize">{plan.billingType.replace("_", " ")}</span>

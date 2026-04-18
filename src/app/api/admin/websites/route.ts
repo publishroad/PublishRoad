@@ -52,6 +52,9 @@ export async function POST(req: NextRequest) {
       categoryIds.length > 0
         ? db.websiteCategory.createMany({ data: categoryIds.map((categoryId) => ({ websiteId: website.id, categoryId })) })
         : Promise.resolve(),
+      countryIds.length > 0
+        ? db.websiteCountry.createMany({ data: countryIds.map((countryId) => ({ websiteId: website.id, countryId })) })
+        : Promise.resolve(),
     ]);
 
     return NextResponse.json(website, { status: 201 });
