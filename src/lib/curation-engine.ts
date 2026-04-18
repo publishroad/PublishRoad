@@ -469,7 +469,9 @@ export async function processCuration(
   // Extract meaningful words from product description for description-overlap scoring
   const productDescWords = extractDescWords(description ?? "");
 
-  const categoryIdToSlug = new Map(availableCategories.map((entry) => [entry.id, entry.slug]));
+  const categoryIdToSlug = new Map<string, string>(
+    availableCategories.map((entry): [string, string] => [entry.id, entry.slug])
+  );
 
   const websiteCategoriesSupportProbe = await db.$queryRaw<Array<{ exists: boolean }>>`
     SELECT to_regclass('public.website_categories') IS NOT NULL AS "exists"
