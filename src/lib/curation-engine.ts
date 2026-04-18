@@ -509,21 +509,44 @@ export async function processCuration(
     ...(hasWebsiteCountriesTable ? { websiteCountries: { select: { countryId: true } } } : {}),
   };
 
-  const normalizeWebsiteRows = <T extends {
+  type WebsiteQueryRowInput = {
+    id: string;
+    name: string;
+    url: string;
+    da: number;
+    pa: number;
+    spamScore: number;
+    traffic: number;
+    type: string;
+    description: string | null;
+    tagSlugs: string[];
+    categoryId: string | null;
+    countryId: string | null;
+    starRating: number | null;
     websiteCountries?: Array<{ countryId: string }>;
-    websiteCategories?: Array<{ category: { slug: string | null } }>;
-  }>(
-    rows: T[]
-  ): Array<
-    Omit<T, "websiteCountries" | "websiteCategories"> & {
-      websiteCountries: Array<{ countryId: string }>;
-      websiteCategories: Array<{ category: { slug: string | null } }>;
-    }
-  > => {
+    websiteCategories?: Array<{
+      category?: { slug: string | null } | null;
+      categoryId?: string;
+      websiteId?: string;
+    }>;
+  };
+
+  type NormalizedWebsiteRow = Omit<WebsiteQueryRowInput, "websiteCountries" | "websiteCategories"> & {
+    websiteCountries: Array<{ countryId: string }>;
+    websiteCategories: Array<{ category: { slug: string | null } }>;
+  };
+
+  const normalizeWebsiteRows = (
+    rows: WebsiteQueryRowInput[]
+  ): NormalizedWebsiteRow[] => {
     return rows.map((row) => ({
       ...row,
       websiteCountries: Array.isArray(row.websiteCountries) ? row.websiteCountries : [],
-      websiteCategories: Array.isArray(row.websiteCategories) ? row.websiteCategories : [],
+      websiteCategories: Array.isArray(row.websiteCategories)
+        ? row.websiteCategories
+            .filter((entry): entry is { category: { slug: string | null } } => Boolean(entry?.category))
+            .map((entry) => ({ category: { slug: entry.category.slug ?? null } }))
+        : [],
     }));
   };
 
@@ -636,7 +659,7 @@ export async function processCuration(
     }),
   ]);
 
-  const rawWebsites = normalizeWebsiteRows(rawWebsiteRows as Array<{ websiteCountries?: Array<{ countryId: string }> }>);
+  const rawWebsites = normalizeWebsiteRows(rawWebsiteRows);
 
   // Fallback: if too few website results, drop keywords but keep country + category hard filters
   let candidateSites = rawWebsites;
@@ -646,7 +669,7 @@ export async function processCuration(
       orderBy: [{ starRating: "desc" }, { da: "desc" }],
       take: 150,
       select: websiteSelect,
-    }) as Array<{ websiteCountries?: Array<{ countryId: string }> }>);
+    }));
   }
   // Last resort: if still empty, keep the selected category hard filter and
   // relax country only. Never widen website results outside the chosen category.
@@ -664,7 +687,7 @@ export async function processCuration(
       orderBy: [{ starRating: "desc" }, { da: "desc" }],
       take: 150,
       select: websiteSelect,
-    }) as Array<{ websiteCountries?: Array<{ countryId: string }> }>);
+    }));
   }
 
   // Fallback 1: drop keywords, keep country + category
@@ -760,7 +783,7 @@ export async function processCuration(
           : { categoryId: effectiveCategoryId }),
       },
       select: websiteSelect,
-    }) as Array<{ websiteCountries?: Array<{ countryId: string }> }>);
+    }));
     const existingIds = new Set(candidateSites.map((s) => s.id));
     for (const site of prioritySites) {
       if (!existingIds.has(site.id)) {
@@ -810,7 +833,7 @@ export async function processCuration(
       orderBy: [{ starRating: "desc" }, { da: "desc" }],
       take: missingCount + 20,
       select: websiteSelect,
-    }) as Array<{ websiteCountries?: Array<{ countryId: string }> }>);
+    }));
 
     for (const site of typedBackfill) {
       if (existingWebsiteIds.has(site.id)) {
