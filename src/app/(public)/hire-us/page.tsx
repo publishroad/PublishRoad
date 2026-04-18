@@ -60,6 +60,26 @@ export default async function HireUsPage() {
   const pricingConfig = await getHireUsPricingConfig();
   const starterPrice = formatUsdFromCents(pricingConfig.starter.priceCents);
   const completePrice = formatUsdFromCents(pricingConfig.complete.priceCents);
+  const starterCompareAtPrice =
+    pricingConfig.starter.compareAtPriceCents != null &&
+    pricingConfig.starter.compareAtPriceCents > pricingConfig.starter.priceCents
+      ? formatUsdFromCents(pricingConfig.starter.compareAtPriceCents)
+      : null;
+  const completeCompareAtPrice =
+    pricingConfig.complete.compareAtPriceCents != null &&
+    pricingConfig.complete.compareAtPriceCents > pricingConfig.complete.priceCents
+      ? formatUsdFromCents(pricingConfig.complete.compareAtPriceCents)
+      : null;
+  const starterSavingsLabel =
+    pricingConfig.starter.compareAtPriceCents != null &&
+    pricingConfig.starter.compareAtPriceCents > pricingConfig.starter.priceCents
+      ? `Save ${Math.round(((pricingConfig.starter.compareAtPriceCents - pricingConfig.starter.priceCents) / pricingConfig.starter.compareAtPriceCents) * 100)}%`
+      : null;
+  const completeSavingsLabel =
+    pricingConfig.complete.compareAtPriceCents != null &&
+    pricingConfig.complete.compareAtPriceCents > pricingConfig.complete.priceCents
+      ? `Save ${Math.round(((pricingConfig.complete.compareAtPriceCents - pricingConfig.complete.priceCents) / pricingConfig.complete.compareAtPriceCents) * 100)}%`
+      : null;
   const heroBadges = [
     "Fully managed execution",
     `2 packages from ${starterPrice}`,
@@ -616,17 +636,53 @@ export default async function HireUsPage() {
               }}
             >
               <div
-                className="inline-block self-start rounded-full px-3 py-1 text-xs font-semibold mb-4"
+                className="inline-block self-center rounded-full px-3 py-1 text-xs font-semibold mb-4"
                 style={{ background: "rgba(91,88,246,0.08)", color: "#5B58F6" }}
               >
                 Starter
               </div>
-              <div style={{ fontFamily: "var(--font-heading)", fontSize: "4rem", fontWeight: 800, color: "#020617", lineHeight: 1 }}>
-                {starterPrice}
+              <div
+                className="flex items-end justify-center gap-3"
+                style={{ minHeight: "4.2rem", marginBottom: "0.25rem" }}
+              >
+                {starterCompareAtPrice && (
+                  <p
+                    style={{
+                      color: "#94a3b8",
+                      fontSize: "1.2rem",
+                      textDecoration: "line-through",
+                      lineHeight: 1,
+                      marginBottom: "0.6rem",
+                    }}
+                  >
+                    {starterCompareAtPrice}
+                  </p>
+                )}
+                <div
+                  style={{
+                    fontFamily: "var(--font-heading)",
+                    fontSize: "4rem",
+                    fontWeight: 800,
+                    color: "#020617",
+                    lineHeight: 1,
+                  }}
+                >
+                  {starterPrice}
+                </div>
               </div>
-              <p style={{ color: "#94a3b8", fontSize: "0.9rem", marginTop: "0.5rem", marginBottom: "2rem" }}>
-                One-time · No recurring fees
-              </p>
+              <div className="flex flex-col items-center" style={{ marginTop: "0.5rem", marginBottom: "2rem" }}>
+                <p style={{ color: "#94a3b8", fontSize: "0.9rem", textAlign: "center" }}>
+                  One-time · No recurring fees
+                </p>
+                {starterSavingsLabel && (
+                  <span
+                    className="mt-2 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold"
+                    style={{ border: "1px solid #86efac", background: "#f0fdf4", color: "#166534" }}
+                  >
+                    {starterSavingsLabel}
+                  </span>
+                )}
+              </div>
               <div className="space-y-3 mb-8 text-left flex-1">
                 {pricingConfig.starter.includes.map((item, i) => (
                   <div key={i} className="flex items-start gap-3">
@@ -666,17 +722,53 @@ export default async function HireUsPage() {
               }}
             >
               <div
-                className="inline-block self-start rounded-full px-3 py-1 text-xs font-semibold mb-4"
+                className="inline-block self-center rounded-full px-3 py-1 text-xs font-semibold mb-4"
                 style={{ background: "rgba(255,255,255,0.2)", color: "white" }}
               >
                 Complete ✦ Most Popular
               </div>
-              <div style={{ fontFamily: "var(--font-heading)", fontSize: "4rem", fontWeight: 800, color: "white", lineHeight: 1 }}>
-                {completePrice}
+              <div
+                className="flex items-end justify-center gap-3"
+                style={{ minHeight: "4.2rem", marginBottom: "0.25rem" }}
+              >
+                {completeCompareAtPrice && (
+                  <p
+                    style={{
+                      color: "rgba(255,255,255,0.7)",
+                      fontSize: "1.2rem",
+                      textDecoration: "line-through",
+                      lineHeight: 1,
+                      marginBottom: "0.6rem",
+                    }}
+                  >
+                    {completeCompareAtPrice}
+                  </p>
+                )}
+                <div
+                  style={{
+                    fontFamily: "var(--font-heading)",
+                    fontSize: "4rem",
+                    fontWeight: 800,
+                    color: "white",
+                    lineHeight: 1,
+                  }}
+                >
+                  {completePrice}
+                </div>
               </div>
-              <p style={{ color: "rgba(255,255,255,0.7)", fontSize: "0.9rem", marginTop: "0.5rem", marginBottom: "2rem" }}>
-                One-time · No recurring fees
-              </p>
+              <div className="flex flex-col items-center" style={{ marginTop: "0.5rem", marginBottom: "2rem" }}>
+                <p style={{ color: "rgba(255,255,255,0.7)", fontSize: "0.9rem", textAlign: "center" }}>
+                  One-time · No recurring fees
+                </p>
+                {completeSavingsLabel && (
+                  <span
+                    className="mt-2 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold"
+                    style={{ border: "1px solid rgba(255,255,255,0.45)", background: "rgba(255,255,255,0.18)", color: "#ffffff" }}
+                  >
+                    {completeSavingsLabel}
+                  </span>
+                )}
+              </div>
               <div className="space-y-3 mb-8 text-left flex-1">
                 {pricingConfig.complete.includes.map((item, i) => (
                   <div key={i} className="flex items-start gap-3">

@@ -13,6 +13,7 @@ interface PricingCardProps {
   name: string;
   slug: string;
   priceCents: number;
+  compareAtPriceCents?: number | null;
   billingType: "free" | "one_time" | "monthly" | "lifetime";
   credits: number;
   features: string[];
@@ -26,6 +27,7 @@ export function PricingCard({
   name,
   slug,
   priceCents,
+  compareAtPriceCents,
   billingType,
   credits,
   features,
@@ -46,6 +48,18 @@ export function PricingCard({
       : billingType === "monthly"
       ? `${formatCurrency(priceCents)}/mo`
       : formatCurrency(priceCents);
+
+  const compareAtLabel =
+    compareAtPriceCents != null && compareAtPriceCents > priceCents
+      ? billingType === "monthly"
+        ? `${formatCurrency(compareAtPriceCents)}/mo`
+        : formatCurrency(compareAtPriceCents)
+      : null;
+
+  const savingsLabel =
+    compareAtPriceCents != null && compareAtPriceCents > 0 && compareAtPriceCents > priceCents
+      ? `Save ${Math.round(((compareAtPriceCents - priceCents) / compareAtPriceCents) * 100)}%`
+      : null;
 
   const billingLabel =
     billingType === "monthly"
@@ -198,6 +212,11 @@ export function PricingCard({
           {name}
         </h3>
         <div className="flex items-baseline gap-1">
+          {compareAtLabel && (
+            <span className="text-base font-medium line-through text-slate-400 mr-1">
+              {compareAtLabel}
+            </span>
+          )}
           <span
             className="text-3xl font-bold"
             style={{ color: "var(--dark)", fontFamily: "var(--font-heading)" }}
@@ -205,6 +224,11 @@ export function PricingCard({
             {priceLabel}
           </span>
         </div>
+        {savingsLabel && (
+          <p className="text-xs mt-1 font-semibold" style={{ color: "var(--indigo)" }}>
+            {savingsLabel}
+          </p>
+        )}
         {billingLabel && (
           <p className="text-xs text-slate-400 mt-1 font-light">{billingLabel}</p>
         )}

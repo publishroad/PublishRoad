@@ -209,7 +209,7 @@ function buildWebsiteMatchingPrompt(p: ProductContext, websites: WebsiteCandidat
   const pressRelease  = websites.filter((w) => w.type === "press_release");
 
   const fmt = (w: WebsiteCandidate, i: number) => {
-    const starLabel = w.starRating && w.starRating >= 4 ? ` ⭐PRIORITY(${w.starRating}★)` : "";
+    const starLabel = w.starRating && w.starRating >= 3 ? ` ⭐PRIORITY(${w.starRating}★)` : "";
     return `${i + 1}. ID:W:${w.id} | Name:${w.name}${starLabel} | URL:${w.url} | DA:${w.da} | PA:${w.pa} | Spam:${w.spamScore} | Traffic:${w.traffic} | Tags:${w.tagSlugs.join(",")} | Desc:${w.description?.slice(0, 200) ?? "N/A"}`;
   };
 
@@ -240,7 +240,7 @@ Platform compatibility check (CRITICAL — apply to every site before including 
 - If the product IS built for that platform, these sites become highly relevant and should rank high
 - If there is any platform mismatch, exclude the site entirely regardless of category or tag overlap
 
-Priority sites (marked ⭐PRIORITY): These are admin-verified gold-standard sites for this category. Include them in results unless there is a clear platform or audience mismatch specific to this product. Category alignment alone is sufficient to include them — apply the platform check but give strong benefit of the doubt.
+Priority sites (marked ⭐PRIORITY): These are admin-verified gold-standard sites for this category. Include them in results unless there is a clear platform or audience mismatch specific to this product. Category alignment alone is sufficient to include them — apply the platform check but give strong benefit of the doubt. If multiple priority sites qualify, prefer 5★ first, then 4★, then 3★ before non-priority sites.
 
 ${JSON_SCHEMA}
 ${JSON_RULES}`;

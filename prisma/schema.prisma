@@ -18,6 +18,7 @@ model Country {
   funds       Fund[]
   influencers Influencer[]
   websites    Website[]
+  websiteCountries WebsiteCountry[]
 
   @@map("countries")
 }
@@ -75,6 +76,7 @@ model PlanConfig {
   name          String
   slug          String      @unique
   priceCents    Int         @map("price_cents")
+  compareAtPriceCents Int?  @map("compare_at_price_cents")
   credits       Int
   billingType   BillingType @map("billing_type")
   stripePriceId String?     @map("stripe_price_id")
@@ -176,6 +178,7 @@ model Website {
   starRating        Int?              @map("star_rating")
   curationResults   CurationResult[]
   websiteCategories WebsiteCategory[]
+  websiteCountries  WebsiteCountry[]
   websiteTags       WebsiteTag[]
   category          Category?         @relation(fields: [categoryId], references: [id])
   country           Country?          @relation(fields: [countryId], references: [id])
@@ -196,6 +199,17 @@ model WebsiteTag {
 
   @@id([websiteId, tagId])
   @@map("website_tags")
+}
+
+model WebsiteCountry {
+  websiteId String  @map("website_id")
+  countryId String  @map("country_id")
+  website   Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  country   Country @relation(fields: [countryId], references: [id], onDelete: Cascade)
+
+  @@id([websiteId, countryId])
+  @@index([countryId, websiteId], map: "website_countries_country_id_website_id_idx")
+  @@map("website_countries")
 }
 
 model Curation {
@@ -651,6 +665,7 @@ model WebsiteCategory {
   website    Website  @relation(fields: [websiteId], references: [id], onDelete: Cascade)
 
   @@id([websiteId, categoryId])
+  @@index([categoryId, websiteId], map: "website_categories_category_id_website_id_idx")
   @@map("website_categories")
 }
 

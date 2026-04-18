@@ -92,6 +92,8 @@ export function HireUsPackageSelector({
       slug: HireUsPackageSlug;
       name: string;
       price: string;
+      compareAtPrice: string | null;
+      savingsLabel: string | null;
       note: string;
       description: string;
       includes: string[];
@@ -100,6 +102,16 @@ export function HireUsPackageSelector({
         slug: "starter",
         name: "Starter",
         price: formatUsdFromCents(pricingConfig.starter.priceCents),
+        compareAtPrice:
+          pricingConfig.starter.compareAtPriceCents != null &&
+          pricingConfig.starter.compareAtPriceCents > pricingConfig.starter.priceCents
+            ? formatUsdFromCents(pricingConfig.starter.compareAtPriceCents)
+            : null,
+        savingsLabel:
+          pricingConfig.starter.compareAtPriceCents != null &&
+          pricingConfig.starter.compareAtPriceCents > pricingConfig.starter.priceCents
+            ? `Save ${Math.round(((pricingConfig.starter.compareAtPriceCents - pricingConfig.starter.priceCents) / pricingConfig.starter.compareAtPriceCents) * 100)}%`
+            : null,
         note: "One-time",
         description: "Managed launch submissions for quick traction.",
         includes: pricingConfig.starter.includes,
@@ -108,6 +120,16 @@ export function HireUsPackageSelector({
         slug: "complete",
         name: "Complete",
         price: formatUsdFromCents(pricingConfig.complete.priceCents),
+        compareAtPrice:
+          pricingConfig.complete.compareAtPriceCents != null &&
+          pricingConfig.complete.compareAtPriceCents > pricingConfig.complete.priceCents
+            ? formatUsdFromCents(pricingConfig.complete.compareAtPriceCents)
+            : null,
+        savingsLabel:
+          pricingConfig.complete.compareAtPriceCents != null &&
+          pricingConfig.complete.compareAtPriceCents > pricingConfig.complete.priceCents
+            ? `Save ${Math.round(((pricingConfig.complete.compareAtPriceCents - pricingConfig.complete.priceCents) / pricingConfig.complete.compareAtPriceCents) * 100)}%`
+            : null,
         note: "One-time",
         description: "Full done-for-you distribution, outreach, and support.",
         includes: pricingConfig.complete.includes,
@@ -249,13 +271,23 @@ export function HireUsPackageSelector({
                 <p className="text-xs uppercase tracking-widest font-semibold" style={{ color: "var(--indigo)" }}>
                   {pkg.name}
                 </p>
+                {pkg.compareAtPrice && (
+                  <p className="mt-3 text-base font-medium text-slate-400 line-through">{pkg.compareAtPrice}</p>
+                )}
                 <p
                   className={isOnboarding ? "mt-2 text-5xl font-bold" : "mt-2 text-4xl font-bold"}
                   style={{ fontFamily: "var(--font-heading)", color: "var(--dark)", letterSpacing: "-0.02em" }}
                 >
                   {pkg.price}
                 </p>
-                <p className="text-sm text-slate-500 mt-1">{pkg.note}</p>
+                <div className="mt-1 flex items-center gap-2">
+                  <p className="text-sm text-slate-500">{pkg.note}</p>
+                  {pkg.savingsLabel && (
+                    <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                      {pkg.savingsLabel}
+                    </span>
+                  )}
+                </div>
                 <div className="flex-1">
                   <p className={isOnboarding ? "text-sm text-slate-600 mt-5 leading-6" : "text-sm text-slate-600 mt-4 leading-6"}>
                     {pkg.description}

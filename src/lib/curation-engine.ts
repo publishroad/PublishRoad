@@ -1,3 +1,4 @@
+import { Client } from "@upstash/qstash";
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { redis } from "@/lib/redis";
@@ -55,6 +56,96 @@ async function assertCurationStillExists(curationId: string) {
   if (!curation) {
     throw new Error("CURATION_CANCELLED");
   }
+}
+
+type RankedWebsiteCandidate = {
+  id: string;
+  type: string;
+  starRating?: number | null;
+  description?: string | null;
+  _score: number;
+};
+
+type WebsiteSectionResult = {
+  websiteId: string;
+  matchScore: number;
+  matchReason: string;
+  section: "a" | "b" | "c";
+  rank: number;
+};
+
+const WEBSITE_SECTION_DB_TYPES = ["distribution", "guest_post", "press_release"] as const;
+
+function countResultsBySection<T extends { section: string }>(results: T[]) {
+  return results.reduce<Record<string, number>>((acc, result) => {
+    acc[result.section] = (acc[result.section] ?? 0) + 1;
+    return acc;
+  }, {});
+}
+
+function getWebsiteStarTier(starRating?: number | null): 0 | 3 | 4 | 5 {
+  if (starRating === 5) return 5;
+  if (starRating === 4) return 4;
+  if (starRating === 3) return 3;
+  return 0;
+}
+
+function buildTieredWebsiteResults<T extends RankedWebsiteCandidate>(input: {
+  section: "a" | "b" | "c";
+  pool: T[];
+  maxPerSection: number;
+  usedWebsiteIds: Set<string>;
+  getAiScore: (siteId: string) => number | undefined;
+  getAiReason: (siteId: string) => string | undefined;
+  toDeterministicScore: (score: number) => number;
+}): WebsiteSectionResult[] {
+  const {
+    section,
+    pool,
+    maxPerSection,
+    usedWebsiteIds,
+    getAiScore,
+    getAiReason,
+    toDeterministicScore,
+  } = input;
+
+  const scoredPool = pool
+    .filter((site) => !usedWebsiteIds.has(site.id))
+    .map((site) => {
+      const aiScore = getAiScore(site.id);
+      const aiReason = getAiReason(site.id)?.trim() ?? "";
+      const fallbackReason = site.description?.trim() || "";
+
+      return {
+        site,
+        starTier: getWebsiteStarTier(site.starRating),
+        effectiveScore: aiScore ?? toDeterministicScore(site._score),
+        matchReason: aiReason || fallbackReason,
+      };
+    });
+
+  const sortWithinTier = (a: (typeof scoredPool)[number], b: (typeof scoredPool)[number]) => {
+    if (b.effectiveScore !== a.effectiveScore) return b.effectiveScore - a.effectiveScore;
+    if ((b.site.starRating ?? 0) !== (a.site.starRating ?? 0)) {
+      return (b.site.starRating ?? 0) - (a.site.starRating ?? 0);
+    }
+    return b.site._score - a.site._score;
+  };
+
+  const ordered = [5, 4, 3, 0]
+    .flatMap((tier) => scoredPool.filter((item) => item.starTier === tier).sort(sortWithinTier))
+    .slice(0, maxPerSection);
+
+  return ordered.map((item, index) => {
+    usedWebsiteIds.add(item.site.id);
+    return {
+      websiteId: item.site.id,
+      matchScore: item.effectiveScore,
+      matchReason: item.matchReason,
+      section,
+      rank: index + 1,
+    };
+  });
 }
 
 export async function runCuration(input: RunCurationInput) {
@@ -168,58 +259,49 @@ export async function runCuration(input: RunCurationInput) {
   // the curation is still processing.
   await invalidateUserProfile(userId).catch(() => {});
 
-  // ─── Step 2: Process asynchronously (fire and forget) ────────────────────
-  // In production this would be a background job/queue (e.g., Upstash QStash).
-  // For simplicity here we use a detached async function.
-  processCuration(
-    result.id,
-    userId,
-    productUrl,
-    keywords,
-    problemStatement,
-    solutionStatement,
-    description,
-    countryId,
-    categoryId,
-    enabledSectionsSnapshot
-  ).catch(
-    async (err) => {
-      if (err instanceof Error && err.message === "CURATION_CANCELLED") {
-        return;
-      }
+  // ─── Step 2: Enqueue via QStash (survives serverless function termination) ──
+  const qstashToken = process.env.QSTASH_TOKEN;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
 
-      console.error(`Curation ${result.id} failed:`, err);
+  if (qstashToken && appUrl) {
+    const client = new Client({ token: qstashToken });
+    const processorUrl = `${appUrl}/api/internal/curations/process`;
 
-      const markedFailed = await db.curation.updateMany({
-        where: {
-          id: result.id,
-          status: { in: ["pending", "processing"] },
+    await client
+      .publishJSON({
+        url: processorUrl,
+        body: {
+          curationId: result.id,
+          userId,
+          productUrl,
+          keywords,
+          problemStatement,
+          solutionStatement,
+          description,
+          countryId: countryId ?? null,
+          categoryId: categoryId ?? null,
+          enabledSectionsSnapshot,
         },
-        data: {
-          status: "failed",
-          errorMessage: err instanceof Error ? err.message.slice(0, 1000) : "Unknown curation error",
+        retries: 2,
+        headers: {
+          // QStash forwards all custom headers — processor verifies signature instead
         },
-      }).catch(() => ({ count: 0 }));
-
-      if (markedFailed.count === 0) {
-        return;
-      }
-
-      await setProgress(result.id, "error").catch(() => {});
-
-      // Refund the credit only for genuine processing failures.
-      await db.user.update({
-        where: { id: userId },
-        data: { creditsRemaining: { increment: 1 } },
-      }).catch(() => {});
-      await invalidateUserProfile(userId).catch(() => {});
-    }
-  );
+      })
+      .catch(async (err) => {
+        // QStash publish failed — fall back to local fire-and-forget so the
+        // user still gets results (acceptable in dev / if QStash is misconfigured).
+        console.error(`[CurationQueue] QStash publish failed for ${result.id}, falling back to local:`, err);
+        runProcessCurationLocal(result.id, userId, productUrl, keywords, problemStatement, solutionStatement, description, countryId, categoryId, enabledSectionsSnapshot);
+      });
+  } else {
+    // QStash not configured (local dev) — run inline
+    runProcessCurationLocal(result.id, userId, productUrl, keywords, problemStatement, solutionStatement, description, countryId, categoryId, enabledSectionsSnapshot);
+  }
 
   return result;
 }
 
-async function processCuration(
+function runProcessCurationLocal(
   curationId: string,
   userId: string,
   productUrl: string,
@@ -231,6 +313,70 @@ async function processCuration(
   categoryId?: string | null,
   enabledSectionsSnapshot: CurationSectionKey[] = ["a", "b", "c", "d", "e", "f"]
 ) {
+  processCuration(
+    curationId,
+    userId,
+    productUrl,
+    keywords,
+    problemStatement,
+    solutionStatement,
+    description,
+    countryId,
+    categoryId,
+    enabledSectionsSnapshot
+  ).catch(async (err) => {
+    if (err instanceof Error && err.message === "CURATION_CANCELLED") {
+      return;
+    }
+
+    console.error(`Curation ${curationId} failed:`, err);
+
+    const markedFailed = await db.curation.updateMany({
+      where: {
+        id: curationId,
+        status: { in: ["pending", "processing"] },
+      },
+      data: {
+        status: "failed",
+        errorMessage: err instanceof Error ? err.message.slice(0, 1000) : "Unknown curation error",
+      },
+    }).catch(() => ({ count: 0 }));
+
+    if (markedFailed.count === 0) {
+      return;
+    }
+
+    await setProgress(curationId, "error").catch(() => {});
+
+    await db.user.update({
+      where: { id: userId },
+      data: { creditsRemaining: { increment: 1 } },
+    }).catch(() => {});
+    await invalidateUserProfile(userId).catch(() => {});
+  });
+}
+
+export async function processCuration(
+  curationId: string,
+  userId: string,
+  productUrl: string,
+  keywords: string[],
+  problemStatement: string,
+  solutionStatement: string,
+  description: string | null,
+  countryId?: string | null,
+  categoryId?: string | null,
+  enabledSectionsSnapshot: CurationSectionKey[] = ["a", "b", "c", "d", "e", "f"]
+) {
+  // Idempotency guard: skip if already completed or failed (handles QStash retries)
+  const existing = await db.curation.findUnique({
+    where: { id: curationId },
+    select: { status: true },
+  });
+  if (!existing || existing.status === "completed" || existing.status === "failed") {
+    return;
+  }
+
   await assertCurationStillExists(curationId);
   await setProgress(curationId, "started");
 
@@ -264,6 +410,10 @@ async function processCuration(
 
   // Use inferred category if user didn't explicitly pick one
   const effectiveCategoryId = categoryId ?? inferredCategoryId;
+  if (!effectiveCategoryId) {
+    throw new Error("CATEGORY_REQUIRED_FOR_CURATION");
+  }
+
   const category = effectiveCategoryId
     ? (availableCategories.find((c) => c.id === effectiveCategoryId) ?? null)
     : null;
@@ -277,9 +427,6 @@ async function processCuration(
   // Resolved slug for the effective category — used as the target in scoreCategoryMatch
   const userCategorySlug = category?.slug ?? "";
 
-  // Map from category ID → slug; resolves website.categoryId (FK) to a slug for scoring
-  const categorySlugMap = new Map(availableCategories.map((c) => [c.id, c.slug]));
-
   // Extract meaningful words from product description for description-overlap scoring
   const productDescWords = extractDescWords(description ?? "");
 
@@ -287,8 +434,9 @@ async function processCuration(
   const websiteBaseConditions: Prisma.WebsiteWhereInput[] = [
     { isActive: true },
     { isExcluded: false },
-    ...(countryId ? [{ OR: [{ countryId }, { countryId: null }] } as Prisma.WebsiteWhereInput] : []),
-    ...(categoryId ? [{ OR: [{ categoryId }, { categoryId: null }] } as Prisma.WebsiteWhereInput] : []),
+    ...(countryId ? [{ OR: [{ countryId }, { countryId: null }, { websiteCountries: { some: { countryId } } }] } as Prisma.WebsiteWhereInput] : []),
+    // Match via join table so multi-category sites are included (not just primary categoryId)
+    ...(effectiveCategoryId ? [{ websiteCategories: { some: { categoryId: effectiveCategoryId } } } as Prisma.WebsiteWhereInput] : []),
   ];
 
   const [rawWebsites, rawInfluencers, rawReddit, rawFunds] = await Promise.all([
@@ -309,7 +457,23 @@ async function processCuration(
       },
       orderBy: [{ starRating: "desc" }, { da: "desc" }],
       take: 150,
-      select: { id: true, name: true, url: true, da: true, pa: true, spamScore: true, traffic: true, type: true, description: true, tagSlugs: true, categoryId: true, countryId: true, starRating: true },
+      select: {
+        id: true,
+        name: true,
+        url: true,
+        da: true,
+        pa: true,
+        spamScore: true,
+        traffic: true,
+        type: true,
+        description: true,
+        tagSlugs: true,
+        categoryId: true,
+        countryId: true,
+        starRating: true,
+        websiteCategories: { select: { category: { select: { slug: true } } } },
+        websiteCountries: { select: { countryId: true } },
+      },
     }),
 
     db.influencer.findMany({
@@ -393,16 +557,53 @@ async function processCuration(
       where: { AND: websiteBaseConditions },
       orderBy: [{ starRating: "desc" }, { da: "desc" }],
       take: 150,
-      select: { id: true, name: true, url: true, da: true, pa: true, spamScore: true, traffic: true, type: true, description: true, tagSlugs: true, categoryId: true, countryId: true, starRating: true },
+      select: {
+        id: true,
+        name: true,
+        url: true,
+        da: true,
+        pa: true,
+        spamScore: true,
+        traffic: true,
+        type: true,
+        description: true,
+        tagSlugs: true,
+        categoryId: true,
+        countryId: true,
+        starRating: true,
+        websiteCategories: { select: { category: { select: { slug: true } } } },
+        websiteCountries: { select: { countryId: true } },
+      },
     });
   }
-  // Last resort: if still empty, drop all optional filters and use top active websites.
+  // Last resort: if still empty, keep the selected category hard filter and
+  // relax country only. Never widen website results outside the chosen category.
   if (candidateSites.length === 0) {
     candidateSites = await db.website.findMany({
-      where: { isActive: true, isExcluded: false },
+      where: {
+        isActive: true,
+        isExcluded: false,
+        ...(effectiveCategoryId ? { websiteCategories: { some: { categoryId: effectiveCategoryId } } } : {}),
+      },
       orderBy: [{ starRating: "desc" }, { da: "desc" }],
       take: 150,
-      select: { id: true, name: true, url: true, da: true, pa: true, spamScore: true, traffic: true, type: true, description: true, tagSlugs: true, categoryId: true, countryId: true, starRating: true },
+      select: {
+        id: true,
+        name: true,
+        url: true,
+        da: true,
+        pa: true,
+        spamScore: true,
+        traffic: true,
+        type: true,
+        description: true,
+        tagSlugs: true,
+        categoryId: true,
+        countryId: true,
+        starRating: true,
+        websiteCategories: { select: { category: { select: { slug: true } } } },
+        websiteCountries: { select: { countryId: true } },
+      },
     });
   }
 
@@ -484,7 +685,7 @@ async function processCuration(
     });
   }
 
-  // ─── Step 3b: Guaranteed inclusion for 4-5 star sites ────────────────────
+  // ─── Step 3b: Guaranteed inclusion for 3-5 star sites ────────────────────
   // Fetch admin-starred gold-standard sites for this category and inject them
   // into the candidate pool, bypassing keyword soft filters. These sites are
   // always evaluated by the AI unless there is a clear platform mismatch.
@@ -493,10 +694,26 @@ async function processCuration(
       where: {
         isActive: true,
         isExcluded: false,
-        starRating: { gte: 4 },
-        categoryId: effectiveCategoryId,
+        starRating: { gte: 3 },
+        websiteCategories: { some: { categoryId: effectiveCategoryId } },
       },
-      select: { id: true, name: true, url: true, da: true, pa: true, spamScore: true, traffic: true, type: true, description: true, tagSlugs: true, categoryId: true, countryId: true, starRating: true },
+      select: {
+        id: true,
+        name: true,
+        url: true,
+        da: true,
+        pa: true,
+        spamScore: true,
+        traffic: true,
+        type: true,
+        description: true,
+        tagSlugs: true,
+        categoryId: true,
+        countryId: true,
+        starRating: true,
+        websiteCategories: { select: { category: { select: { slug: true } } } },
+        websiteCountries: { select: { countryId: true } },
+      },
     });
     const existingIds = new Set(candidateSites.map((s) => s.id));
     for (const site of prioritySites) {
@@ -506,6 +723,76 @@ async function processCuration(
       }
     }
   }
+
+  // Backfill each website section independently so distribution, guest-post,
+  // and press-release sections can each reach a full result set.
+  const existingWebsiteIds = new Set(candidateSites.map((site) => site.id));
+  const websiteTypeCounts = new Map<string, number>();
+  for (const site of candidateSites) {
+    websiteTypeCounts.set(site.type, (websiteTypeCounts.get(site.type) ?? 0) + 1);
+  }
+
+  for (const websiteType of WEBSITE_SECTION_DB_TYPES) {
+    const currentCount = websiteTypeCounts.get(websiteType) ?? 0;
+    if (currentCount >= 20) {
+      continue;
+    }
+
+    const missingCount = 20 - currentCount;
+    const typedBackfill = await db.website.findMany({
+      where: {
+        isActive: true,
+        isExcluded: false,
+        type: websiteType,
+        ...(countryId ? { OR: [{ countryId }, { countryId: null }, { websiteCountries: { some: { countryId } } }] } : {}),
+        ...(effectiveCategoryId ? { websiteCategories: { some: { categoryId: effectiveCategoryId } } } : {}),
+      },
+      orderBy: [{ starRating: "desc" }, { da: "desc" }],
+      take: missingCount + 20,
+      select: {
+        id: true,
+        name: true,
+        url: true,
+        da: true,
+        pa: true,
+        spamScore: true,
+        traffic: true,
+        type: true,
+        description: true,
+        tagSlugs: true,
+        categoryId: true,
+        countryId: true,
+        starRating: true,
+        websiteCategories: { select: { category: { select: { slug: true } } } },
+        websiteCountries: { select: { countryId: true } },
+      },
+    });
+
+    for (const site of typedBackfill) {
+      if (existingWebsiteIds.has(site.id)) {
+        continue;
+      }
+      candidateSites.push(site);
+      existingWebsiteIds.add(site.id);
+      websiteTypeCounts.set(site.type, (websiteTypeCounts.get(site.type) ?? 0) + 1);
+
+      if ((websiteTypeCounts.get(websiteType) ?? 0) >= 20) {
+        break;
+      }
+    }
+  }
+
+  console.info("[Curation] Website candidate counts", {
+    curationId,
+    categoryId: effectiveCategoryId,
+    categorySlug: userCategorySlug,
+    countryId: countryId ?? null,
+    websiteCandidates: {
+      distribution: websiteTypeCounts.get("distribution") ?? 0,
+      guest_post: websiteTypeCounts.get("guest_post") ?? 0,
+      press_release: websiteTypeCounts.get("press_release") ?? 0,
+    },
+  });
 
   // Guaranteed inclusion for 4-5 star influencers, reddit channels, and funds
   if (categorySlugs.length > 0) {
@@ -542,17 +829,31 @@ async function processCuration(
   // description, star boost) and sorted with country-priority grouping.
   const scoredSites = sortWithCountryPriority(
     candidateSites.map((w) => {
-      const entityCatSlugs = w.categoryId && categorySlugMap.has(w.categoryId)
-        ? [categorySlugMap.get(w.categoryId)!]
-        : [];
+      const entityCatSlugs = w.websiteCategories
+        .map((wc) => wc.category.slug)
+        .filter((slug): slug is string => Boolean(slug));
       const { finalScore, breakdown } = computeEntityScore(
-        { tagSlugs: w.tagSlugs, categorySlugs: entityCatSlugs, countryId: w.countryId, starRating: w.starRating },
+        {
+          tagSlugs: w.tagSlugs,
+          categorySlugs: entityCatSlugs,
+          countryId:
+            countryId && w.websiteCountries.some((wc) => wc.countryId === countryId)
+              ? countryId
+              : w.countryId,
+          starRating: w.starRating,
+        },
         userCategorySlug,
         keywordsLower,
         countryId,
         productDescWords
       );
-      return { ...w, _score: finalScore, _breakdown: breakdown, _cntryMatch: scoreCountryMatch(w.countryId, countryId) > 0 };
+      const hasCountryRelationMatch = !!countryId && w.websiteCountries.some((wc) => wc.countryId === countryId);
+      return {
+        ...w,
+        _score: finalScore,
+        _breakdown: breakdown,
+        _cntryMatch: hasCountryRelationMatch || scoreCountryMatch(w.countryId, countryId) > 0,
+      };
     }),
     countryId
   );
@@ -638,9 +939,6 @@ async function processCuration(
   const MAX_PER_SECTION = 20;
   const toDeterministicScore = (score: number) => Math.min(0.5 + score * 0.05, 1);
 
-  const websiteDescriptionById = new Map(
-    scoredSites.map((site) => [site.id, site.description?.trim() || ""])
-  );
   const aiWebsiteScoreBySection = {
     a: new Map(
       aiWebsiteResults
@@ -694,32 +992,15 @@ async function processCuration(
       ? typedPool
       : scoredSites.filter((site) => !usedWebsiteIds.has(site.id));
 
-    const ranked = pool
-      .map((site) => {
-        const entityDescription = websiteDescriptionById.get(site.id) ?? "";
-        const aiScore = aiWebsiteScoreBySection[section].get(site.id);
-        const aiReason = aiWebsiteReasonBySection[section].get(site.id) ?? "";
-        return {
-          site,
-          effectiveScore: aiScore ?? toDeterministicScore(site._score),
-          // AI's reason for this specific product takes priority; fall back to entity description
-          matchReason: aiReason || entityDescription,
-        };
-      })
-      .sort((x, y) => y.effectiveScore - x.effectiveScore)
-      .slice(0, MAX_PER_SECTION)
-      .map((item, index) => {
-        usedWebsiteIds.add(item.site.id);
-        return {
-          websiteId: item.site.id,
-          matchScore: item.effectiveScore,
-          matchReason: item.matchReason,
-          section,
-          rank: index + 1,
-        };
-      });
-
-    return ranked;
+    return buildTieredWebsiteResults({
+      section,
+      pool,
+      maxPerSection: MAX_PER_SECTION,
+      usedWebsiteIds,
+      getAiScore: (siteId) => aiWebsiteScoreBySection[section].get(siteId),
+      getAiReason: (siteId) => aiWebsiteReasonBySection[section].get(siteId),
+      toDeterministicScore,
+    });
   };
 
   const websiteResults = [
@@ -769,72 +1050,87 @@ async function processCuration(
       .map((result) => [result.fundId!, result.matchReason])
   );
 
-  const influencerResults = scoredInfluencers
-    .map((inf) => {
-      const entityDescription = influencerDescriptionById.get(inf.id) ?? "";
-      const aiScore = aiInfluencerScoreById.get(inf.id);
-      const aiReason = aiInfluencerReasonById.get(inf.id) ?? "";
+  // Helper: tier-sort any entity pool by star rating (5→4→3→0) then by
+  // effective score within each tier — mirrors buildTieredWebsiteResults.
+  function tierSort<T extends { id: string; starRating?: number | null; _score: number }>(
+    pool: T[],
+    getScore: (id: string) => number | undefined,
+    getDescription: (id: string) => string,
+    getAiReason: (id: string) => string,
+  ) {
+    const scored = pool.map((entity) => {
+      const aiScore = getScore(entity.id);
+      const aiReason = getAiReason(entity.id).trim();
+      const fallbackReason = getDescription(entity.id);
       return {
-        influencerId: inf.id,
-        matchScore: aiScore ?? toDeterministicScore(inf._score),
-        matchReason: aiReason || entityDescription,
+        entity,
+        starTier: getWebsiteStarTier(entity.starRating),
+        effectiveScore: aiScore ?? toDeterministicScore(entity._score),
+        matchReason: aiReason || fallbackReason,
       };
-    })
-    .sort((x, y) => y.matchScore - x.matchScore)
-    .slice(0, MAX_PER_SECTION)
-    .map((item, idx) => ({
-      influencerId: item.influencerId,
-      matchScore: item.matchScore,
-      matchReason: item.matchReason,
-      section: "d" as const,
-      rank: idx + 1,
-    }));
+    });
 
-  const redditResults = scoredReddit
-    .map((r) => {
-      const entityDescription = redditDescriptionById.get(r.id) ?? "";
-      const aiScore = aiRedditScoreById.get(r.id);
-      const aiReason = aiRedditReasonById.get(r.id) ?? "";
-      return {
-        redditChannelId: r.id,
-        matchScore: aiScore ?? toDeterministicScore(r._score),
-        matchReason: aiReason || entityDescription,
-      };
-    })
-    .sort((x, y) => y.matchScore - x.matchScore)
-    .slice(0, MAX_PER_SECTION)
-    .map((item, idx) => ({
-      redditChannelId: item.redditChannelId,
-      matchScore: item.matchScore,
-      matchReason: item.matchReason,
-      section: "e" as const,
-      rank: idx + 1,
-    }));
+    const sortWithinTier = (
+      a: (typeof scored)[number],
+      b: (typeof scored)[number],
+    ) => {
+      if (b.effectiveScore !== a.effectiveScore) return b.effectiveScore - a.effectiveScore;
+      return (b.entity.starRating ?? 0) - (a.entity.starRating ?? 0);
+    };
 
-  const fundResults = scoredFunds
-    .map((f) => {
-      const entityDescription = fundDescriptionById.get(f.id) ?? "";
-      const aiScore = aiFundScoreById.get(f.id);
-      const aiReason = aiFundReasonById.get(f.id) ?? "";
-      return {
-        fundId: f.id,
-        matchScore: aiScore ?? toDeterministicScore(f._score),
-        matchReason: aiReason || entityDescription,
-      };
-    })
-    .sort((x, y) => y.matchScore - x.matchScore)
-    .slice(0, MAX_PER_SECTION)
-    .map((item, idx) => ({
-      fundId: item.fundId,
-      matchScore: item.matchScore,
-      matchReason: item.matchReason,
-      section: "f" as const,
-      rank: idx + 1,
-    }));
+    return [5, 4, 3, 0]
+      .flatMap((tier) => scored.filter((item) => item.starTier === tier).sort(sortWithinTier))
+      .slice(0, MAX_PER_SECTION);
+  }
+
+  const influencerResults = tierSort(
+    scoredInfluencers,
+    (id) => aiInfluencerScoreById.get(id),
+    (id) => influencerDescriptionById.get(id) ?? "",
+    (id) => aiInfluencerReasonById.get(id) ?? "",
+  ).map((item, idx) => ({
+    influencerId: item.entity.id,
+    matchScore: item.effectiveScore,
+    matchReason: item.matchReason,
+    section: "d" as const,
+    rank: idx + 1,
+  }));
+
+  const redditResults = tierSort(
+    scoredReddit,
+    (id) => aiRedditScoreById.get(id),
+    (id) => redditDescriptionById.get(id) ?? "",
+    (id) => aiRedditReasonById.get(id) ?? "",
+  ).map((item, idx) => ({
+    redditChannelId: item.entity.id,
+    matchScore: item.effectiveScore,
+    matchReason: item.matchReason,
+    section: "e" as const,
+    rank: idx + 1,
+  }));
+
+  const fundResults = tierSort(
+    scoredFunds,
+    (id) => aiFundScoreById.get(id),
+    (id) => fundDescriptionById.get(id) ?? "",
+    (id) => aiFundReasonById.get(id) ?? "",
+  ).map((item, idx) => ({
+    fundId: item.entity.id,
+    matchScore: item.effectiveScore,
+    matchReason: item.matchReason,
+    section: "f" as const,
+    rank: idx + 1,
+  }));
 
   const allResults = [...websiteResults, ...influencerResults, ...redditResults, ...fundResults];
   const enabledSections = new Set(normalizeEnabledCurationSections(enabledSectionsSnapshot));
   const filteredResults = allResults.filter((result) => enabledSections.has(result.section));
+
+  console.info("[Curation] Final section counts", {
+    curationId,
+    preFilter: countResultsBySection(allResults),
+    postFilter: countResultsBySection(filteredResults),
+  });
 
   // ─── Step 5: Save results ──────────────────────────────────────────────────
   await assertCurationStillExists(curationId);

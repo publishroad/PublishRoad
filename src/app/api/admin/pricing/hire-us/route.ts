@@ -9,11 +9,19 @@ const bodySchema = z.object({
   config: z.object({
     starter: z.object({
       priceCents: z.number().int().min(100).max(5000000),
+      compareAtPriceCents: z.number().int().min(100).max(5000000).nullable().optional(),
       includes: z.array(z.string().trim().min(1).max(180)).min(1).max(12),
+    }).refine((v) => v.compareAtPriceCents == null || v.compareAtPriceCents >= v.priceCents, {
+      message: "Starter actual/list price must be greater than or equal to offer price",
+      path: ["compareAtPriceCents"],
     }),
     complete: z.object({
       priceCents: z.number().int().min(100).max(5000000),
+      compareAtPriceCents: z.number().int().min(100).max(5000000).nullable().optional(),
       includes: z.array(z.string().trim().min(1).max(180)).min(1).max(12),
+    }).refine((v) => v.compareAtPriceCents == null || v.compareAtPriceCents >= v.priceCents, {
+      message: "Complete actual/list price must be greater than or equal to offer price",
+      path: ["compareAtPriceCents"],
     }),
     faq: z.array(
       z.object({

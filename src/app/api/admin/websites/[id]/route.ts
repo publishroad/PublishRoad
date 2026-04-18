@@ -67,6 +67,11 @@ export async function PUT(
         await tx.websiteCategory.createMany({ data: categoryIds.map((categoryId) => ({ websiteId: id, categoryId })) });
       }
 
+      await tx.websiteCountry.deleteMany({ where: { websiteId: id } });
+      if (countryIds.length > 0) {
+        await tx.websiteCountry.createMany({ data: countryIds.map((countryId) => ({ websiteId: id, countryId })) });
+      }
+
       return updatedWebsite;
     });
 

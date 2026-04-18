@@ -100,6 +100,8 @@ export default async function BlogPostPage({ params }: Props) {
     },
   });
 
+  const contentWithoutDuplicateH1 = sanitizedContent.replace(/<h1\b[^>]*>[\s\S]*?<\/h1>/i, "");
+
   const plainTextContent = sanitizedContent.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
   const wordCount = plainTextContent.length > 0 ? plainTextContent.split(" ").length : undefined;
   const estimatedReadMinutes = wordCount ? Math.max(1, Math.ceil(wordCount / 220)) : 3;
@@ -204,7 +206,7 @@ export default async function BlogPostPage({ params }: Props) {
             <article className="card-base rounded-[2rem] p-6 sm:p-8 lg:p-10">
               <div
                 className="blog-article-content max-w-none"
-                dangerouslySetInnerHTML={{ __html: sanitizedContent }}
+                dangerouslySetInnerHTML={{ __html: contentWithoutDuplicateH1 }}
               />
             </article>
 

@@ -35,10 +35,29 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   if (!body) return NextResponse.json({ error: "Invalid input" }, { status: 422 });
 
+  const existingPlan = await db.planConfig.findUnique({
+    where: { id },
+    select: { priceCents: true, compareAtPriceCents: true },
+  });
+
+  if (!existingPlan) {
+    return NextResponse.json({ error: "Plan not found" }, { status: 404 });
+  }
+
   // Explicit allowlist of updatable fields
   const updateData: Record<string, unknown> = {};
+  const nextPriceCents = body.priceCents !== undefined ? Number(body.priceCents) : undefined;
+  const nextCompareAtPriceCents = body.compareAtPriceCents !== undefined && body.compareAtPriceCents !== null
+    ? Number(body.compareAtPriceCents)
+    : body.compareAtPriceCents === null
+      ? null
+      : undefined;
+
   if (body.name !== undefined) updateData.name = body.name;
-  if (body.priceCents !== undefined) updateData.priceCents = Number(body.priceCents);
+  if (body.priceCents !== undefined) updateData.priceCents = nextPriceCents;
+  if (body.compareAtPriceCents !== undefined) {
+    updateData.compareAtPriceCents = nextCompareAtPriceCents;
+  }
   if (body.credits !== undefined) updateData.credits = Number(body.credits);
   if (body.billingType !== undefined) updateData.billingType = body.billingType;
   if (body.stripePriceId !== undefined) updateData.stripePriceId = body.stripePriceId;
@@ -55,6 +74,34 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       );
     }
     updateData.features = features;
+  }
+
+  if (nextPriceCents !== undefined && (!Number.isInteger(nextPriceCents) || nextPriceCents < 0)) {
+    return NextResponse.json({ error: "Price must be a non-negative integer (cents)." }, { status: 422 });
+  }
+
+  if (
+    nextCompareAtPriceCents !== undefined &&
+    nextCompareAtPriceCents !== null &&
+    (!Number.isInteger(nextCompareAtPriceCents) || nextCompareAtPriceCents < 0)
+  ) {
+    return NextResponse.json({ error: "Actual/List price must be a non-negative integer (cents)." }, { status: 422 });
+  }
+
+  const effectivePriceCents = nextPriceCents ?? existingPlan.priceCents;
+  const effectiveCompareAtPriceCents =
+    nextCompareAtPriceCents !== undefined
+      ? nextCompareAtPriceCents
+      : existingPlan.compareAtPriceCents;
+
+  if (
+    effectiveCompareAtPriceCents !== null &&
+    effectiveCompareAtPriceCents < effectivePriceCents
+  ) {
+    return NextResponse.json(
+      { error: "Actual/List price must be greater than or equal to offer price." },
+      { status: 422 }
+    );
   }
 
   await db.planConfig.update({ where: { id }, data: updateData });

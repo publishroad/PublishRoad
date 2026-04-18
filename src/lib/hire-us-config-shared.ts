@@ -2,6 +2,7 @@ export type HireUsPackageSlug = "starter" | "complete";
 
 export type HireUsPricingPackageConfig = {
   priceCents: number;
+  compareAtPriceCents: number | null;
   includes: string[];
 };
 
@@ -25,6 +26,7 @@ const MAX_FAQ_A_LENGTH = 600;
 export const DEFAULT_HIRE_US_PRICING_CONFIG: HireUsPricingConfig = {
   starter: {
     priceCents: 39900,
+    compareAtPriceCents: null,
     includes: [
       "Submissions to all sites on your curated distribution list",
       "Full execution report with all submission links",
@@ -33,6 +35,7 @@ export const DEFAULT_HIRE_US_PRICING_CONFIG: HireUsPricingConfig = {
   },
   complete: {
     priceCents: 99900,
+    compareAtPriceCents: null,
     includes: [
       "Everything in the Starter package",
       "Guest posts on up to 20 sites from your curation list",
@@ -67,6 +70,26 @@ function normalizePriceCents(input: unknown, fallback: number): number {
   const rounded = Math.round(input);
   if (rounded < 100 || rounded > 5000000) return fallback;
   return rounded;
+}
+
+function normalizeCompareAtPriceCents(input: unknown, fallback: number | null, priceCents: number): number | null {
+  if (input === null) return null;
+  if (input === undefined) {
+    if (fallback !== null && fallback >= priceCents) return fallback;
+    return null;
+  }
+  if (typeof input !== "number" || !Number.isFinite(input)) {
+    if (fallback !== null && fallback >= priceCents) return fallback;
+    return null;
+  }
+
+  const rounded = Math.round(input);
+  if (rounded < 100 || rounded > 5000000) {
+    if (fallback !== null && fallback >= priceCents) return fallback;
+    return null;
+  }
+
+  return rounded >= priceCents ? rounded : null;
 }
 
 function normalizeIncludes(input: unknown, fallback: string[]): string[] {
@@ -116,13 +139,26 @@ export function normalizeHireUsPricingConfig(input: unknown): HireUsPricingConfi
     ? (value.complete as Record<string, unknown>)
     : {};
 
+  const starterPriceCents = normalizePriceCents(starterRaw.priceCents, DEFAULT_HIRE_US_PRICING_CONFIG.starter.priceCents);
+  const completePriceCents = normalizePriceCents(completeRaw.priceCents, DEFAULT_HIRE_US_PRICING_CONFIG.complete.priceCents);
+
   return {
     starter: {
-      priceCents: normalizePriceCents(starterRaw.priceCents, DEFAULT_HIRE_US_PRICING_CONFIG.starter.priceCents),
+      priceCents: starterPriceCents,
+      compareAtPriceCents: normalizeCompareAtPriceCents(
+        starterRaw.compareAtPriceCents,
+        DEFAULT_HIRE_US_PRICING_CONFIG.starter.compareAtPriceCents,
+        starterPriceCents
+      ),
       includes: normalizeIncludes(starterRaw.includes, DEFAULT_HIRE_US_PRICING_CONFIG.starter.includes),
     },
     complete: {
-      priceCents: normalizePriceCents(completeRaw.priceCents, DEFAULT_HIRE_US_PRICING_CONFIG.complete.priceCents),
+      priceCents: completePriceCents,
+      compareAtPriceCents: normalizeCompareAtPriceCents(
+        completeRaw.compareAtPriceCents,
+        DEFAULT_HIRE_US_PRICING_CONFIG.complete.compareAtPriceCents,
+        completePriceCents
+      ),
       includes: normalizeIncludes(completeRaw.includes, DEFAULT_HIRE_US_PRICING_CONFIG.complete.includes),
     },
     faq: normalizeFaq(value.faq, DEFAULT_HIRE_US_PRICING_CONFIG.faq),

@@ -784,7 +784,13 @@ function ResultRow({
                     <Tooltip>
                       <TooltipTrigger className="mt-3 block max-w-3xl text-left">
                         <span
-                          className={`block cursor-help text-sm leading-6 line-clamp-2 transition-colors ${isComplete ? "text-slate-500 hover:text-slate-600" : "text-slate-600 hover:text-slate-700"}`}
+                          className={`block cursor-help text-sm leading-6 transition-colors ${isComplete ? "text-slate-500 hover:text-slate-600" : "text-slate-600 hover:text-slate-700"}`}
+                          style={{
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                          }}
                         >
                           {result.matchReason}
                         </span>
