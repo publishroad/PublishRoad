@@ -47,6 +47,7 @@ type UserProfile = {
 
 const SELECT_COUNTRY_VALUE = "__select_country__";
 const SELECT_CATEGORY_VALUE = "__select_category__";
+const WORLDWIDE_COUNTRY_VALUE = "worldwide";
 
 async function fetchCountries() {
   const res = await fetch("/api/lookup/countries", {
@@ -321,7 +322,9 @@ export default function NewCurationPage() {
                         </FormLabel>
                         {(() => {
                           const selectedCountry = countries.find((country) => country.id === field.value);
-                          const countryLabel = selectedCountry
+                          const countryLabel = field.value === WORLDWIDE_COUNTRY_VALUE
+                            ? "Worldwide"
+                            : selectedCountry
                             ? `${selectedCountry.flagEmoji ? `${selectedCountry.flagEmoji} ` : ""}${selectedCountry.name}`
                             : "Select country";
 
@@ -343,6 +346,7 @@ export default function NewCurationPage() {
                           </FormControl>
                           <SelectContent>
                             <SelectItem value={SELECT_COUNTRY_VALUE}>Select country</SelectItem>
+                            <SelectItem value={WORLDWIDE_COUNTRY_VALUE}>Worldwide</SelectItem>
                             {countries.map((country) => (
                               <SelectItem key={country.id} value={country.id}>
                                 {country.flagEmoji} {country.name}

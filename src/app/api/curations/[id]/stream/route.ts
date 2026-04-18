@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { redis } from "@/lib/redis";
+import { invalidateUserProfile } from "@/lib/cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,6 +12,8 @@ const POLL_INTERVAL_MS = 2000;
 const DB_STATUS_CHECK_INTERVAL = 5;
 const INITIAL_LOOKUP_RETRIES = 8;
 const INITIAL_LOOKUP_DELAY_MS = 450;
+const STALE_PENDING_TIMEOUT_MS = 8 * 60 * 1000;
+const STALE_PROCESSING_TIMEOUT_MS = 15 * 60 * 1000;
 
 function fallbackProgressEventForStatus(status: "pending" | "processing" | "completed" | "failed") {
   if (status === "processing") return "fetching_sites";
@@ -23,7 +26,7 @@ async function lookupCurationWithRetry(id: string) {
   for (let attempt = 1; attempt <= INITIAL_LOOKUP_RETRIES; attempt += 1) {
     const curation = await db.curation.findUnique({
       where: { id },
-      select: { userId: true, status: true },
+      select: { userId: true, status: true, updatedAt: true },
     });
 
     if (curation) {
@@ -36,6 +39,31 @@ async function lookupCurationWithRetry(id: string) {
   }
 
   return null;
+}
+
+async function markStaleCurationAsFailed(id: string, userId: string) {
+  const markedFailed = await db.curation.updateMany({
+    where: {
+      id,
+      status: { in: ["pending", "processing"] },
+    },
+    data: {
+      status: "failed",
+      errorMessage: "Curation timed out while processing. Please retry.",
+    },
+  }).catch(() => ({ count: 0 }));
+
+  if (markedFailed.count === 0) {
+    return false;
+  }
+
+  await db.user.update({
+    where: { id: userId },
+    data: { creditsRemaining: { increment: 1 } },
+  }).catch(() => {});
+
+  await invalidateUserProfile(userId).catch(() => {});
+  return true;
 }
 
 export async function GET(
@@ -103,8 +131,25 @@ export async function GET(
             if (iteration % DB_STATUS_CHECK_INTERVAL === 0) {
               const current = await db.curation.findUnique({
                 where: { id },
-                select: { status: true },
+                select: { status: true, updatedAt: true },
               });
+
+              if (current?.status === "pending" || current?.status === "processing") {
+                const staleThreshold =
+                  current.status === "pending" ? STALE_PENDING_TIMEOUT_MS : STALE_PROCESSING_TIMEOUT_MS;
+                const isStale = Date.now() - new Date(current.updatedAt).getTime() > staleThreshold;
+
+                if (isStale) {
+                  const timedOut = await markStaleCurationAsFailed(id, userId);
+                  if (timedOut) {
+                    const data = `data: ${JSON.stringify({ event: "error" })}\n\n`;
+                    controller.enqueue(encoder.encode(data));
+                    isActive = false;
+                    controller.close();
+                    return;
+                  }
+                }
+              }
 
               if (current?.status === "pending" || current?.status === "processing") {
                 const fallbackEvent = fallbackProgressEventForStatus(current.status);
