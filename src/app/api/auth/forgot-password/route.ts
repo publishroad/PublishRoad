@@ -24,11 +24,10 @@ export async function POST(request: NextRequest) {
     execute: async () => {
       if (!parsed.success) {
         return {
-          status: 200,
+          status: 422,
           body: {
-            success: true,
-            requestAccepted: true,
-            emailDelivery: "queued",
+            success: false,
+            error: "Invalid email address.",
           },
         };
       }
@@ -43,11 +42,10 @@ export async function POST(request: NextRequest) {
       const { success } = await checkRateLimitForIdentifiers(passwordResetLimiter, identifiers);
       if (!success) {
         return {
-          status: 200,
+          status: 429,
           body: {
-            success: true,
-            requestAccepted: true,
-            emailDelivery: "queued",
+            success: false,
+            error: "Too many reset attempts. Please try again later.",
           },
         };
       }
@@ -56,28 +54,35 @@ export async function POST(request: NextRequest) {
         where: { email, deletedAt: null, authProvider: "email" },
       });
 
-      if (user) {
-        const token = randomBytes(32).toString("hex");
-        const expiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-
-        await db.user.update({
-          where: { id: user.id },
-          data: { resetToken: token, resetTokenExpiry: expiry },
-        });
-
-        await enqueueEmailJob("password_reset", {
-          to: email,
-          name: user.name ?? "there",
-          token,
-        });
+      if (!user) {
+        return {
+          status: 404,
+          body: {
+            success: false,
+            error: "No user found with this email.",
+          },
+        };
       }
+
+      const token = randomBytes(32).toString("hex");
+      const expiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+      await db.user.update({
+        where: { id: user.id },
+        data: { resetToken: token, resetTokenExpiry: expiry },
+      });
+
+      await enqueueEmailJob("password_reset", {
+        to: email,
+        name: user.name ?? "there",
+        token,
+      });
 
       return {
         status: 200,
         body: {
           success: true,
-          requestAccepted: true,
-          emailDelivery: "queued",
+          message: "Password reset email sent.",
         },
       };
     },

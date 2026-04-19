@@ -178,6 +178,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           where: { id: token.id as string },
           select: {
             creditsRemaining: true,
+            emailVerifiedAt: true,
             plan: {
               select: {
                 slug: true,
@@ -191,6 +192,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             planSlug: freshUser.plan?.slug ?? "free",
             creditsRemaining: freshUser.creditsRemaining,
           });
+          token.isEmailVerified = Boolean(freshUser.emailVerifiedAt);
         }
 
         token.userRefreshedAt = Math.floor(Date.now() / 1000);

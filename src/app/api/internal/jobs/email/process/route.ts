@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { processEmailQueueBatch } from "@/lib/email/queue";
-import { isInternalQueueRequestAllowed, isQueueAuthorizationValid } from "@/lib/internal-endpoint-security";
+import {
+  isInternalQueueRequestAllowed,
+  isQueueAuthorizationValid,
+  isTrustedVercelCronRequest,
+} from "@/lib/internal-endpoint-security";
 
 export async function POST(request: NextRequest) {
   if (!isQueueAuthorizationValid(request)) {
     return NextResponse.json({ success: false, error: { code: "UNAUTHORIZED", message: "Unauthorized" } }, { status: 401 });
   }
 
-  if (!isInternalQueueRequestAllowed(request)) {
+  if (!isTrustedVercelCronRequest(request) && !isInternalQueueRequestAllowed(request)) {
     return NextResponse.json({ success: false, error: { code: "FORBIDDEN", message: "Forbidden" } }, { status: 403 });
   }
 

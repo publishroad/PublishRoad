@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import {
   Form,
@@ -32,11 +33,19 @@ export default function ForgotPasswordPage() {
   async function onSubmit(data: ForgotPasswordInput) {
     setIsLoading(true);
     try {
-      await fetch("/api/auth/forgot-password", {
+      const response = await fetch("/api/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const message = typeof payload.error === "string" ? payload.error : "Could not send reset email.";
+        toast.error(message);
+        return;
+      }
+
       setSubmitted(true);
     } finally {
       setIsLoading(false);
