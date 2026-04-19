@@ -5,6 +5,14 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 
 interface Plan { id: string; name: string; slug: string; credits: number; }
@@ -34,12 +42,16 @@ interface CreatorReferral {
 export function UserAdminPanel({
   user,
   plans,
+  hasHireUsPurchases,
+  hireUsPaymentCount,
   affiliateProfile,
   creatorProfile,
   creatorReferrals,
 }: {
   user: User;
   plans: Plan[];
+  hasHireUsPurchases: boolean;
+  hireUsPaymentCount: number;
   affiliateProfile: AffiliateProfile;
   creatorProfile: CreatorProfile;
   creatorReferrals: CreatorReferral[];
@@ -59,6 +71,9 @@ export function UserAdminPanel({
   const [creatorDisabledReason, setCreatorDisabledReason] = useState(creatorProfile.disabledReason ?? "");
   const [creatorInviteToken, setCreatorInviteToken] = useState(creatorProfile.inviteToken ?? "");
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const invitePath = creatorInviteToken ? `/invite/${creatorInviteToken}` : "";
   const inviteLink = creatorInviteToken
@@ -127,10 +142,29 @@ export function UserAdminPanel({
   }
 
   async function handleDelete() {
-    if (!confirm("Permanently delete this user account? This cannot be undone.")) return;
-    const res = await fetch(`/api/admin/users/${user.id}`, { method: "DELETE" });
-    if (!res.ok) { toast.error("Failed to delete"); return; }
+    if (hasHireUsPurchases && deleteConfirmText !== "DELETE") {
+      toast.error("Type DELETE to confirm account deletion.");
+      return;
+    }
+
+    setIsDeleting(true);
+    const res = await fetch(`/api/admin/users/${user.id}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        deleteConfirmation: hasHireUsPurchases ? deleteConfirmText : null,
+      }),
+    });
+    setIsDeleting(false);
+
+    if (!res.ok) {
+      const payload = await res.json().catch(() => ({}));
+      toast.error(payload.error ?? "Failed to delete");
+      return;
+    }
+
     toast.success("User deleted");
+    setIsDeleteDialogOpen(false);
     router.push("/admin/users");
   }
 
@@ -332,10 +366,47 @@ export function UserAdminPanel({
         <p className="text-sm text-medium-gray mb-4">
           Permanently delete this user and all their data.
         </p>
-        <Button variant="destructive" onClick={handleDelete}>
+        <Button variant="destructive" onClick={() => setIsDeleteDialogOpen(true)}>
           Delete User Account
         </Button>
       </div>
+
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete User Account</DialogTitle>
+            <DialogDescription>
+              This action permanently deletes the user account and related records.
+              {hasHireUsPurchases
+                ? ` This user has ${hireUsPaymentCount} Hire Us payment${hireUsPaymentCount === 1 ? "" : "s"}; type DELETE to continue.`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          {hasHireUsPurchases && (
+            <div className="space-y-2">
+              <Label htmlFor="delete-confirm">Type DELETE to confirm</Label>
+              <Input
+                id="delete-confirm"
+                value={deleteConfirmText}
+                onChange={(event) => setDeleteConfirmText(event.target.value)}
+                placeholder="DELETE"
+                autoComplete="off"
+              />
+            </div>
+          )}
+
+          <DialogFooter showCloseButton>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={isDeleting || (hasHireUsPurchases && deleteConfirmText !== "DELETE")}
+            >
+              {isDeleting ? "Deleting..." : "Delete Permanently"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

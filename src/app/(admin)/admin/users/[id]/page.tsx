@@ -93,7 +93,7 @@ export default async function AdminUserDetailPage({
 }) {
   const { id } = await params;
 
-  const [user, plans, curations, affiliateProfileRows, creatorProfileRows, creatorReferralRows] = await Promise.all([
+  const [user, plans, curations, hireUsPaymentCount, affiliateProfileRows, creatorProfileRows, creatorReferralRows] = await Promise.all([
     db.user.findUnique({
       where: { id },
       select: {
@@ -109,6 +109,7 @@ export default async function AdminUserDetailPage({
     }),
     db.planConfig.findMany({ where: { isActive: true }, orderBy: { priceCents: "asc" } }),
     db.curation.count({ where: { userId: id } }),
+    db.payment.count({ where: { userId: id, paymentType: "hire_us" } }),
     db.$queryRaw<AffiliateProfileRow[]>`
       SELECT
         starter_commission_pct AS "starterCommissionPct",
@@ -178,6 +179,8 @@ export default async function AdminUserDetailPage({
         <UserAdminPanel
           user={user}
           plans={plans}
+          hasHireUsPurchases={hireUsPaymentCount > 0}
+          hireUsPaymentCount={hireUsPaymentCount}
           affiliateProfile={affiliateProfile}
           creatorProfile={creatorProfile}
           creatorReferrals={creatorReferralRows}
