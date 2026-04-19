@@ -25,6 +25,13 @@ export class UnsupportedEmailProviderError extends Error {
   }
 }
 
+function maskEmail(email: string): string {
+  const [localPart = "", domain = ""] = email.split("@");
+  if (!domain) return email;
+  if (localPart.length <= 2) return `${localPart.charAt(0) || "*"}***@${domain}`;
+  return `${localPart.slice(0, 2)}***@${domain}`;
+}
+
 async function getEmailConfigRow(): Promise<EmailConfigRow | null> {
   const rows = await db.$queryRaw<EmailConfigRow[]>`
     SELECT provider, from_address, api_key, host, port, username, password, use_tls
@@ -64,6 +71,7 @@ export async function sendEmailWithActiveProvider({
   const config = await getEmailConfigRow();
   const provider = config?.provider ?? "resend";
   const fromAddress = config?.from_address ?? "PublishRoad <noreply@publishroad.com>";
+  const maskedRecipient = maskEmail(to);
 
   if (provider === "smtp") {
     const host = config?.host;
@@ -86,12 +94,21 @@ export async function sendEmailWithActiveProvider({
     // Defer CPU-intensive React rendering to avoid blocking the event loop
     const html = react ? await renderEmailHtml(react) : undefined;
 
-    await transporter.sendMail({
+    const info = await transporter.sendMail({
       from: fromAddress,
       to,
       subject,
       html,
       text,
+    });
+
+    console.info("[Email] Sent via SMTP", {
+      provider,
+      to: maskedRecipient,
+      subject,
+      messageId: info?.messageId ?? null,
+      accepted: info?.accepted ?? [],
+      rejected: info?.rejected ?? [],
     });
 
     return;
@@ -109,7 +126,7 @@ export async function sendEmailWithActiveProvider({
   }
 
   const resend = new Resend(apiKey.trim());
-  const { error } = await resend.emails.send({
+  const { data, error } = await resend.emails.send({
     from: fromAddress,
     to,
     subject,
@@ -120,4 +137,11 @@ export async function sendEmailWithActiveProvider({
   if (error) {
     throw new Error(error.message ?? "Failed to send email");
   }
+
+  console.info("[Email] Sent via Resend", {
+    provider,
+    to: maskedRecipient,
+    subject,
+    messageId: data?.id ?? null,
+  });
 }

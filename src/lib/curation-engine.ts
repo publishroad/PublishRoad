@@ -281,6 +281,7 @@ export async function runCuration(input: RunCurationInput) {
   // ─── Step 2: Enqueue via QStash (survives serverless function termination) ──
   const qstashToken = process.env.QSTASH_TOKEN;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const curationQueueSecret = process.env.CURATION_QUEUE_SECRET?.trim();
 
   if (qstashToken && appUrl) {
     const client = new Client({ token: qstashToken });
@@ -303,7 +304,9 @@ export async function runCuration(input: RunCurationInput) {
         },
         retries: 2,
         headers: {
-          // QStash forwards all custom headers — processor verifies signature instead
+          ...(curationQueueSecret
+            ? { Authorization: `Bearer ${curationQueueSecret}` }
+            : {}),
         },
       })
       .catch(async (err) => {

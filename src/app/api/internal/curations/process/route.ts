@@ -7,6 +7,15 @@ import { invalidateUserProfile } from "@/lib/cache";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
+function hasValidQueueBearer(request: NextRequest): boolean {
+  const secret = process.env.CURATION_QUEUE_SECRET?.trim();
+  if (!secret) return false;
+
+  const auth = request.headers.get("authorization") ?? "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  return token.length > 0 && token === secret;
+}
+
 async function markCurationFailedAndRefund(
   curationId: string,
   userId: string,
@@ -53,21 +62,25 @@ export async function POST(req: NextRequest) {
     const nextSigningKey = process.env.QSTASH_NEXT_SIGNING_KEY;
 
     if (!currentSigningKey || !nextSigningKey) {
-      console.error("[CurationQueue] QSTASH signing keys not configured");
-      return NextResponse.json({ error: "Server misconfiguration" }, { status: 500 });
+      if (!hasValidQueueBearer(req)) {
+        console.error("[CurationQueue] QSTASH signing keys not configured and queue bearer auth failed");
+        return NextResponse.json({ error: "Server misconfiguration" }, { status: 500 });
+      }
     }
 
-    const receiver = new Receiver({ currentSigningKey, nextSigningKey });
+    if (currentSigningKey && nextSigningKey) {
+      const receiver = new Receiver({ currentSigningKey, nextSigningKey });
 
-    const isValid = await receiver
-      .verify({
-        signature: req.headers.get("upstash-signature") ?? "",
-        body,
-      })
-      .catch(() => false);
+      const isValid = await receiver
+        .verify({
+          signature: req.headers.get("upstash-signature") ?? "",
+          body,
+        })
+        .catch(() => false);
 
-    if (!isValid) {
-      return NextResponse.json({ error: "Invalid QStash signature" }, { status: 401 });
+      if (!isValid) {
+        return NextResponse.json({ error: "Invalid QStash signature" }, { status: 401 });
+      }
     }
   } else {
     // Direct call (e.g. local dev, cron) — require bearer token

@@ -238,9 +238,112 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
+  const body = await req.json().catch(() => ({}));
+  const deleteConfirmation =
+    body && typeof body.deleteConfirmation === "string"
+      ? body.deleteConfirmation.trim()
+      : "";
 
-  // Hard delete for admin-initiated account deletion
-  await db.user.delete({ where: { id } });
+  const user = await db.user.findUnique({
+    where: { id },
+    select: { id: true },
+  });
+  if (!user) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+
+  const hireUsPaymentCount = await db.payment.count({
+    where: { userId: id, paymentType: "hire_us" },
+  });
+
+  if (hireUsPaymentCount > 0 && deleteConfirmation !== "DELETE") {
+    return NextResponse.json(
+      { error: "Type DELETE to confirm removing a user with Hire Us purchases." },
+      { status: 422 }
+    );
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.$executeRaw`
+      DELETE FROM content_creator_referrals
+      WHERE creator_user_id = ${id} OR referred_user_id = ${id}
+    `;
+
+    await tx.$executeRaw`
+      DELETE FROM content_creator_profiles
+      WHERE user_id = ${id}
+    `;
+
+    await tx.$executeRaw`
+      DELETE FROM affiliate_referrals
+      WHERE referrer_user_id = ${id} OR referred_user_id = ${id}
+    `;
+
+    await tx.$executeRaw`
+      UPDATE affiliate_commissions
+      SET payment_id = NULL
+      WHERE payment_id IN (
+        SELECT p.id
+        FROM payments p
+        WHERE p.user_id = ${id}
+      )
+    `;
+
+    await tx.$executeRaw`
+      DELETE FROM affiliate_commissions
+      WHERE affiliate_user_id = ${id} OR referred_user_id = ${id}
+    `;
+
+    await tx.$executeRaw`
+      DELETE FROM affiliate_payout_batches
+      WHERE affiliate_user_id = ${id}
+    `;
+
+    await tx.$executeRaw`
+      DELETE FROM affiliate_profiles
+      WHERE user_id = ${id}
+    `;
+
+    await tx.$executeRaw`
+      DELETE FROM referrals
+      WHERE referrer_user_id = ${id} OR referred_user_id = ${id}
+    `;
+
+    await tx.$executeRaw`
+      DELETE FROM notifications
+      WHERE user_id = ${id}
+    `;
+
+    await tx.$executeRaw`
+      DELETE FROM curation_results
+      WHERE curation_id IN (
+        SELECT c.id
+        FROM curations c
+        WHERE c.user_id = ${id}
+      )
+    `;
+
+    await tx.$executeRaw`
+      DELETE FROM curations
+      WHERE user_id = ${id}
+    `;
+
+    await tx.$executeRaw`
+      DELETE FROM service_leads
+      WHERE user_id = ${id}
+    `;
+
+    await tx.$executeRaw`
+      DELETE FROM payments
+      WHERE user_id = ${id}
+    `;
+
+    await tx.$executeRaw`
+      DELETE FROM users
+      WHERE id = ${id}
+    `;
+  });
+
   await invalidateUserProfile(id);
 
   return NextResponse.json({ success: true });
