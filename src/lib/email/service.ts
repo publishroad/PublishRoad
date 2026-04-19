@@ -94,6 +94,12 @@ export async function sendEmailWithActiveProvider({
     // Defer CPU-intensive React rendering to avoid blocking the event loop
     const html = react ? await renderEmailHtml(react) : undefined;
 
+    console.debug("[Email][Debug] Final recipient before SMTP send", {
+      provider,
+      to,
+      subject,
+    });
+
     const info = await transporter.sendMail({
       from: fromAddress,
       to,
@@ -126,6 +132,12 @@ export async function sendEmailWithActiveProvider({
   }
 
   const resend = new Resend(apiKey.trim());
+  console.debug("[Email][Debug] Final recipient before Resend send", {
+    provider,
+    to,
+    subject,
+  });
+
   const { data, error } = await resend.emails.send({
     from: fromAddress,
     to,
