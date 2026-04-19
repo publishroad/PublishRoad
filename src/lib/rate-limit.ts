@@ -39,6 +39,12 @@ export const passwordResetLimiter = new Ratelimit({
   prefix: "rl:password_reset",
 });
 
+export const emailVerificationResendLimiter = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(3, "1 h"),
+  prefix: "rl:email_verification_resend",
+});
+
 export const curationLimiter = new Ratelimit({
   redis,
   limiter: Ratelimit.slidingWindow(5, "1 m"),

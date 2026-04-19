@@ -37,6 +37,13 @@ type ProcessStats = {
   failed: number;
 };
 
+export type EmailQueueHealth = {
+  pending: number;
+  retry: number;
+  dead: number;
+  nextRetryAt: number | null;
+};
+
 const QUEUE_PENDING_KEY = "queue:email:pending";
 const QUEUE_RETRY_KEY = "queue:email:retry";
 const QUEUE_DEAD_KEY = "queue:email:dead";
@@ -274,6 +281,13 @@ export async function enqueueEmailJob(
 
   await enqueueRaw(job);
 
+  console.info("[EmailQueue] Job queued", {
+    jobId: job.id,
+    kind: job.kind,
+    to: job.to,
+    createdAt: job.createdAt,
+  });
+
   if (SHOULD_PROCESS_IMMEDIATELY) {
     try {
       await processEmailQueueBatch(1);
@@ -286,6 +300,38 @@ export async function enqueueEmailJob(
   }
 
   return { accepted: true, jobId: job.id };
+}
+
+export async function getEmailQueueHealth(): Promise<EmailQueueHealth> {
+  if (!isRedisConfigured) {
+    const nextRetryAt =
+      memoryQueue.retry.length > 0
+        ? memoryQueue.retry.reduce((min, job) => Math.min(min, job.nextAttemptAt), Number.POSITIVE_INFINITY)
+        : Number.POSITIVE_INFINITY;
+
+    return {
+      pending: memoryQueue.pending.length,
+      retry: memoryQueue.retry.length,
+      dead: memoryQueue.dead.length,
+      nextRetryAt: Number.isFinite(nextRetryAt) ? nextRetryAt : null,
+    };
+  }
+
+  const [pending, retry, dead, nextRetryRows] = await Promise.all([
+    redis.llen(QUEUE_PENDING_KEY),
+    redis.zcard(QUEUE_RETRY_KEY),
+    redis.llen(QUEUE_DEAD_KEY),
+    redis.zrange<unknown[]>(QUEUE_RETRY_KEY, 0, 0, { byScore: true }),
+  ]);
+
+  const nextRetryJob = Array.isArray(nextRetryRows) ? toEmailJob(nextRetryRows[0]) : null;
+
+  return {
+    pending: Number(pending ?? 0),
+    retry: Number(retry ?? 0),
+    dead: Number(dead ?? 0),
+    nextRetryAt: nextRetryJob?.nextAttemptAt ?? null,
+  };
 }
 
 export async function processEmailQueueBatch(maxJobs = 25): Promise<ProcessStats> {

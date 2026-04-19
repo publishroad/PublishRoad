@@ -3,15 +3,17 @@ import { NextRequest } from "next/server";
 let hasWarnedMissingQueueSecret = false;
 let hasWarnedMissingQueueIps = false;
 
-function getEmailQueueSecret(): string {
-  const secret = process.env.EMAIL_QUEUE_SECRET?.trim() ?? "";
+function getQueueSecrets(): string[] {
+  const emailQueueSecret = process.env.EMAIL_QUEUE_SECRET?.trim() ?? "";
+  const cronSecret = process.env.CRON_SECRET?.trim() ?? "";
+  const secrets = [emailQueueSecret, cronSecret].filter((value) => value.length > 0);
 
-  if (!secret && process.env.NODE_ENV === "production" && !hasWarnedMissingQueueSecret) {
+  if (secrets.length === 0 && process.env.NODE_ENV === "production" && !hasWarnedMissingQueueSecret) {
     hasWarnedMissingQueueSecret = true;
-    console.warn("[EmailQueue] EMAIL_QUEUE_SECRET is missing. Internal queue requests will be rejected until it is configured.");
+    console.warn("[EmailQueue] EMAIL_QUEUE_SECRET/CRON_SECRET are missing. Internal queue requests will be rejected until at least one is configured.");
   }
 
-  return secret;
+  return secrets;
 }
 
 function getAllowedInternalIps(): string[] {
@@ -106,12 +108,17 @@ export function isInternalQueueRequestAllowed(request: NextRequest): boolean {
 }
 
 export function isQueueAuthorizationValid(request: NextRequest): boolean {
-  const secret = getEmailQueueSecret();
-  if (!secret) {
+  const secrets = getQueueSecrets();
+  if (secrets.length === 0) {
     return false;
   }
 
   const authHeader = request.headers.get("authorization") ?? "";
   const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
-  return bearer.length > 0 && bearer === secret;
+  return bearer.length > 0 && secrets.includes(bearer);
+}
+
+export function isTrustedVercelCronRequest(request: NextRequest): boolean {
+  const isVercelCron = request.headers.get("x-vercel-cron") === "1";
+  return isVercelCron && isQueueAuthorizationValid(request);
 }
