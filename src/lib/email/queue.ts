@@ -3,6 +3,8 @@ import { randomUUID } from "crypto";
 import { redis } from "@/lib/redis";
 import { sendEmailWithActiveProvider } from "@/lib/email/service";
 
+type EmailQueueChannel = "transactional" | "support";
+
 type EmailJobKind =
   | "verification"
   | "welcome"
@@ -13,6 +15,7 @@ type EmailJobKind =
 type EmailJob = {
   id: string;
   kind: EmailJobKind;
+  channel: EmailQueueChannel;
   to: string;
   name?: string;
   token?: string;
@@ -42,11 +45,16 @@ export type EmailQueueHealth = {
   retry: number;
   dead: number;
   nextRetryAt: number | null;
+  transactional: QueueHealthSnapshot;
+  support: QueueHealthSnapshot;
 };
 
-const QUEUE_PENDING_KEY = "queue:email:pending";
-const QUEUE_RETRY_KEY = "queue:email:retry";
-const QUEUE_DEAD_KEY = "queue:email:dead";
+type QueueHealthSnapshot = {
+  pending: number;
+  retry: number;
+  dead: number;
+  nextRetryAt: number | null;
+};
 
 const MAX_ATTEMPTS = Number(process.env.EMAIL_QUEUE_MAX_ATTEMPTS ?? 5);
 const RETRY_BASE_MS = Number(process.env.EMAIL_QUEUE_RETRY_BASE_MS ?? 2000);
@@ -57,19 +65,22 @@ const isRedisConfigured =
   !process.env.UPSTASH_REDIS_REST_URL.includes("placeholder");
 
 const memoryState = globalThis as typeof globalThis & {
-  __emailQueueMemory?: {
-    pending: EmailJob[];
-    retry: EmailJob[];
-    dead: EmailJob[];
-  };
+  __emailQueueMemory?: Record<EmailQueueChannel, { pending: EmailJob[]; retry: EmailJob[]; dead: EmailJob[] }>;
 };
 
 const memoryQueue =
   memoryState.__emailQueueMemory ??
   {
-    pending: [],
-    retry: [],
-    dead: [],
+    transactional: {
+      pending: [],
+      retry: [],
+      dead: [],
+    },
+    support: {
+      pending: [],
+      retry: [],
+      dead: [],
+    },
   };
 
 if (!memoryState.__emailQueueMemory) {
@@ -83,6 +94,31 @@ function nowMs(): number {
 function calcBackoffMs(attempts: number): number {
   const capped = Math.min(attempts, 8);
   return RETRY_BASE_MS * Math.pow(2, Math.max(0, capped - 1));
+}
+
+function getChannelForJobKind(kind: EmailJobKind): EmailQueueChannel {
+  return kind === "support_contact" ? "support" : "transactional";
+}
+
+function getQueueKeys(channel: EmailQueueChannel): {
+  pendingKey: string;
+  retryKey: string;
+  deadKey: string;
+} {
+  if (channel === "transactional") {
+    // Keep legacy keys for backward compatibility with existing queued items.
+    return {
+      pendingKey: "queue:email:pending",
+      retryKey: "queue:email:retry",
+      deadKey: "queue:email:dead",
+    };
+  }
+
+  return {
+    pendingKey: "queue:email:support:pending",
+    retryKey: "queue:email:support:retry",
+    deadKey: "queue:email:support:dead",
+  };
 }
 
 function toEmailJob(raw: unknown): EmailJob | null {
@@ -106,50 +142,59 @@ function toEmailJob(raw: unknown): EmailJob | null {
 }
 
 async function enqueueRaw(job: EmailJob): Promise<void> {
+  const keys = getQueueKeys(job.channel);
+
   if (!isRedisConfigured) {
-    memoryQueue.pending.push(job);
+    memoryQueue[job.channel].pending.push(job);
     return;
   }
 
-  await redis.rpush(QUEUE_PENDING_KEY, job);
+  await redis.rpush(keys.pendingKey, job);
 }
 
-async function popPendingRaw(): Promise<EmailJob | null> {
+async function popPendingRaw(channel: EmailQueueChannel): Promise<EmailJob | null> {
+  const keys = getQueueKeys(channel);
+
   if (!isRedisConfigured) {
-    return memoryQueue.pending.shift() ?? null;
+    return memoryQueue[channel].pending.shift() ?? null;
   }
 
-  const raw = await redis.lpop(QUEUE_PENDING_KEY);
+  const raw = await redis.lpop(keys.pendingKey);
   if (!raw) return null;
   const parsed = toEmailJob(raw);
   if (!parsed) {
-    console.error("[EmailQueue] Corrupt pending payload dropped", { raw });
+    console.error("[EmailQueue] Corrupt pending payload dropped", { channel, raw });
     return null;
+  }
+
+  if (!parsed.channel) {
+    parsed.channel = getChannelForJobKind(parsed.kind);
   }
 
   return parsed;
 }
 
-async function moveDueRetryJobsToPending(): Promise<void> {
+async function moveDueRetryJobsToPending(channel: EmailQueueChannel): Promise<void> {
+  const keys = getQueueKeys(channel);
   const now = nowMs();
 
   if (!isRedisConfigured) {
-    const due = memoryQueue.retry.filter((job) => job.nextAttemptAt <= now);
+    const due = memoryQueue[channel].retry.filter((job) => job.nextAttemptAt <= now);
     if (due.length === 0) return;
 
-    memoryQueue.retry = memoryQueue.retry.filter((job) => job.nextAttemptAt > now);
-    memoryQueue.pending.push(...due);
+    memoryQueue[channel].retry = memoryQueue[channel].retry.filter((job) => job.nextAttemptAt > now);
+    memoryQueue[channel].pending.push(...due);
     return;
   }
 
   let due: unknown[] = [];
   try {
-    const rows = await redis.zrange(QUEUE_RETRY_KEY, 0, now, {
+    const rows = await redis.zrange(keys.retryKey, 0, now, {
       byScore: true,
     });
     due = Array.isArray(rows) ? rows : [];
   } catch (error) {
-    console.error("[EmailQueue] Failed to read retry set", error);
+    console.error("[EmailQueue] Failed to read retry set", { channel, error });
     return;
   }
 
@@ -160,16 +205,21 @@ async function moveDueRetryJobsToPending(): Promise<void> {
   for (const raw of due) {
     const job = toEmailJob(raw);
     if (!job) {
-      await redis.zrem(QUEUE_RETRY_KEY, raw);
+      await redis.zrem(keys.retryKey, raw);
       continue;
     }
 
-    await redis.zrem(QUEUE_RETRY_KEY, raw);
-    await redis.rpush(QUEUE_PENDING_KEY, job);
+    if (!job.channel) {
+      job.channel = getChannelForJobKind(job.kind);
+    }
+
+    await redis.zrem(keys.retryKey, raw);
+    await redis.rpush(keys.pendingKey, job);
   }
 }
 
 async function scheduleRetry(job: EmailJob, error: unknown): Promise<void> {
+  const keys = getQueueKeys(job.channel);
   const attempts = job.attempts + 1;
   const nextAttemptAt = nowMs() + calcBackoffMs(attempts);
   const retriable: EmailJob = {
@@ -183,23 +233,25 @@ async function scheduleRetry(job: EmailJob, error: unknown): Promise<void> {
     console.error("[EmailQueue] Permanent failure", {
       id: retriable.id,
       kind: retriable.kind,
+      channel: retriable.channel,
       to: retriable.to,
       attempts: retriable.attempts,
       lastError: retriable.lastError,
     });
 
     if (!isRedisConfigured) {
-      memoryQueue.dead.push(retriable);
+      memoryQueue[retriable.channel].dead.push(retriable);
       return;
     }
 
-    await redis.rpush(QUEUE_DEAD_KEY, retriable);
+    await redis.rpush(keys.deadKey, retriable);
     return;
   }
 
   console.error("[EmailQueue] Send failed, scheduling retry", {
     id: retriable.id,
     kind: retriable.kind,
+    channel: retriable.channel,
     to: retriable.to,
     attempts: retriable.attempts,
     nextAttemptAt,
@@ -207,71 +259,86 @@ async function scheduleRetry(job: EmailJob, error: unknown): Promise<void> {
   });
 
   if (!isRedisConfigured) {
-    memoryQueue.retry.push(retriable);
+    memoryQueue[retriable.channel].retry.push(retriable);
     return;
   }
 
-  await redis.zadd(QUEUE_RETRY_KEY, { score: nextAttemptAt, member: retriable });
+  await redis.zadd(keys.retryKey, { score: nextAttemptAt, member: retriable });
 }
 
 async function deliver(job: EmailJob): Promise<void> {
-  if (job.kind === "verification") {
-    const { VerifyEmailTemplate } = await import("@/emails/verify-email");
-    const verifyUrl = `${process.env.NEXT_PUBLIC_APP_URL}/verify-email?token=${job.token ?? ""}`;
-    await sendEmailWithActiveProvider({
-      to: job.to,
-      subject: "Verify your PublishRoad email",
-      react: React.createElement(VerifyEmailTemplate, {
-        name: job.name ?? "there",
-        verifyUrl,
-      }),
-    });
-    return;
-  }
+  switch (job.kind) {
+    case "verification": {
+      const { VerifyEmailTemplate } = await import("@/emails/verify-email");
+      const verifyUrl = `${process.env.NEXT_PUBLIC_APP_URL}/verify-email?token=${job.token ?? ""}`;
+      await sendEmailWithActiveProvider({
+        to: job.to,
+        subject: "Verify your PublishRoad email",
+        react: React.createElement(VerifyEmailTemplate, {
+          name: job.name ?? "there",
+          verifyUrl,
+        }),
+      });
+      return;
+    }
 
-  if (job.kind === "welcome") {
-    const { WelcomeTemplate } = await import("@/emails/welcome");
-    await sendEmailWithActiveProvider({
-      to: job.to,
-      subject: "Welcome to PublishRoad 🚀",
-      react: React.createElement(WelcomeTemplate, { name: job.name ?? "there" }),
-    });
-    return;
-  }
+    case "welcome": {
+      const { WelcomeTemplate } = await import("@/emails/welcome");
+      await sendEmailWithActiveProvider({
+        to: job.to,
+        subject: "Welcome to PublishRoad 🚀",
+        react: React.createElement(WelcomeTemplate, { name: job.name ?? "there" }),
+      });
+      return;
+    }
 
-  if (job.kind === "password_reset") {
-    const { PasswordResetTemplate } = await import("@/emails/password-reset");
-    const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL}/reset-password?token=${job.token ?? ""}`;
-    await sendEmailWithActiveProvider({
-      to: job.to,
-      subject: "Reset your PublishRoad password",
-      react: React.createElement(PasswordResetTemplate, {
-        name: job.name ?? "there",
-        resetUrl,
-      }),
-    });
-    return;
-  }
+    case "password_reset": {
+      const { PasswordResetTemplate } = await import("@/emails/password-reset");
+      const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL}/reset-password?token=${job.token ?? ""}`;
+      await sendEmailWithActiveProvider({
+        to: job.to,
+        subject: "Reset your PublishRoad password",
+        react: React.createElement(PasswordResetTemplate, {
+          name: job.name ?? "there",
+          resetUrl,
+        }),
+      });
+      return;
+    }
 
-  if (job.kind === "support_contact" || job.kind === "account_deleted") {
-    await sendEmailWithActiveProvider({
-      to: job.to,
-      subject: job.subject ?? "PublishRoad notification",
-      text: job.text ?? "",
-    });
-    return;
-  }
+    case "support_contact": {
+      await sendEmailWithActiveProvider({
+        to: job.to,
+        subject: job.subject ?? "New contact form submission",
+        text: job.text ?? "",
+      });
+      return;
+    }
 
-  throw new Error(`Unsupported email job kind: ${job.kind}`);
+    case "account_deleted": {
+      await sendEmailWithActiveProvider({
+        to: job.to,
+        subject: job.subject ?? "PublishRoad notification",
+        text: job.text ?? "",
+      });
+      return;
+    }
+
+    default:
+      throw new Error(`Unsupported email job kind: ${job.kind}`);
+  }
 }
 
 export async function enqueueEmailJob(
   kind: EmailJobKind,
-  payload: Omit<EmailJob, "id" | "kind" | "createdAt" | "attempts" | "maxAttempts" | "nextAttemptAt">
+  payload: Omit<EmailJob, "id" | "kind" | "channel" | "createdAt" | "attempts" | "maxAttempts" | "nextAttemptAt">
 ): Promise<QueueStats> {
+  const channel = getChannelForJobKind(kind);
+
   const job: EmailJob = {
     id: randomUUID(),
     kind,
+    channel,
     createdAt: nowMs(),
     attempts: 0,
     maxAttempts: MAX_ATTEMPTS,
@@ -284,16 +351,18 @@ export async function enqueueEmailJob(
   console.info("[EmailQueue] Job queued", {
     jobId: job.id,
     kind: job.kind,
+    channel: job.channel,
     to: job.to,
     createdAt: job.createdAt,
   });
 
-  if (SHOULD_PROCESS_IMMEDIATELY) {
+  if (SHOULD_PROCESS_IMMEDIATELY && channel === "transactional") {
     try {
       await processEmailQueueBatch(1);
     } catch (error) {
       console.error("[EmailQueue] Immediate processing failed; job remains queued", {
         jobId: job.id,
+        channel,
         error,
       });
     }
@@ -303,25 +372,47 @@ export async function enqueueEmailJob(
 }
 
 export async function getEmailQueueHealth(): Promise<EmailQueueHealth> {
+  const [transactional, support] = await Promise.all([
+    getQueueHealthSnapshot("transactional"),
+    getQueueHealthSnapshot("support"),
+  ]);
+
+  const nextRetryCandidates = [transactional.nextRetryAt, support.nextRetryAt].filter(
+    (value): value is number => typeof value === "number"
+  );
+
+  return {
+    pending: transactional.pending + support.pending,
+    retry: transactional.retry + support.retry,
+    dead: transactional.dead + support.dead,
+    nextRetryAt: nextRetryCandidates.length > 0 ? Math.min(...nextRetryCandidates) : null,
+    transactional,
+    support,
+  };
+}
+
+async function getQueueHealthSnapshot(channel: EmailQueueChannel): Promise<QueueHealthSnapshot> {
+  const keys = getQueueKeys(channel);
+
   if (!isRedisConfigured) {
     const nextRetryAt =
-      memoryQueue.retry.length > 0
-        ? memoryQueue.retry.reduce((min, job) => Math.min(min, job.nextAttemptAt), Number.POSITIVE_INFINITY)
+      memoryQueue[channel].retry.length > 0
+        ? memoryQueue[channel].retry.reduce((min, job) => Math.min(min, job.nextAttemptAt), Number.POSITIVE_INFINITY)
         : Number.POSITIVE_INFINITY;
 
     return {
-      pending: memoryQueue.pending.length,
-      retry: memoryQueue.retry.length,
-      dead: memoryQueue.dead.length,
+      pending: memoryQueue[channel].pending.length,
+      retry: memoryQueue[channel].retry.length,
+      dead: memoryQueue[channel].dead.length,
       nextRetryAt: Number.isFinite(nextRetryAt) ? nextRetryAt : null,
     };
   }
 
   const [pending, retry, dead, nextRetryRows] = await Promise.all([
-    redis.llen(QUEUE_PENDING_KEY),
-    redis.zcard(QUEUE_RETRY_KEY),
-    redis.llen(QUEUE_DEAD_KEY),
-    redis.zrange<unknown[]>(QUEUE_RETRY_KEY, 0, 0, { byScore: true }),
+    redis.llen(keys.pendingKey),
+    redis.zcard(keys.retryKey),
+    redis.llen(keys.deadKey),
+    redis.zrange<unknown[]>(keys.retryKey, 0, 0, { byScore: true }),
   ]);
 
   const nextRetryJob = Array.isArray(nextRetryRows) ? toEmailJob(nextRetryRows[0]) : null;
@@ -334,8 +425,8 @@ export async function getEmailQueueHealth(): Promise<EmailQueueHealth> {
   };
 }
 
-export async function processEmailQueueBatch(maxJobs = 25): Promise<ProcessStats> {
-  await moveDueRetryJobsToPending();
+async function processQueueBatch(channel: EmailQueueChannel, maxJobs = 25): Promise<ProcessStats> {
+  await moveDueRetryJobsToPending(channel);
 
   const stats: ProcessStats = {
     processed: 0,
@@ -345,14 +436,30 @@ export async function processEmailQueueBatch(maxJobs = 25): Promise<ProcessStats
   };
 
   for (let i = 0; i < maxJobs; i += 1) {
-    const job = await popPendingRaw();
+    const job = await popPendingRaw(channel);
     if (!job) break;
 
     stats.processed += 1;
 
+    console.info("[EmailQueue] Processing job", {
+      jobId: job.id,
+      kind: job.kind,
+      channel: job.channel,
+      to: job.to,
+      attempt: job.attempts + 1,
+      maxAttempts: job.maxAttempts,
+    });
+
     try {
       await deliver(job);
       stats.sent += 1;
+      console.info("[EmailQueue] Job sent", {
+        jobId: job.id,
+        kind: job.kind,
+        channel: job.channel,
+        to: job.to,
+        attempt: job.attempts + 1,
+      });
     } catch (error) {
       await scheduleRetry(job, error);
       if (job.attempts + 1 >= job.maxAttempts) {
@@ -364,4 +471,12 @@ export async function processEmailQueueBatch(maxJobs = 25): Promise<ProcessStats
   }
 
   return stats;
+}
+
+export async function processEmailQueueBatch(maxJobs = 25): Promise<ProcessStats> {
+  return processQueueBatch("transactional", maxJobs);
+}
+
+export async function processSupportEmailQueueBatch(maxJobs = 25): Promise<ProcessStats> {
+  return processQueueBatch("support", maxJobs);
 }
