@@ -11,7 +11,7 @@ import { SiteNoticeEditor } from "@/components/admin/SiteNoticeEditor";
 import { AppHeader } from "@/components/dashboard/AppHeader";
 import { formatDate } from "@/lib/utils";
 import { getSiteNoticeConfig } from "@/lib/site-notice-config";
-import { getEmailQueueHealth } from "@/lib/email/queue";
+import { getEmailQueueHealth, getEmailQueueInsights } from "@/lib/email/queue";
 
 type EmailConfigRow = {
   provider: "resend" | "smtp" | "sendgrid" | "ses";
@@ -43,7 +43,7 @@ async function fetchWithMissingRelationFallback<T>(
 }
 
 export default async function AdminSettingsPage() {
-  const [aiConfig, paymentConfigResult, emailRowsResult, siteNoticeConfig, emailQueueHealth] = await Promise.all([
+  const [aiConfig, paymentConfigResult, emailRowsResult, siteNoticeConfig, emailQueueHealth, emailQueueInsights] = await Promise.all([
     db.aiConfig.findUnique({ where: { id: "default" } }),
     fetchWithMissingRelationFallback("payment_gateway_config", [], async () =>
       db.$queryRaw<Array<{
@@ -69,6 +69,7 @@ export default async function AdminSettingsPage() {
     ),
     getSiteNoticeConfig(),
     getEmailQueueHealth(),
+    getEmailQueueInsights(12),
   ]);
 
   const paymentMigrationMissing = paymentConfigResult.migrationMissing;
@@ -166,7 +167,7 @@ export default async function AdminSettingsPage() {
           />
 
           <div className="mt-6">
-            <EmailQueuePanel initialHealth={emailQueueHealth} />
+            <EmailQueuePanel initialHealth={emailQueueHealth} initialInsights={emailQueueInsights} />
           </div>
         </section>
 
