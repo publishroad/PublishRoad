@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { processEmailQueueBatch, processSupportEmailQueueBatch } from "@/lib/email/queue";
+import { processEmailQueueBatch } from "@/lib/email/queue";
 import {
   isInternalQueueRequestAllowed,
   isQueueAuthorizationValid,
@@ -18,22 +18,7 @@ export async function POST(request: NextRequest) {
   try {
     const maxJobs = Number(request.nextUrl.searchParams.get("max") ?? process.env.EMAIL_QUEUE_BATCH_SIZE ?? 25);
     const safeMax = Number.isFinite(maxJobs) ? Math.min(Math.max(maxJobs, 1), 200) : 25;
-    const supportMaxJobs = Number(
-      request.nextUrl.searchParams.get("supportMax") ?? process.env.EMAIL_QUEUE_SUPPORT_BATCH_SIZE ?? safeMax
-    );
-    const safeSupportMax = Number.isFinite(supportMaxJobs) ? Math.min(Math.max(supportMaxJobs, 1), 200) : safeMax;
-
-    const [transactionalStats, supportStats] = await Promise.all([
-      processEmailQueueBatch(safeMax),
-      processSupportEmailQueueBatch(safeSupportMax),
-    ]);
-
-    const stats = {
-      processed: transactionalStats.processed + supportStats.processed,
-      sent: transactionalStats.sent + supportStats.sent,
-      retried: transactionalStats.retried + supportStats.retried,
-      failed: transactionalStats.failed + supportStats.failed,
-    };
+    const stats = await processEmailQueueBatch(safeMax);
 
     return NextResponse.json({
       success: true,
@@ -42,10 +27,6 @@ export async function POST(request: NextRequest) {
       sent: stats.sent,
       retried: stats.retried,
       failed: stats.failed,
-      queues: {
-        transactional: transactionalStats,
-        support: supportStats,
-      },
     });
   } catch (error) {
     console.error("[EmailQueue] Processor failed", error);

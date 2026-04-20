@@ -358,7 +358,7 @@ export async function enqueueEmailJob(
 
   if (SHOULD_PROCESS_IMMEDIATELY && channel === "transactional") {
     try {
-      await processEmailQueueBatch(1);
+      await processQueueBatch("transactional", 1);
     } catch (error) {
       console.error("[EmailQueue] Immediate processing failed; job remains queued", {
         jobId: job.id,
@@ -474,7 +474,23 @@ async function processQueueBatch(channel: EmailQueueChannel, maxJobs = 25): Prom
 }
 
 export async function processEmailQueueBatch(maxJobs = 25): Promise<ProcessStats> {
-  return processQueueBatch("transactional", maxJobs);
+  const safeMax = Number.isFinite(maxJobs) ? Math.min(Math.max(maxJobs, 1), 200) : 25;
+
+  const transactionalStats = await processQueueBatch("transactional", safeMax);
+
+  const remainingCapacity = safeMax - transactionalStats.processed;
+  if (remainingCapacity <= 0) {
+    return transactionalStats;
+  }
+
+  const supportStats = await processQueueBatch("support", remainingCapacity);
+
+  return {
+    processed: transactionalStats.processed + supportStats.processed,
+    sent: transactionalStats.sent + supportStats.sent,
+    retried: transactionalStats.retried + supportStats.retried,
+    failed: transactionalStats.failed + supportStats.failed,
+  };
 }
 
 export async function processSupportEmailQueueBatch(maxJobs = 25): Promise<ProcessStats> {
