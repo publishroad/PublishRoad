@@ -99,7 +99,8 @@ function isStrictPressReleaseEligible(
     return site.countryId === countryId || site.websiteCountries.some((wc) => wc.countryId === countryId);
   }
 
-  return site.countryId == null;
+  // Worldwide mode should include all press-release sources (global + country-specific).
+  return true;
 }
 
 function getWebsiteStarTier(starRating?: number | null): 0 | 3 | 4 | 5 {
@@ -823,9 +824,6 @@ export async function processCuration(
                 ? [{ countryId }, { websiteCountries: { some: { countryId } } }]
                 : [{ countryId }],
             }
-          : {}),
-        ...(websiteType === "press_release" && pressReleaseCountryMode === "worldwide"
-          ? { countryId: null }
           : {}),
         ...(effectiveCategoryId
           ? (hasWebsiteCategoriesTable
