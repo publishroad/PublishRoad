@@ -13,7 +13,14 @@ export async function GET() {
   });
 
   const worldwide = { id: "worldwide", name: "Worldwide", slug: "worldwide", flagEmoji: "🌍" };
-  const response = NextResponse.json([worldwide, ...countries]);
+  const withoutWorldwide = countries.filter((country) => {
+    const byId = country.id.trim().toLowerCase() === "worldwide";
+    const bySlug = country.slug.trim().toLowerCase() === "worldwide";
+    const byName = country.name.trim().toLowerCase() === "worldwide";
+    return !(byId || bySlug || byName);
+  });
+
+  const response = NextResponse.json([worldwide, ...withoutWorldwide]);
   response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
   return response;
 }

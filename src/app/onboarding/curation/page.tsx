@@ -235,14 +235,11 @@ function OnboardingCurationPageContent() {
                 {...register("countryId")}
               >
                 <option value="">Select country</option>
-                <option value={WORLDWIDE_COUNTRY_VALUE}>Worldwide</option>
-                {countries
-                  .filter((c) => c.id !== WORLDWIDE_COUNTRY_VALUE)
-                  .map((c) => (
+                {countries.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.flagEmoji} {c.name}
                   </option>
-                  ))}
+                ))}
               </select>
               {errors.countryId && (
                 <p className="text-xs text-error">{errors.countryId.message}</p>

@@ -346,14 +346,11 @@ export default function NewCurationPage() {
                           </FormControl>
                           <SelectContent>
                             <SelectItem value={SELECT_COUNTRY_VALUE}>Select country</SelectItem>
-                            <SelectItem value={WORLDWIDE_COUNTRY_VALUE}>Worldwide</SelectItem>
-                            {countries
-                              .filter((country) => country.id !== WORLDWIDE_COUNTRY_VALUE)
-                              .map((country) => (
+                            {countries.map((country) => (
                               <SelectItem key={country.id} value={country.id}>
                                 {country.flagEmoji} {country.name}
                               </SelectItem>
-                              ))}
+                            ))}
                           </SelectContent>
                         </Select>
                           );
