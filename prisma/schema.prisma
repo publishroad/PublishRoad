@@ -316,6 +316,7 @@ model BetaConfig {
   updatedAt               DateTime   @updatedAt @map("updated_at")
   updatedById             String?    @map("updated_by_id")
   pricingComparisonRows   Json       @default("[]") @map("pricing_comparison_rows")
+  socialLinks             Json       @default("[]") @map("social_links")
   curationEnabledSections String[]   @default(["a", "b", "c", "d", "e", "f"]) @map("curation_enabled_sections")
   updatedBy               AdminUser? @relation(fields: [updatedById], references: [id])
 
